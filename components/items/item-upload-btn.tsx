@@ -5,7 +5,7 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Upload, Download, AlertCircle, Loader2, Trash2, Plus, Check } from "lucide-react"
-import { parseExcelFile, downloadExcelTemplate } from "@/lib/excel-parser"
+import { parseExcelFile, downloadItemExcelTemplate } from "@/lib/excel-parser"
 import { itemSchema } from "@/lib/schemas"
 import { bulkImportItems } from "@/app/items/actions"
 import { toast } from "sonner"
@@ -24,7 +24,7 @@ interface ParsedItemRow {
   isValid: boolean
 }
 
-export function ItemUploadBtn() {
+export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: string }> }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<UploadStep>("upload")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -47,9 +47,14 @@ export function ItemUploadBtn() {
           throw new Error(`Invalid unit "${newData[index].data.unit}". Must be one of: ${validUnits.join(", ")}`)
         }
 
+        const inclusiveOfTax = String(newData[index].data.inclusiveOfTax || "false").toLowerCase() === "true" ||
+          String(newData[index].data.inclusiveOfTax || "").toLowerCase() === "yes"
+
         itemSchema.parse({
+          itemCode: newData[index].data.itemCode?.toString() || "",
           name: newData[index].data.name,
-          hsnCode: newData[index].data.hsnCode?.toString(),
+          category: newData[index].data.category?.toString() || "",
+          hsnCode: newData[index].data.hsnCode?.toString() || "",
           barcodeNo: newData[index].data.barcodeNo?.toString() || "",
           unit: unitValue as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN",
           conversionRate: Number(newData[index].data.conversionRate) || 1,
@@ -59,11 +64,18 @@ export function ItemUploadBtn() {
           wholesalePrice: Number(newData[index].data.wholesalePrice) || 0,
           quantityPrice: Number(newData[index].data.quantityPrice) || 0,
           mrp: Number(newData[index].data.mrp) || 0,
+          discountType: (newData[index].data.discountType as "percentage" | "flat") || "percentage",
+          saleDiscount: Number(newData[index].data.saleDiscount) || 0,
           stock: Number(newData[index].data.stock) || 0,
           minStock: Number(newData[index].data.minStock) || 0,
           maxStock: Number(newData[index].data.maxStock) || 0,
+          itemLocation: newData[index].data.itemLocation?.toString() || "",
+          perCartonQuantity: Number(newData[index].data.perCartonQuantity) || undefined,
+          godownId: (newData[index].data.godownId as any) ?? null,
           gstRate: Number(newData[index].data.gstRate) || 18,
+          taxRate: Number(newData[index].data.taxRate) || 18,
           cessRate: Number(newData[index].data.cessRate) || 0,
+          inclusiveOfTax: inclusiveOfTax,
         })
         newData[index].errors = []
         newData[index].isValid = true
@@ -91,7 +103,10 @@ export function ItemUploadBtn() {
       ...prev,
       {
         data: {
+          id: "",
+          itemCode: "",
           name: "",
+          category: "",
           hsnCode: "",
           barcodeNo: "",
           unit: "PCS",
@@ -102,40 +117,27 @@ export function ItemUploadBtn() {
           wholesalePrice: 0,
           quantityPrice: 0,
           mrp: 0,
+          discountType: "percentage",
+          saleDiscount: 0,
           stock: 0,
           minStock: 0,
           maxStock: 0,
+          itemLocation: "",
+          perCartonQuantity: undefined,
+          godownId: null,
           gstRate: 18,
+          taxRate: 18,
           cessRate: 0,
+          inclusiveOfTax: false,
         },
-        errors: ["name: Required", "hsnCode: Required"],
+        errors: ["name: Required"],
         isValid: false,
       },
     ])
   }
 
   const handleDownloadTemplate = () => {
-    downloadExcelTemplate(
-      [
-        "name",
-        "hsnCode",
-        "barcodeNo",
-        "unit",
-        "conversionRate",
-        "alternateUnit",
-        "purchasePrice",
-        "salePrice",
-        "wholesalePrice",
-        "quantityPrice",
-        "mrp",
-        "stock",
-        "minStock",
-        "maxStock",
-        "gstRate",
-        "cessRate",
-      ],
-      "item_template.xlsx",
-    )
+    void downloadItemExcelTemplate("item_template.xlsx", godowns.map((g) => g.name))
     toast.success("Template downloaded successfully")
   }
 
@@ -159,9 +161,24 @@ export function ItemUploadBtn() {
             throw new Error(`Invalid unit "${row.unit}". Must be one of: ${validUnits.join(", ")}`)
           }
 
+          // Parse inclusiveOfTax from Yes/No string
+          const inclusiveOfTax = String(row.inclusiveOfTax || "").toLowerCase() === "yes"
+
+          const godownName = String((row as any).godownName || (row as any).godown || "")
+            .trim()
+            .replace(/\s+/g, " ")
+          const matchedGodown = godownName
+            ? godowns.find((g) => g.name.toLowerCase() === godownName.toLowerCase())
+            : undefined
+          if (godownName && !matchedGodown) {
+            throw new Error(`Invalid Godown "${godownName}". Please select an existing godown.`)
+          }
+
           const validated = itemSchema.parse({
+            itemCode: row.itemCode?.toString() || "",
             name: row.name,
-            hsnCode: row.hsnCode?.toString(),
+            category: row.category?.toString() || "",
+            hsnCode: row.hsnCode?.toString() || "",
             barcodeNo: row.barcodeNo?.toString() || "",
             unit: unitValue as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN",
             conversionRate: Number(row.conversionRate) || 1,
@@ -171,20 +188,29 @@ export function ItemUploadBtn() {
             wholesalePrice: Number(row.wholesalePrice) || 0,
             quantityPrice: Number(row.quantityPrice) || 0,
             mrp: Number(row.mrp) || 0,
+            discountType: (row.discountType?.toString().toLowerCase() as "percentage" | "flat") || "percentage",
+            saleDiscount: Number(row.saleDiscount) || 0,
             stock: Number(row.stock) || 0,
             minStock: Number(row.minStock) || 0,
             maxStock: Number(row.maxStock) || 0,
-            gstRate: Number(row.gstRate) || 18,
+            itemLocation: row.itemLocation?.toString() || "",
+            perCartonQuantity: Number(row.perCartonQuantity) || undefined,
+            godownId: matchedGodown?.id ?? null,
+            gstRate: Number(row.gstRate) || Number(row.taxRate) || 18,
+            taxRate: Number(row.taxRate) || Number(row.gstRate) || 18,
             cessRate: Number(row.cessRate) || 0,
+            inclusiveOfTax: inclusiveOfTax,
           })
+
+          // Check if this is an existing item (has valid UUID)
+          const itemId = row.id?.toString() || ""
+          const isExistingItem = itemId.length > 10 // UUID check
 
           parsed.push({
             data: {
-              id: `ITEM-${Date.now()}-${index}`,
+              id: isExistingItem ? itemId : `ITEM-${Date.now()}-${index}`,
               ...validated,
-              barcodeNo: validated.barcodeNo || undefined,
-              alternateUnit: validated.alternateUnit || undefined,
-              mrp: validated.mrp || undefined,
+              godownName: matchedGodown?.name ?? (godownName || null),
               createdAt: new Date(),
               updatedAt: new Date(),
             },
@@ -195,10 +221,13 @@ export function ItemUploadBtn() {
           if (error instanceof Error) {
             parsed.push({
               data: {
-                name: row.name || "",
-                hsnCode: row.hsnCode?.toString() || "",
-                barcodeNo: row.barcodeNo?.toString() || "",
-                unit: row.unit || "PCS",
+                id: row.id?.toString() || "",
+                itemCode: row.itemCode?.toString() || "",
+                name: String(row.name || ""),
+                category: row.category?.toString() || "",
+                hsnCode: String(row.hsnCode || ""),
+                barcodeNo: String(row.barcodeNo || ""),
+                unit: String(row.unit || "PCS"),
                 conversionRate: Number(row.conversionRate) || 1,
                 alternateUnit: row.alternateUnit?.toString() || "",
                 purchasePrice: Number(row.purchasePrice) || 0,
@@ -206,11 +235,18 @@ export function ItemUploadBtn() {
                 wholesalePrice: Number(row.wholesalePrice) || 0,
                 quantityPrice: Number(row.quantityPrice) || 0,
                 mrp: Number(row.mrp) || 0,
+                discountType: (row.discountType?.toString().toLowerCase() as "percentage" | "flat") || "percentage",
+                saleDiscount: Number(row.saleDiscount) || 0,
                 stock: Number(row.stock) || 0,
                 minStock: Number(row.minStock) || 0,
                 maxStock: Number(row.maxStock) || 0,
+                itemLocation: row.itemLocation?.toString() || "",
+                perCartonQuantity: Number(row.perCartonQuantity) || undefined,
+                godownName: String((row as any).godownName || (row as any).godown || "") || "",
                 gstRate: Number(row.gstRate) || 18,
+                taxRate: Number(row.taxRate) || 18,
                 cessRate: Number(row.cessRate) || 0,
+                inclusiveOfTax: String(row.inclusiveOfTax || "").toLowerCase() === "yes",
               },
               errors: [error.message],
               isValid: false,
@@ -219,22 +255,32 @@ export function ItemUploadBtn() {
             const zodError = error as { errors: { path: string[]; message: string }[] }
             parsed.push({
               data: {
-                name: row.name || "",
-                hsnCode: row.hsnCode?.toString() || "",
-                barcodeNo: row.barcodeNo?.toString() || "",
-                unit: row.unit || "PCS",
+                id: row.id?.toString() || "",
+                itemCode: row.itemCode?.toString() || "",
+                name: String(row.name || ""),
+                category: row.category?.toString() || "",
+                hsnCode: String(row.hsnCode || ""),
+                barcodeNo: String(row.barcodeNo || ""),
+                unit: String(row.unit || "PCS"),
                 conversionRate: Number(row.conversionRate) || 1,
-                alternateUnit: row.alternateUnit?.toString() || "",
+                alternateUnit: String(row.alternateUnit || ""),
                 purchasePrice: Number(row.purchasePrice) || 0,
                 salePrice: Number(row.salePrice) || 0,
                 wholesalePrice: Number(row.wholesalePrice) || 0,
                 quantityPrice: Number(row.quantityPrice) || 0,
                 mrp: Number(row.mrp) || 0,
+                discountType: (row.discountType?.toString().toLowerCase() as "percentage" | "flat") || "percentage",
+                saleDiscount: Number(row.saleDiscount) || 0,
                 stock: Number(row.stock) || 0,
                 minStock: Number(row.minStock) || 0,
                 maxStock: Number(row.maxStock) || 0,
+                itemLocation: row.itemLocation?.toString() || "",
+                perCartonQuantity: Number(row.perCartonQuantity) || undefined,
+                godownName: String((row as any).godownName || (row as any).godown || "") || "",
                 gstRate: Number(row.gstRate) || 18,
+                taxRate: Number(row.taxRate) || 18,
                 cessRate: Number(row.cessRate) || 0,
+                inclusiveOfTax: String(row.inclusiveOfTax || "").toLowerCase() === "yes",
               },
               errors: zodError.errors.map((e) => `${e.path.join(".")}: ${e.message}`),
               isValid: false,
@@ -266,8 +312,15 @@ export function ItemUploadBtn() {
 
     setIsProcessing(true)
     try {
-      await bulkImportItems(validRows.map((row) => row.data as IItem))
-      toast.success(`Successfully imported ${validRows.length} items`)
+      const result = await bulkImportItems(validRows.map((row) => row.data as IItem))
+      
+      if (result.success) {
+        const message = result.message || `Successfully imported ${validRows.length} items`
+        toast.success(message)
+      } else {
+        toast.error(result.error || "Failed to import items")
+      }
+      
       setOpen(false)
       setStep("upload")
       setParsedData([])
@@ -370,7 +423,7 @@ export function ItemUploadBtn() {
               </div>
 
               {/* Data Table - Scrollable */}
-              <div className="border rounded-lg max-h-[500px] overflow-auto">
+              <div className="border rounded-lg max-h-125 overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
@@ -392,7 +445,7 @@ export function ItemUploadBtn() {
                           {row.isValid ? (
                             <Check className="w-4 h-4 text-green-600" />
                           ) : (
-                            <AlertCircle className="w-4 h-4 text-orange-600" title={row.errors.join(", ")} />
+                            <AlertCircle className="w-4 h-4 text-orange-600" aria-label={row.errors.join(", ")} />
                           )}
                         </TableCell>
                         <TableCell>
@@ -401,8 +454,8 @@ export function ItemUploadBtn() {
                             onChange={(e) => updateRow(index, "name", e.target.value)}
                             className={
                               !row.isValid && row.errors.some((e) => e.includes("name"))
-                                ? "border-orange-500 min-w-[200px]"
-                                : "min-w-[200px]"
+                                ? "border-orange-500 min-w-50"
+                                : "min-w-50"
                             }
                           />
                         </TableCell>
@@ -412,8 +465,8 @@ export function ItemUploadBtn() {
                             onChange={(e) => updateRow(index, "hsnCode", e.target.value)}
                             className={
                               !row.isValid && row.errors.some((e) => e.includes("hsnCode"))
-                                ? "border-orange-500 min-w-[120px]"
-                                : "min-w-[120px]"
+                                ? "border-orange-500 min-w-30"
+                                : "min-w-30"
                             }
                           />
                         </TableCell>
@@ -425,8 +478,8 @@ export function ItemUploadBtn() {
                             <SelectTrigger
                               className={
                                 !row.isValid && row.errors.some((e) => e.includes("unit"))
-                                  ? "border-orange-500 w-[100px]"
-                                  : "w-[100px]"
+                                  ? "border-orange-500 w-25"
+                                  : "w-25"
                               }
                             >
                               <SelectValue />
@@ -445,7 +498,7 @@ export function ItemUploadBtn() {
                             type="number"
                             value={row.data.purchasePrice || 0}
                             onChange={(e) => updateRow(index, "purchasePrice", Number.parseFloat(e.target.value) || 0)}
-                            className="min-w-[120px]"
+                            className="min-w-30"
                           />
                         </TableCell>
                         <TableCell>
@@ -453,7 +506,7 @@ export function ItemUploadBtn() {
                             type="number"
                             value={row.data.salePrice || 0}
                             onChange={(e) => updateRow(index, "salePrice", Number.parseFloat(e.target.value) || 0)}
-                            className="min-w-[120px]"
+                            className="min-w-30"
                           />
                         </TableCell>
                         <TableCell>
@@ -461,7 +514,7 @@ export function ItemUploadBtn() {
                             type="number"
                             value={row.data.stock || 0}
                             onChange={(e) => updateRow(index, "stock", Number.parseFloat(e.target.value) || 0)}
-                            className="min-w-[100px]"
+                            className="min-w-25"
                           />
                         </TableCell>
                         <TableCell>
@@ -469,7 +522,7 @@ export function ItemUploadBtn() {
                             type="number"
                             value={row.data.gstRate || 18}
                             onChange={(e) => updateRow(index, "gstRate", Number.parseFloat(e.target.value) || 18)}
-                            className="min-w-[80px]"
+                            className="min-w-20"
                           />
                         </TableCell>
                         <TableCell>

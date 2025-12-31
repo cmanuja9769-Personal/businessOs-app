@@ -1,310 +1,120 @@
-# Implementation Complete
+# Feature Specification: Billing & Inventory Application
+**Based on Vyapar App Functional Analysis**
 
-All missing features from MISSING_FEATURES.md have been successfully implemented.
+This document outlines the complete feature set required to build a comprehensive GST Billing and Accounting application for small businesses (MSMEs).
 
-## Completed Features
+---
 
-### 1. Database Integration
-- Supabase PostgreSQL configured with complete schema
-- All CRUD operations migrated to use database instead of in-memory storage
-- SQL scripts created for easy setup:
-  - `scripts/001_create_tables.sql` - Core tables
-  - `scripts/002_create_triggers.sql` - Automatic timestamps
-  - `scripts/003_seed_dummy_data.sql` - Sample data
-  - `scripts/004_disable_rls_for_dev.sql` - Development setup
-  - `scripts/005_create_settings_table.sql` - Settings table
-- Server actions in place for all entities
-- Data persists across server restarts
+## 1. Dashboard & Home
+* **Business Overview:** Real-time display of Cash-in-Hand, Stock Value, Bank Balance, and critical financial health indicators.
+* **Quick Actions:** Shortcut keys for fast navigation (e.g., `Alt+S` for Sale, `Ctrl+P` for Print).
+* **Business Status:** Visual graphs/charts for Expenses, Sales, and Receivables.
 
-### 2. Payment Management
-**New Features:**
-- Dedicated payments page (`/payments`) with:
-  - Receivables tracking (outstanding invoices)
-  - Payables tracking (outstanding purchases)
-  - Summary cards showing total receivables, payables, and net position
-  - Quick payment recording for any outstanding invoice or purchase
-- Payment form component for recording payments
-- Payment methods: Cash, Card, UPI, Bank Transfer, Cheque, Other
-- Payment history tracking with reference numbers
-- Automatic status updates (paid/partial/unpaid) based on payments
-- Payment detail view in invoice and purchase pages
+## 2. Inventory Management (Stock)
+### Item Master
+- [ ] **Add/Edit Items:** Capture Item Name, HSN/SAC Code, Tax Rate, and Description.
+- [ ] **Item Types:** Support for Products (Inventory) and Services.
+- [ ] **Pricing:** Sales Price, Purchase Price, and Tax Inclusive/Exclusive toggles.
+- [ ] **Unit Management:**
+    - Base Units (e.g., pcs, kg).
+    - Secondary Units with conversion formulas (e.g., 1 Box = 12 Pcs).
+- [ ] **Barcode Integration:** Generate barcodes and scan for quick billing/inventory lookup.
+- [ ] **Images:** Upload product images.
 
-**Files Created:**
-- `app/payments/page.tsx` - Main payments page
-- `app/payments/actions.ts` - Updated with all payment operations
-- `components/payments/payment-form.tsx` - Already existed, now integrated
+### Advanced Stock Features
+- [ ] **Batch Tracking:** Manage items by Batch Number.
+- [ ] **Expiry Management:** Track Manufacturing Date and Expiry Date; alerts for items expiring in 30 days.
+- [ ] **Serial Number Tracking:** Track individual units by unique serial numbers.
+- [ ] **Low Stock Alerts:** Notification when stock dips below the defined "Minimum Quantity."
+- [ ] **Stock Adjustment:** Manual adjustments for lost/damaged goods.
 
-### 3. Purchase Management System
-**New Features:**
-- Purchase Order creation with supplier selection
-- Purchase detail pages with complete PO information
-- Purchase editing functionality
-- Payment integration on purchase detail pages
-- Purchase numbering system (PO/YEAR/0001)
-- Stock management integration (ready for future implementation)
-- GST/Non-GST billing modes
+## 3. Transaction Modules
+### Sales (Accounts Receivable)
+- [ ] **Sale Invoice:** Create GST/Non-GST invoices. Support for Cash and Credit sales.
+- [ ] **Estimates/Quotations:** Create Proforma invoices; one-click conversion to Sale Invoice.
+- [ ] **Payment-In:** Record payments received from customers (Cash/Cheque/UPI/Bank).
+- [ ] **Sale Return (Credit Note):** Handle returned goods and adjust inventory/accounts automatically.
+- [ ] **Delivery Challan:** Create challans for goods movement; convert to invoice later.
+- [ ] **Sale Orders:** Manage open orders from customers.
 
-**Files Created:**
-- `app/purchases/[id]/page.tsx` - Purchase detail view
-- `app/purchases/[id]/edit/page.tsx` - Purchase edit page
-- `components/purchases/purchase-editor.tsx` - Edit component
-- Updated `app/purchases/actions.ts` with edit functions
+### Purchase (Accounts Payable)
+- [ ] **Purchase Bill:** Record vendor invoices and update stock.
+- [ ] **Payment-Out:** Record payments made to vendors.
+- [ ] **Purchase Order (PO):** Create LPOs for suppliers; convert to Purchase Bill upon delivery.
+- [ ] **Purchase Return (Debit Note):** Return goods to vendors and adjust accounts.
 
-### 4. Invoice Editing
-**Status:** Already implemented
-- Invoice editor component exists
-- Full edit functionality available at `/invoices/[id]/edit`
-- Can modify customers, items, quantities, prices, and notes
-- Payment integration added to invoice detail pages
+### Expenses & Other Income
+- [ ] **Expense Tracking:** Record direct/indirect expenses (Rent, Electricity, Salary).
+- [ ] **Expense Categories:** Group expenses for reporting.
+- [ ] **Other Income:** Record non-core income (e.g., Interest, Scrap sale).
 
-**Enhanced:**
-- Added payment form to invoice detail page
-- Payment history display
-- Better integration with payment system
+## 4. Party Management (CRM/SRM)
+- [ ] **Party Master:** Create Customers and Suppliers.
+- [ ] **Import Parties:** Bulk import from Excel/Contacts.
+- [ ] **Party Details:** GSTIN, Phone, Email, Billing Address, Shipping Address.
+- [ ] **Receivables/Payables:** Track "To Pay" and "To Collect" balances.
+- [ ] **Credit Limits:** Set credit limits for customers.
+- [ ] **Party Groups:** Categorize parties (e.g., Retailers, Wholesalers) for analysis.
 
-### 5. Reports & Analytics
-**New Features:**
-- Comprehensive reports page (`/reports`) with 4 main sections:
-  
-**a) Sales Report:**
-- Total sales, monthly sales, yearly sales
-- Outstanding receivables
-- Top performing items by revenue
-- Recent invoices with status
+## 5. Banking & Cash
+- [ ] **Bank Accounts:** Manage multiple bank accounts and wallets.
+- [ ] **Cash-in-Hand:** Track daily cash flow.
+- [ ] **Cheque Management:** Log received/issued cheques and track clearance status (Open/Closed).
+- [ ] **Loan Management:** Track Loan Accounts, EMI schedules, and interest.
+- [ ] **Bank-to-Cash / Cash-to-Bank:** Contra entries for deposits and withdrawals.
 
-**b) Purchase Report:**
-- Total purchases and payment status
-- Outstanding payables
-- Recent purchase orders
+## 6. Comprehensive Reporting
+### GST Reports (Government Formats)
+- [ ] **GSTR-1:** Sales summary.
+- [ ] **GSTR-2:** Purchase summary.
+- [ ] **GSTR-3B:** Monthly summary of sales & purchases.
+- [ ] **GSTR-9:** Annual return data.
+- [ ] **JSON Export:** Generate files compatible with the GST portal.
 
-**c) GST Report:**
-- CGST, SGST, IGST collection tracking
-- Total GST collected
-- Invoice-wise GST breakdown
-- Export-ready format
+### Financial Reports
+- [ ] **Balance Sheet:** Assets, Liabilities, and Equity summary.
+- [ ] **Profit & Loss:** Net Profit, Gross Profit calculations.
+- [ ] **Cash Flow Statement:** Inflow/Outflow tracking.
+- [ ] **Day Book:** Daily transaction log.
 
-**d) Inventory Report:**
-- Total stock value
-- Low stock alerts
-- Out of stock items
-- Stock value by item/category
+### Item & Stock Reports
+- [ ] **Stock Summary:** Quantity and Value of current stock.
+- [ ] **Item-wise Profit/Loss:** Profitability analysis per product.
+- [ ] **Low Stock Report:** List of items needing replenishment.
+- [ ] **Stock Detail:** Opening, Inward, Outward, and Closing quantities.
 
-**Summary Cards:**
-- Total sales, purchases, gross profit, stock value
-- Real-time calculations from database
+### Business & Party Reports
+- [ ] **Party Statement:** Ledger for specific customers/suppliers.
+- [ ] **Outstanding Report:** Aging analysis of dues (Receivable/Payable).
+- [ ] **Tax Report:** Input Tax Credit (ITC) vs Tax Collected.
+- [ ] **Discount Report:** Total discounts given/received.
 
-**Files Created:**
-- `app/reports/page.tsx` - Complete reports dashboard
-- `app/reports/loading.tsx` - Loading state
+## 7. Settings & Configuration
+### General
+- [ ] **Company Profile:** Logo, Signature, Address.
+- [ ] **Multi-Firm:** Support multiple businesses in one app.
+- [ ] **Security:** App Lock (Passcode/Fingerprint).
+- [ ] **Backup:** Auto-backup to Google Drive; Local backup; Restore functionality.
 
-### 6. Functional Settings
-**New Features:**
-- Database-backed settings storage
-- Business information management:
-  - Business name, address, phone, email
-  - GSTIN number
-  - Logo upload support (structure ready)
-- Application preferences:
-  - Invoice/Purchase prefixes
-  - Default tax rate
-  - Currency symbol
-  - Date format selection
-  - Financial year start month
-- Feature toggles:
-  - Enable/disable GST
-  - Low stock alerts
-- Auto-creation of default settings on first load
+### Invoice Customization
+- [ ] **Themes:** Support for multiple templates (Classic, Modern, Thermal).
+- [ ] **Printer Settings:** Support for Thermal (2/3/4 inch) and Standard (A4/A5) printers.
+- [ ] **Header/Footer:** Custom terms & conditions, notes.
 
-**Files Created:**
-- Updated `app/settings/page.tsx` - Settings dashboard
-- `app/settings/actions.ts` - Settings CRUD operations
-- `components/settings/settings-form.tsx` - Settings form
-- `scripts/005_create_settings_table.sql` - Settings table schema
+### Transaction Settings
+- [ ] **Prefixes:** Custom invoice numbering (e.g., INV-001, 23-24/001).
+- [ ] **Terms:** Due dates and payment terms.
+- [ ] **Tax Settings:** Inclusive/Exclusive tax logic, HSN columns, Cess, Reverse Charge Mechanism (RCM).
+- [ ] **Additional Fields:** Transport details, E-Way Bill Number, PO Date/Number.
 
-### 7. Bulk Upload Confirmation Screens
-**Status:** Already implemented in earlier chat
-- Customer bulk upload with preview/edit
-- Item bulk upload with preview/edit
-- Validation before database insertion
-- Editable rows in confirmation screen
+### User Management
+- [ ] **Roles:** Admin, Salesperson, Secondary Admin.
+- [ ] **Permissions:** Restrict access (e.g., Salesperson cannot edit/delete past invoices).
 
-## Database Schema
-
-### Tables Created:
-1. `customers` - Customer information
-2. `items` - Inventory items
-3. `suppliers` - Supplier information
-4. `invoices` - Sales invoices
-5. `invoice_items` - Invoice line items
-6. `purchases` - Purchase orders
-7. `purchase_items` - Purchase line items
-8. `payments` - Payment records (linked to invoices/purchases)
-9. `settings` - Application settings
-
-### Key Features:
-- UUID primary keys
-- Foreign key relationships
-- Cascading deletes where appropriate
-- Timestamp triggers for updated_at
-- Indexes for performance
-- Check constraints for data integrity
-
-## Setup Instructions
-
-### 1. Database Setup
-Run the SQL scripts in Supabase in this order:
-```sql
--- 1. Create all tables
-scripts/001_create_tables.sql
-
--- 2. Setup automatic timestamps
-scripts/002_create_triggers.sql
-
--- 3. (Optional) Add sample data
-scripts/003_seed_dummy_data.sql
-
--- 4. Disable RLS for development
-scripts/004_disable_rls_for_dev.sql
-
--- 5. Create settings table
-scripts/005_create_settings_table.sql
-```
-
-### 2. Environment Variables
-Ensure these are set in your Vercel project:
-```
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-### 3. Test the Application
-1. Navigate to Settings and configure business information
-2. Add customers and items (or use bulk upload)
-3. Add suppliers
-4. Create purchase orders
-5. Create invoices
-6. Record payments
-7. View reports
-
-## Application Structure
-
-### Main Routes:
-- `/` - Dashboard (existing)
-- `/customers` - Customer management (existing, enhanced)
-- `/items` - Inventory management (existing, enhanced)
-- `/suppliers` - Supplier management (existing)
-- `/invoices` - Invoice management (existing, enhanced)
-- `/invoices/new` - Create invoice (existing)
-- `/invoices/[id]` - Invoice detail (existing, enhanced)
-- `/invoices/[id]/edit` - Edit invoice (existing)
-- `/purchases` - Purchase orders (existing, enhanced)
-- `/purchases/new` - Create purchase order (existing)
-- `/purchases/[id]` - Purchase detail (NEW)
-- `/purchases/[id]/edit` - Edit purchase (NEW)
-- `/payments` - Payment management (NEW)
-- `/reports` - Reports & analytics (NEW)
-- `/settings` - Application settings (enhanced)
-
-### Key Components:
-- Payment form for recording payments
-- Purchase editor for editing POs
-- Settings form for managing business config
-- Various report views and analytics
-
-## Next Steps / Future Enhancements
-
-### Recommended Additions:
-1. **Stock Management:**
-   - Auto-reduce stock on invoice creation
-   - Auto-increase stock on purchase order
-   - Stock adjustment forms
-
-2. **User Authentication:**
-   - Supabase Auth integration
-   - Role-based access control
-   - Multi-user support
-
-3. **PDF Generation:**
-   - Invoice PDF export
-   - Purchase order PDF export
-   - Report PDF export
-
-4. **Email Integration:**
-   - Send invoices via email
-   - Payment reminders
-   - Low stock alerts
-
-5. **Advanced Analytics:**
-   - Charts and graphs
-   - Trend analysis
-   - Profit/loss statements
-   - Balance sheet
-
-6. **Data Export:**
-   - Excel/CSV export
-   - Database backup
-   - Restore functionality
-
-7. **Quotations:**
-   - Create quotations
-   - Convert quotations to invoices
-
-8. **Expense Tracking:**
-   - Record business expenses
-   - Expense categories
-   - Expense reports
-
-9. **Customer Portal:**
-   - Customers view their invoices
-   - Online payment integration
-   - Invoice history
-
-10. **Mobile App:**
-    - React Native or PWA
-    - Mobile-optimized UI
-    - Offline support
-
-## Design Consistency
-
-The application maintains consistent design throughout:
-- Slate blue professional color scheme
-- Uniform card-based layouts
-- Consistent table styling
-- Standardized forms
-- Icon usage from Lucide React
-- Responsive design with mobile support
-- shadcn/ui component library
-
-## Performance Optimizations
-
-- Server-side data fetching with Next.js
-- Optimistic UI updates
-- Proper database indexing
-- Efficient SQL queries
-- React Server Components for better performance
-- Form validation with Zod
-
-## Security Considerations
-
-- Server actions for all mutations
-- Input validation and sanitization
-- Prepared statements (via Supabase)
-- Environment variable protection
-- HTTPS only in production
-
-**Note:** Before production, enable RLS policies in Supabase for proper data security.
-
-## Summary
-
-All features from MISSING_FEATURES.md have been successfully implemented and integrated into the application. The app now has:
-
-- Complete database integration with Supabase
-- Full payment management system
-- Comprehensive purchase management
-- Invoice editing capability
-- Detailed reports and analytics
-- Functional settings with business configuration
-- Consistent design throughout
-- Production-ready architecture
-
-The application is now a fully functional inventory and billing system with payment tracking, ready for deployment and real-world use.
+## 8. Utilities & Extra Features
+- [ ] **My Online Store:** Generate a web link for a product catalog; allow customers to place orders online.
+- [ ] **Tally Export:** Export data to Tally XML format.
+- [ ] **SMS/Communication:** Send Transaction SMS, Payment Reminders, and WhatsApp integration.
+- [ ] **Recycle Bin:** Restore deleted transactions.
+- [ ] **Offline Mode:** Full functionality without internet; sync when online.
+- [ ] **Referral System:** "Refer & Earn" logic (optional).

@@ -1,5 +1,5 @@
 import { getInvoice } from "@/app/invoices/actions"
-import { InvoiceEditor } from "@/components/invoices/invoice-editor"
+import { InvoiceForm } from "@/components/invoices/invoice-form"
 import { notFound } from "next/navigation"
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,12 +11,12 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Edit Invoice</h1>
         <p className="text-muted-foreground mt-1">Update invoice details and line items</p>
       </div>
-      <InvoiceEditor invoice={invoice} />
+      <InvoiceForm invoice={invoice} />
     </div>
   )
 }

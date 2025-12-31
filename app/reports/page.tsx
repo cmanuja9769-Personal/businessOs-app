@@ -21,12 +21,12 @@ export default async function ReportsPage() {
 
   // Sales Analytics
   const thisMonthInvoices = invoices.filter((inv) => {
-    const invDate = new Date(inv.date)
+    const invDate = new Date(inv.invoiceDate)
     return invDate >= monthStart && invDate <= monthEnd
   })
 
   const thisYearInvoices = invoices.filter((inv) => {
-    const invDate = new Date(inv.date)
+    const invDate = new Date(inv.invoiceDate)
     return invDate >= yearStart
   })
 
@@ -74,7 +74,7 @@ export default async function ReportsPage() {
     .slice(0, 10)
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
         <p className="text-muted-foreground mt-1">Track business performance and insights</p>
@@ -231,7 +231,7 @@ export default async function ReportsPage() {
                     <TableRow key={invoice.id}>
                       <TableCell className="font-mono">{invoice.invoiceNo}</TableCell>
                       <TableCell>{invoice.customerName}</TableCell>
-                      <TableCell>{format(new Date(invoice.date), "dd MMM yyyy")}</TableCell>
+                      <TableCell>{format(new Date(invoice.invoiceDate), "dd MMM yyyy")}</TableCell>
                       <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge

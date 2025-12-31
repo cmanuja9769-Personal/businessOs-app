@@ -29,7 +29,7 @@ export function DeleteButton({ customerId }: { customerId: string }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" title="Delete Customer">
           <Trash2 className="w-4 h-4 text-destructive" />
         </Button>
       </AlertDialogTrigger>

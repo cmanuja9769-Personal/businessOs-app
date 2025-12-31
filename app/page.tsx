@@ -8,8 +8,15 @@ import { getInvoices } from "./invoices/actions"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { format } from "date-fns"
+import { getCurrentUser } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
+  const user = await getCurrentUser()
+  if (!user) {
+    redirect("/auth/login")
+  }
+
   const [customers, items, invoices] = await Promise.all([getCustomers(), getItems(), getInvoices()])
 
   // Calculate statistics

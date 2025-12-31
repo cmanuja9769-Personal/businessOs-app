@@ -1,0 +1,59 @@
+{
+  "appId": "com.businessos.app",
+  "productName": "BusinessOS",
+  "copyright": "Copyright © 2025 BusinessOS",
+  "npmRebuild": true,
+  "buildDependenciesFromSource": false,
+  "directories": {
+    "output": "dist",
+    "buildResources": "electron/resources"
+  },
+  "files": [
+    ".next/standalone/**/*",
+    "electron/**/*",
+    "!electron/resources",
+    "node_modules/next/**/*"
+  ],
+  "asar": false,
+  "extraResources": [
+    {
+      "from": "C:/Program Files/nodejs/node.exe",
+      "to": "node.exe"
+    }
+  ],
+  "extraMetadata": {
+    "main": "electron/main.js"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "signAndEditExecutable": false
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "BusinessOS"
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "public/apple-icon.png",
+    "category": "public.app-category.business"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "public/apple-icon.png",
+    "category": "Office"
+  },
+  "publish": null
+}

@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Loader2 } from "lucide-react"
-import { createCustomer, updateCustomer } from "@/app/customers/actions"
+import { Plus, Loader2, Search } from "lucide-react"
+import { createCustomer, updateCustomer, lookupGSTDetails } from "@/app/customers/actions"
 import { toast } from "sonner"
 import type { ICustomer } from "@/types"
 
@@ -24,12 +24,15 @@ interface CustomerFormProps {
 export function CustomerForm({ customer, trigger }: CustomerFormProps) {
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isFetchingGST, setIsFetchingGST] = useState(false)
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    watch,
   } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: customer
@@ -47,6 +50,37 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
           openingDate: new Date(),
         },
   })
+
+  const gstinValue = watch("gstinNo")
+
+  // Auto-fetch GST details when valid GSTIN is entered
+  const handleGSTLookup = async () => {
+    const gstin = gstinValue?.trim().toUpperCase()
+    
+    if (!gstin || gstin.length !== 15) {
+      toast.error("Please enter a valid 15-character GST number")
+      return
+    }
+
+    setIsFetchingGST(true)
+    try {
+      const result = await lookupGSTDetails(gstin)
+      
+      if (result.success && result.data) {
+        // Auto-fill the form with fetched details
+        setValue("name", result.data.legalName || result.data.tradeName || "")
+        setValue("address", result.data.address)
+        
+        toast.success("GST details fetched successfully")
+      } else {
+        toast.error(result.error || "Could not fetch GST details")
+      }
+    } catch (error) {
+      toast.error("Failed to fetch GST details. Please try again.")
+    } finally {
+      setIsFetchingGST(false)
+    }
+  }
 
   const onSubmit = async (data: CustomerFormData) => {
     setIsSubmitting(true)
@@ -141,8 +175,31 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
 
           <div className="space-y-2">
             <Label htmlFor="gstinNo">GSTIN Number</Label>
-            <Input id="gstinNo" {...register("gstinNo")} placeholder="15 characters (e.g., 22AAAAA0000A1Z5)" />
+            <div className="flex gap-2">
+              <Input 
+                id="gstinNo" 
+                {...register("gstinNo")} 
+                placeholder="15 characters (e.g., 22AAAAA0000A1Z5)" 
+                className="flex-1"
+              />
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleGSTLookup}
+                disabled={isFetchingGST || !gstinValue || gstinValue.length !== 15}
+                className="shrink-0"
+              >
+                {isFetchingGST ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
             {errors.gstinNo && <p className="text-sm text-destructive">{errors.gstinNo.message}</p>}
+            <p className="text-xs text-muted-foreground">
+              Enter GST number and click the search button to auto-fill customer details
+            </p>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

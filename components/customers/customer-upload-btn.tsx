@@ -6,7 +6,7 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Upload, Download, AlertCircle, Loader2, Trash2, Plus, Check } from "lucide-react"
-import { parseExcelFile, downloadExcelTemplate } from "@/lib/excel-parser"
+import { parseExcelFile, downloadCustomerExcelTemplate } from "@/lib/excel-parser"
 import { customerSchema } from "@/lib/schemas"
 import { bulkImportCustomers } from "@/app/customers/actions"
 import { toast } from "sonner"
@@ -85,10 +85,7 @@ export function CustomerUploadBtn() {
   }
 
   const handleDownloadTemplate = () => {
-    downloadExcelTemplate(
-      ["name", "contactNo", "email", "address", "openingBalance", "openingDate", "gstinNo"],
-      "customer_template.xlsx",
-    )
+    void downloadCustomerExcelTemplate("customer_template.xlsx")
     toast.success("Template downloaded successfully")
   }
 
@@ -132,10 +129,10 @@ export function CustomerUploadBtn() {
             const zodError = error as { errors: { path: string[]; message: string }[] }
             parsed.push({
               data: {
-                name: row.name || "",
-                contactNo: row.contactNo?.toString() || "",
-                email: row.email || "",
-                address: row.address || "",
+                name: String(row.name || ""),
+                contactNo: String(row.contactNo || ""),
+                email: String(row.email || ""),
+                address: String(row.address || ""),
                 openingBalance: Number(row.openingBalance) || 0,
                 openingDate: row.openingDate ? new Date(row.openingDate) : new Date(),
                 gstinNo: row.gstinNo?.toString() || "",
@@ -270,7 +267,7 @@ export function CustomerUploadBtn() {
               </div>
 
               {/* Data Table */}
-              <div className="border rounded-lg max-h-[500px] overflow-auto">
+              <div className="border rounded-lg max-h-125 overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
@@ -291,7 +288,7 @@ export function CustomerUploadBtn() {
                           {row.isValid ? (
                             <Check className="w-4 h-4 text-green-600" />
                           ) : (
-                            <AlertCircle className="w-4 h-4 text-orange-600" title={row.errors.join(", ")} />
+                            <AlertCircle className="w-4 h-4 text-orange-600" aria-label={row.errors.join(", ")} />
                           )}
                         </TableCell>
                         <TableCell>

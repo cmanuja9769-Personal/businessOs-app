@@ -35,7 +35,7 @@ export default async function PaymentsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Payment Management</h1>
         <p className="text-muted-foreground mt-1">Track receivables, payables, and record payments</p>
@@ -130,7 +130,7 @@ export default async function PaymentsPage() {
                       <TableRow key={invoice.id}>
                         <TableCell className="font-mono font-medium">{invoice.invoiceNo}</TableCell>
                         <TableCell>{invoice.customerName}</TableCell>
-                        <TableCell>{format(new Date(invoice.date), "dd MMM yyyy")}</TableCell>
+                        <TableCell>{format(new Date(invoice.invoiceDate), "dd MMM yyyy")}</TableCell>
                         <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>
                         <TableCell className="text-green-600">₹{invoice.paidAmount.toFixed(2)}</TableCell>
                         <TableCell className="text-red-600 font-semibold">₹{invoice.balance.toFixed(2)}</TableCell>

@@ -7,9 +7,16 @@ import "./globals.css"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Toaster } from "@/components/ui/sonner"
+import { AuthProvider } from "@/components/auth/auth-provider"
+import { getCurrentUser } from "@/lib/auth"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
+
+// Force all routes to be dynamic to avoid static export errors (cookies/session usage)
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
 
 export const metadata: Metadata = {
   title: "BusinessOS - Professional Business Management Software",
@@ -34,23 +41,46 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const user = await getCurrentUser()
+
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased`}>
+      <body className={`font-sans antialiased`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
-              <Header />
-              <main className="flex-1 overflow-y-auto bg-muted/30">{children}</main>
-            </div>
-          </div>
-          <Toaster />
+          <AuthProvider>
+            {user ? (
+              // Authenticated layout
+              <div className="flex h-screen overflow-hidden">
+                <div className="print:hidden">
+                  <Sidebar />
+                </div>
+                <div className="flex-1 flex flex-col overflow-hidden md:ml-64 lg:ml-64 print:ml-0">
+                  <div className="print:hidden">
+                    <Header />
+                  </div>
+                  <main className="flex-1 overflow-y-auto bg-muted/30 print:bg-white print:overflow-visible">
+                    {children}
+                  </main>
+                </div>
+              </div>
+            ) : (
+              // Unauthenticated layout (for login/signup pages)
+              <>{children}</>
+            )}
+            <Toaster />
+          </AuthProvider>
         </ThemeProvider>
         <Analytics />
       </body>

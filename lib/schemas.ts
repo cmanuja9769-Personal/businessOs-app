@@ -42,10 +42,12 @@ export const itemSchema = z
     minStock: z.coerce.number().min(0, "Minimum stock cannot be negative").default(0),
     maxStock: z.coerce.number().min(0, "Maximum stock cannot be negative").default(0),
     itemLocation: z.string().optional().or(z.literal("")), // Added item location
+    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1").optional(), // Added per carton quantity
     gstRate: z.coerce.number().min(0).max(100, "GST rate must be between 0-100"),
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),
     inclusiveOfTax: z.boolean().optional().default(false), // Added inclusive of tax flag
+    godownId: z.string().uuid().optional().nullable(),
   })
   .refine((data) => data.salePrice >= data.purchasePrice, {
     message: "Sale price should be greater than or equal to purchase price",
@@ -76,6 +78,15 @@ export type InvoiceItemFormData = z.infer<typeof invoiceItemSchema>
 // Invoice validation schema
 export const invoiceSchema = z.object({
   invoiceNo: z.string().min(1, "Invoice number is required"),
+  documentType: z.enum([
+    "invoice",
+    "sales_order",
+    "quotation",
+    "proforma",
+    "delivery_challan",
+    "credit_note",
+    "debit_note",
+  ]).default("invoice"),
   customerId: z.string().min(1, "Customer is required"),
   customerName: z.string(),
   customerPhone: z.string().optional(),
@@ -83,6 +94,7 @@ export const invoiceSchema = z.object({
   customerGst: z.string().optional(),
   invoiceDate: z.coerce.date(),
   dueDate: z.coerce.date(),
+  validityDate: z.coerce.date().optional(), // For quotations/proforma
   billingMode: z.enum(["gst", "non-gst"]),
   pricingMode: z.enum(["sale", "wholesale", "quantity"]).default("sale"),
   items: z.array(invoiceItemSchema).min(1, "At least one item is required"),
@@ -96,9 +108,28 @@ export const invoiceSchema = z.object({
   total: z.coerce.number(),
   paidAmount: z.coerce.number().default(0),
   balance: z.coerce.number(),
-  status: z.enum(["draft", "sent", "paid", "overdue", "unpaid", "partial"]).default("draft"),
+  status: z.enum([
+    "draft",
+    "sent",
+    "paid",
+    "overdue",
+    "unpaid",
+    "partial",
+    "accepted",
+    "rejected",
+    "converted",
+    "cancelled",
+    "delivered",
+  ]).default("draft"),
   gstEnabled: z.boolean(),
   notes: z.string().optional().or(z.literal("")),
+  // E-invoice fields
+  irn: z.string().optional(),
+  qrCode: z.string().optional(),
+  eInvoiceDate: z.coerce.date().optional(),
+  // Document linking fields
+  parentDocumentId: z.string().optional(),
+  convertedToInvoiceId: z.string().optional(),
 })
 
 export type InvoiceFormData = z.infer<typeof invoiceSchema>
@@ -164,7 +195,7 @@ export type PurchaseFormData = z.infer<typeof purchaseSchema>
 export const paymentSchema = z.object({
   invoiceId: z.string().optional(),
   purchaseId: z.string().optional(),
-  paymentDate: z.coerce.date(),
+  paymentDate: z.string().or(z.coerce.date()),
   amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
   paymentMethod: z.enum(["cash", "card", "upi", "bank_transfer", "cheque", "other"]),
   referenceNumber: z.string().optional().or(z.literal("")),

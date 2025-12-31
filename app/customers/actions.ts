@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import type { ICustomer } from "@/types"
 import { customerSchema } from "@/lib/schemas"
+import { fetchGSTDetails, type GSTDetails } from "@/lib/gst-lookup"
 
 export async function getCustomers(): Promise<ICustomer[]> {
   const supabase = await createClient()
@@ -132,4 +133,27 @@ export async function bulkImportCustomers(customersData: ICustomer[]) {
 
   revalidatePath("/customers")
   return { success: true, count: customersData.length }
+}
+
+/**
+ * Fetches GST details for a given GSTIN
+ * @param gstin - The GST number to lookup
+ * @returns GST details including address or error
+ */
+export async function lookupGSTDetails(gstin: string): Promise<{ success: boolean; data?: GSTDetails; error?: string }> {
+  try {
+    const details = await fetchGSTDetails(gstin)
+    
+    if (!details) {
+      return { success: false, error: "GST details not found" }
+    }
+
+    return { success: true, data: details }
+  } catch (error) {
+    console.error("[v0] Error fetching GST details:", error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to fetch GST details" 
+    }
+  }
 }

@@ -7,4 +7,3 @@ ADD CONSTRAINT check_status CHECK (status IN ('draft', 'sent', 'paid', 'overdue'
 -- Update any existing 'unpaid' statuses to 'sent' if they were created but not paid
 -- (Optional - uncomment if you want to migrate existing data)
 -- UPDATE public.invoices SET status = 'sent' WHERE status = 'unpaid' AND paid_amount = 0;
-

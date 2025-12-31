@@ -1,129 +1,98 @@
 import { getSettings } from "./actions"
 import { SettingsForm } from "@/components/settings/settings-form"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Building2, FileText, Database } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Building2, Palette, SettingsIcon, CreditCard } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export default async function SettingsPage() {
   const settings = await getSettings()
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your business settings and preferences</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Business Profile</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              <p className="text-2xl font-bold">{settings.businessName}</p>
-              {settings.businessGst && (
-                <Badge variant="outline" className="text-xs">
-                  GSTIN: {settings.businessGst}
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="business" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:w-auto lg:inline-grid gap-2">
+          <TabsTrigger value="business" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Business</span>
+          </TabsTrigger>
+          <TabsTrigger value="invoice" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <Palette className="h-4 w-4" />
+            <span className="hidden sm:inline">Invoice</span>
+          </TabsTrigger>
+          <TabsTrigger value="payment" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <CreditCard className="h-4 w-4" />
+            <span className="hidden sm:inline">Payment</span>
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+            <SettingsIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Preferences</span>
+          </TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Tax Configuration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              <p className="text-2xl font-bold">{settings.defaultTaxRate}%</p>
-              <p className="text-xs text-muted-foreground">Default GST Rate</p>
-            </div>
-          </CardContent>
-        </Card>
+        <TabsContent value="business" className="space-y-6">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Business Profile</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1">
+                  <p className="text-2xl font-bold">{settings.businessName}</p>
+                  {settings.businessGst && (
+                    <Badge variant="outline" className="text-xs font-mono">
+                      GSTIN: {settings.businessGst}
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Low Stock Alert</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              <p className="text-2xl font-bold">{settings.lowStockAlert ? "Enabled" : "Disabled"}</p>
-              <p className="text-xs text-muted-foreground">Inventory Monitoring</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Tax Configuration</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1">
+                  <p className="text-2xl font-bold">{settings.defaultTaxRate}%</p>
+                  <p className="text-xs text-muted-foreground">Default GST Rate</p>
+                </div>
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
-            Business Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SettingsForm settings={settings} />
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Template</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1">
+                  <p className="text-2xl font-bold capitalize">{settings.invoiceTemplate}</p>
+                  <p className="text-xs text-muted-foreground">Invoice Design</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Document Preferences
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Invoice Prefix</p>
-                <p className="text-lg font-bold">{settings.invoicePrefix}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Purchase Prefix</p>
-                <p className="text-lg font-bold">{settings.purchasePrefix}</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Date Format</p>
-              <p className="text-muted-foreground">{settings.dateFormat}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Currency Symbol</p>
-              <p className="text-lg">{settings.currencySymbol}</p>
-            </div>
-          </CardContent>
-        </Card>
+          <SettingsForm settings={settings} activeTab="business" />
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="w-5 h-5" />
-              Data Management
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Export Data</p>
-              <p className="text-sm text-muted-foreground mb-2">Download your business data for backup or analysis</p>
-              <Button variant="outline" className="w-full bg-transparent" disabled>
-                Export All Data (Coming Soon)
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Database Backup</p>
-              <p className="text-sm text-muted-foreground mb-2">Create a complete backup of your database</p>
-              <Button variant="outline" className="w-full bg-transparent" disabled>
-                Create Backup (Coming Soon)
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="invoice" className="space-y-6">
+          <SettingsForm settings={settings} activeTab="invoice" />
+        </TabsContent>
+
+        <TabsContent value="payment" className="space-y-6">
+          <SettingsForm settings={settings} activeTab="payment" />
+        </TabsContent>
+
+        <TabsContent value="preferences" className="space-y-6">
+          <SettingsForm settings={settings} activeTab="preferences" />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

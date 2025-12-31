@@ -1,11 +1,21 @@
 import { getInvoice } from "@/app/invoices/actions"
+import { getSettings } from "@/app/settings/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Download } from "lucide-react"
+import { ArrowLeft, Edit } from "lucide-react"
 import Link from "next/link"
-import { format } from "date-fns"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PrintButton } from "@/components/ui/print-button"
+import { DownloadPdfButton } from "@/components/ui/download-pdf-button"
+import { GenerateEInvoiceButton } from "@/components/invoices/generate-einvoice-button"
+import { GenerateEWayBillButton } from "@/components/invoices/generate-ewaybill-button"
+import { EWayBillStatusCard } from "@/components/invoices/e-waybill-status-card"
+import { ClassicTemplate } from "@/components/invoices/templates/classic-template"
+import { ModernTemplate } from "@/components/invoices/templates/modern-template"
+import { MinimalTemplate } from "@/components/invoices/templates/minimal-template"
+import { DOCUMENT_TYPE_CONFIG } from "@/types"
+import { SendInvoiceEmailDialog } from "@/components/invoices/send-invoice-email-dialog"
+import { PrintableInvoice } from "@/components/invoices/printable-invoice"
+import { InvoiceViewDisplay } from "@/components/invoices/invoice-view-display"
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -16,122 +26,93 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       <div className="p-6">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">Invoice not found</p>
+            <div className="text-center space-y-3">
+              <p className="text-muted-foreground">Invoice not found</p>
+              <Link href="/invoices">
+                <Button variant="outline">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Invoices
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
     )
   }
 
+  const settings = await getSettings()
+
+  // Select template based on settings
+  const TemplateComponent =
+    settings.invoiceTemplate === "modern"
+      ? ModernTemplate
+      : settings.invoiceTemplate === "minimal"
+        ? MinimalTemplate
+        : ClassicTemplate
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between print:hidden">
+    <div className="container p-6 space-y-6">
+      {/* Action Bar */}
+      <div className="flex items-center justify-between print:hidden gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <Link href="/invoices">
             <Button variant="outline" size="icon">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Invoice {invoice.invoiceNo}</h1>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold">{invoice.invoiceNo}</h1>
             <p className="text-muted-foreground">{invoice.customerName}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 bg-transparent">
-            <Download className="w-4 h-4" />
-            Download PDF
-          </Button>
+
+        <div className="flex gap-2 flex-wrap">
+          {DOCUMENT_TYPE_CONFIG[invoice.documentType].canBeEInvoiced && !invoice.irn && invoice.status !== "draft" && (
+            <GenerateEInvoiceButton
+              invoiceId={invoice.id}
+              invoiceNo={invoice.invoiceNo}
+              customerGst={invoice.customerGst}
+              gstEnabled={invoice.gstEnabled}
+              status={invoice.status}
+              irn={invoice.irn}
+              customerName={invoice.customerName}
+              total={invoice.total}
+            />
+          )}
+          {!invoice.ewaybillNo && invoice.status !== "draft" && (
+            <GenerateEWayBillButton
+              invoiceId={invoice.id}
+              invoiceNo={invoice.invoiceNo}
+              total={invoice.total}
+              status={invoice.status}
+              ewaybillNo={invoice.ewaybillNo}
+              customerName={invoice.customerName}
+              gstEnabled={invoice.gstEnabled}
+            />
+          )}
+          <Link href={`/invoices/${id}/edit`}>
+            <Button variant="outline" className="gap-2 bg-transparent">
+              <Edit className="w-4 h-4" />
+              Edit
+            </Button>
+          </Link>
+          <DownloadPdfButton />
           <PrintButton />
+          <SendInvoiceEmailDialog invoice={invoice} />
         </div>
       </div>
 
-      <Card className="print:shadow-none">
-        <CardContent className="p-8">
-          <div className="space-y-8">
-            <div className="flex justify-between items-start">
-              <div>
-                <h2 className="text-2xl font-bold">INVOICE</h2>
-                <p className="text-sm text-muted-foreground mt-1">Invoice No: {invoice.invoiceNo}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Date:</span>{" "}
-                  {format(new Date(invoice.invoiceDate), "dd MMM yyyy")}
-                </p>
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Due Date:</span>{" "}
-                  {format(new Date(invoice.dueDate), "dd MMM yyyy")}
-                </p>
-              </div>
-            </div>
+      {/* E-Way Bill Status Card */}
+      {invoice.ewaybillNo && (
+        <EWayBillStatusCard invoice={invoice} />
+      )}
 
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <h3 className="font-semibold mb-2">Bill To:</h3>
-                <p className="font-medium">{invoice.customerName}</p>
-              </div>
-            </div>
+      {/* Professional View */}
+      <InvoiceViewDisplay invoice={invoice} settings={settings} />
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Rate</TableHead>
-                  {invoice.billingMode === "gst" && <TableHead>GST</TableHead>}
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoice.items.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium">{item.itemName}</TableCell>
-                    <TableCell>
-                      {item.quantity} {item.unit}
-                    </TableCell>
-                    <TableCell>₹{item.rate.toFixed(2)}</TableCell>
-                    {invoice.billingMode === "gst" && <TableCell>{item.gstRate}%</TableCell>}
-                    <TableCell className="text-right">₹{item.amount.toFixed(2)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            <div className="flex justify-end">
-              <div className="w-80 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span>₹{invoice.subtotal.toFixed(2)}</span>
-                </div>
-                {invoice.billingMode === "gst" && (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">CGST:</span>
-                      <span>₹{invoice.cgst.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">SGST:</span>
-                      <span>₹{invoice.sgst.toFixed(2)}</span>
-                    </div>
-                  </>
-                )}
-                <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                  <span>Total:</span>
-                  <span>₹{invoice.total.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {invoice.notes && (
-              <div className="pt-6 border-t">
-                <h3 className="font-semibold mb-2">Notes:</h3>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoice.notes}</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Printable Invoice (Hidden but available for printing) */}
+      <PrintableInvoice invoice={invoice} settings={settings} />
     </div>
   )
 }

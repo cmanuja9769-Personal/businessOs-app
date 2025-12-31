@@ -81,7 +81,11 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
                 <FormItem>
                   <FormLabel>Payment Date *</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input 
+                      type="date" 
+                      {...field} 
+                      value={typeof field.value === 'string' ? field.value : field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

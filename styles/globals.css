@@ -123,3 +123,27 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles for invoice templates */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  /* Hide UI elements when printing */
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Invoice template custom properties */
+.invoice-template {
+  /* Fallback for invoice primary color */
+  --invoice-primary: #6366f1;
+}

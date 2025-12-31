@@ -1,4 +1,4 @@
-import { InvoiceBuilder } from "@/components/invoices/invoice-builder"
+import { InvoiceForm } from "@/components/invoices/invoice-form"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -18,7 +18,7 @@ export default function NewInvoicePage() {
         </div>
       </div>
 
-      <InvoiceBuilder />
+      <InvoiceForm />
     </div>
   )
 }

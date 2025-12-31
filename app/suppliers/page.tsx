@@ -11,14 +11,14 @@ export default async function SuppliersPage() {
   const suppliers = await getSuppliers()
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
           <p className="text-muted-foreground">Manage your suppliers and vendor information</p>
         </div>
         <SupplierForm>
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Add Supplier
           </Button>
@@ -27,7 +27,11 @@ export default async function SuppliersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Suppliers</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Truck className="w-5 h-5" />
+            <span className="hidden sm:inline">All Suppliers</span>
+            <span className="sm:hidden">Suppliers</span>
+          </CardTitle>
           <CardDescription>A list of all your suppliers with their contact details</CardDescription>
         </CardHeader>
         <CardContent>

@@ -14,7 +14,7 @@ export async function getItems(): Promise<IItem[]> {
 
   const joined = await supabase
     .from("items")
-    .select("*, warehouses!warehouse_id ( id, name )")
+    .select("*, godowns!warehouse_id ( id, name )")
     .order("created_at", { ascending: false })
 
   data = joined.data as any
@@ -70,7 +70,7 @@ export async function getItems(): Promise<IItem[]> {
       itemLocation: item.item_location || "",
       perCartonQuantity: item.per_carton_quantity || undefined,
       godownId: item.warehouse_id || null,
-      godownName: item.warehouses?.name || null,
+      godownName: item.godowns?.name || null,
       taxRate: Number(item.tax_rate) || 0,
       inclusiveOfTax: item.inclusive_of_tax || false,
       gstRate: Number(item.tax_rate) || 0,
@@ -236,8 +236,109 @@ export async function deleteItem(id: string) {
   return { success: true }
 }
 
+export async function bulkDeleteItems(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: "No items selected" }
+  }
+
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("items")
+    .delete()
+    .in("id", ids)
+    .select()
+
+  if (error) {
+    console.error("[v0] Error bulk deleting items:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/items")
+  return { 
+    success: true, 
+    deleted: count || ids.length,
+    message: `Successfully deleted ${count || ids.length} item(s)` 
+  }
+}
+
+export async function deleteAllItems() {
+  const supabase = await createClient()
+  
+  // Get count first for confirmation
+  const { count } = await supabase
+    .from("items")
+    .select("*", { count: "exact", head: true })
+  
+  if (!count || count === 0) {
+    return { success: false, error: "No items to delete" }
+  }
+
+  const { error } = await supabase
+    .from("items")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000") // Delete all except impossible ID
+
+  if (error) {
+    console.error("[v0] Error deleting all items:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/items")
+  return { 
+    success: true, 
+    deleted: count,
+    message: `Successfully deleted all ${count} item(s)` 
+  }
+}
+
 export async function bulkImportItems(itemsData: IItem[]) {
   const supabase = await createClient()
+
+  // Import barcode utilities
+  const { validateBarcode, findDuplicateBarcodes, autoGenerateBarcodes, getNextBarcode } = await import("@/lib/barcode-generator")
+
+  // Validate all manually entered barcodes (skip empty ones as they'll be auto-generated)
+  for (const item of itemsData) {
+    if (item.barcodeNo && item.barcodeNo.trim() !== '') {
+      const validation = validateBarcode(item.barcodeNo)
+      if (!validation.isValid) {
+        errors.push(`Invalid barcode for "${item.name}": ${validation.error}`)
+      }
+    }
+  }
+
+  // Check for duplicate barcodes within the upload
+  const uploadBarcodes = itemsData.map((item) => item.barcodeNo)
+  const duplicateCheck = findDuplicateBarcodes(uploadBarcodes)
+  if (duplicateCheck.hasDuplicates) {
+    errors.push(
+      `Duplicate barcodes found in upload: ${duplicateCheck.duplicatesList.join(", ")}. Each barcode must be unique.`
+    )
+  }
+
+  // Check for duplicate barcodes in database
+  const nonEmptyBarcodes = uploadBarcodes.filter((bc) => bc && bc.trim() !== '')
+  if (nonEmptyBarcodes.length > 0) {
+    const { data: existingBarcodeItems } = await supabase
+      .from("items")
+      .select("barcode_no, name")
+      .in("barcode_no", nonEmptyBarcodes)
+    
+    if (existingBarcodeItems && existingBarcodeItems.length > 0) {
+      existingBarcodeItems.forEach((item) => {
+        errors.push(`Barcode "${item.barcode_no}" already exists for item "${item.name}"`)
+      })
+    }
+  }
+
+  // Get existing barcodes for auto-generation
+  const { data: allBarcodes } = await supabase.from("items").select("barcode_no")
+  const existingBarcodes = (allBarcodes || []).map((item) => item.barcode_no).filter(Boolean) as string[]
+
+  // Auto-generate barcodes for items without them
+  // Items with manually entered barcodes will keep them
+  // Items with empty barcodes will get auto-generated sequential codes
+  itemsData = autoGenerateBarcodes(itemsData, existingBarcodes, { prefix: 'BAR', strategy: 'sequential' })
 
   // Separate items into new and existing based on ID
   const existingItems = itemsData.filter((item) => item.id && item.id.length > 10) // UUID length check
@@ -245,7 +346,6 @@ export async function bulkImportItems(itemsData: IItem[]) {
 
   let insertCount = 0
   let updateCount = 0
-  const errors: string[] = []
 
   // Handle updates for existing items
   if (existingItems.length > 0) {
@@ -257,6 +357,7 @@ export async function bulkImportItems(itemsData: IItem[]) {
           name: item.name,
           category: item.category || null,
           hsn: item.hsnCode || null,
+          barcode_no: item.barcodeNo || null,
           sale_price: item.salePrice,
           wholesale_price: item.wholesalePrice || 0,
           quantity_price: item.quantityPrice || 0,
@@ -288,6 +389,7 @@ export async function bulkImportItems(itemsData: IItem[]) {
       name: item.name,
       category: item.category || null,
       hsn: item.hsnCode || null,
+      barcode_no: item.barcodeNo || null,
       sale_price: item.salePrice,
       wholesale_price: item.wholesalePrice || 0,
       quantity_price: item.quantityPrice || 0,

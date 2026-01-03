@@ -21,7 +21,7 @@ export async function getCurrentOrganization(userId: string) {
   // Get the first active organization for the user
   const { data, error } = await supabase
     .from("app_user_organizations")
-    .select("organization_id, app_organizations(id, name, email, phone, gst_number)")
+    .select("organization_id, app_organizations(id, name, email, phone, gst_number, pan_number, address)")
     .eq("user_id", userId)
     .eq("is_active", true)
     .limit(1)
@@ -54,7 +54,7 @@ export async function getCurrentOrganization(userId: string) {
     console.log("[organizations] Found via organization_id, fetching details...")
     const { data: orgData } = await supabase
       .from("app_organizations")
-      .select("id, name, email, phone, gst_number")
+      .select("id, name, email, phone, gst_number, pan_number, address")
       .eq("id", (data as any).organization_id)
       .single()
     
@@ -64,7 +64,7 @@ export async function getCurrentOrganization(userId: string) {
   // Fallback: if nothing is marked active (or schema differs), pick any membership.
   const { data: anyData, error: anyError } = await supabase
     .from("app_user_organizations")
-    .select("app_organizations(id, name, email, phone, gst_number)")
+    .select("app_organizations(id, name, email, phone, gst_number, pan_number, address)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)

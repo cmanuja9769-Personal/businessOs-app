@@ -337,6 +337,67 @@ export async function deleteInvoice(id: string) {
   return { success: true }
 }
 
+export async function bulkDeleteInvoices(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: "No invoices selected" }
+  }
+
+  // Validate all UUIDs
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const invalidIds = ids.filter(id => !uuidRegex.test(id))
+  if (invalidIds.length > 0) {
+    return { success: false, error: "Invalid invoice IDs detected" }
+  }
+
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("invoices")
+    .delete()
+    .in("id", ids)
+    .select()
+
+  if (error) {
+    console.error("[v0] Error bulk deleting invoices:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/invoices")
+  return { 
+    success: true, 
+    deleted: count || ids.length,
+    message: `Successfully deleted ${count || ids.length} invoice(s)` 
+  }
+}
+
+export async function deleteAllInvoices() {
+  const supabase = await createClient()
+  
+  const { count } = await supabase
+    .from("invoices")
+    .select("*", { count: "exact", head: true })
+  
+  if (!count || count === 0) {
+    return { success: false, error: "No invoices to delete" }
+  }
+
+  const { error } = await supabase
+    .from("invoices")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000")
+
+  if (error) {
+    console.error("[v0] Error deleting all invoices:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/invoices")
+  return { 
+    success: true, 
+    deleted: count,
+    message: `Successfully deleted all ${count} invoice(s)` 
+  }
+}
+
 export async function updateInvoiceStatus(id: string, status: IInvoice["status"]) {
   // Validate UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

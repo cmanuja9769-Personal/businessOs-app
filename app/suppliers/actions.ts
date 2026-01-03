@@ -105,3 +105,57 @@ export async function deleteSupplier(id: string) {
   revalidatePath("/suppliers")
   return { success: true }
 }
+
+export async function bulkDeleteSuppliers(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: "No suppliers selected" }
+  }
+
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("suppliers")
+    .delete()
+    .in("id", ids)
+    .select()
+
+  if (error) {
+    console.error("[v0] Error bulk deleting suppliers:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/suppliers")
+  return { 
+    success: true, 
+    deleted: count || ids.length,
+    message: `Successfully deleted ${count || ids.length} supplier(s)` 
+  }
+}
+
+export async function deleteAllSuppliers() {
+  const supabase = await createClient()
+  
+  const { count } = await supabase
+    .from("suppliers")
+    .select("*", { count: "exact", head: true })
+  
+  if (!count || count === 0) {
+    return { success: false, error: "No suppliers to delete" }
+  }
+
+  const { error } = await supabase
+    .from("suppliers")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000")
+
+  if (error) {
+    console.error("[v0] Error deleting all suppliers:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/suppliers")
+  return { 
+    success: true, 
+    deleted: count,
+    message: `Successfully deleted all ${count} supplier(s)` 
+  }
+}

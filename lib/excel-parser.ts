@@ -208,7 +208,7 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["Column Descriptions:"],
     ["- name: Item name (required)"],
     ["- hsnCode: HSN/SAC code (optional)"],
-    ["- barcodeNo: Barcode number (optional)"],
+    ["- barcodeNo: Barcode number (optional) - Enter manually (EAN-13, EAN-8, UPC-A, or custom) OR leave empty for auto-generation (BAR000001, BAR000002, etc.)"],
     ["- unit: Unit of measurement - use dropdown or type: PCS, KG, LTR, MTR, BOX, DOZEN"],
     ["- conversionRate: Conversion rate (default: 1)"],
     ["- alternateUnit: Alternate unit (optional)"],

@@ -175,20 +175,101 @@
   }
 }
 
-/* Print styles - hide browser headers/footers */
+/* Barcode Label Grid Styles */
+.barcode-label-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--label-columns), var(--label-width));
+  gap: var(--vertical-gap) var(--horizontal-gap);
+  padding: var(--margin-top) var(--margin-left);
+  width: fit-content;
+}
+
+.barcode-label {
+  width: var(--label-width);
+  height: var(--label-height);
+  box-sizing: border-box;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.barcode-label-placeholder {
+  /* Empty placeholder for start position offset */
+  visibility: hidden;
+}
+
+.barcode-label-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2mm;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 2px;
+  background: white;
+  overflow: hidden;
+}
+
+/* Screen view - show borders for preview */
+@media screen {
+  .barcode-label-content {
+    border: 1px dashed #d1d5db;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+}
+
+/* Print styles - optimized for label sheets */
 @media print {
   @page {
-    margin: 0.5cm;
+    margin: 0;
     size: A4 portrait;
   }
 
   body {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Hide everything except the barcode grid */
+  body > *:not(.barcode-label-grid) {
+    display: none !important;
+  }
+
+  /* Ensure the grid is at page top */
+  .barcode-label-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Remove borders in print for clean labels */
+  .barcode-label-content {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide placeholders completely in print */
+  .barcode-label-placeholder {
+    visibility: hidden;
+    border: none !important;
+  }
+
+  /* Force page breaks after each sheet */
+  .barcode-label:nth-child(24n) {
+    page-break-after: always;
   }
 
   /* Hide scroll bars and ensure full content visibility */
   * {
     overflow: visible !important;
+  }
+
+  /* Ensure canvas barcode prints correctly */
+  canvas {
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
   }
 }

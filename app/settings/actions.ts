@@ -2,6 +2,46 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentOrganization } from "@/lib/organizations"
+
+export interface IOrganization {
+  id: string
+  name: string
+  email?: string
+  phone?: string
+  gstNumber?: string
+  panNumber?: string
+  address?: string
+}
+
+export async function getOrganizationDetails(): Promise<IOrganization | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.getUser()
+
+  if (error || !data?.user) {
+    console.error("[settings] No authenticated user")
+    return null
+  }
+
+  const org = await getCurrentOrganization(data.user.id)
+  if (!org) {
+    console.error("[settings] No organization found for user:", data.user.id)
+    return null
+  }
+
+  // Handle array or object response
+  const resolved = Array.isArray(org) ? org[0] : org
+
+  return {
+    id: resolved?.id || "",
+    name: resolved?.name || "My Business",
+    email: resolved?.email || undefined,
+    phone: resolved?.phone || undefined,
+    gstNumber: resolved?.gst_number || undefined,
+    panNumber: resolved?.pan_number || undefined,
+    address: resolved?.address || undefined,
+  }
+}
 
 export interface ISettings {
   id: string

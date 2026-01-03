@@ -242,6 +242,60 @@ export async function deletePurchase(id: string) {
   return { success: true }
 }
 
+export async function bulkDeletePurchases(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: "No purchases selected" }
+  }
+
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("purchases")
+    .delete()
+    .in("id", ids)
+    .select()
+
+  if (error) {
+    console.error("[v0] Error bulk deleting purchases:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/purchases")
+  return { 
+    success: true, 
+    deleted: count || ids.length,
+    message: `Successfully deleted ${count || ids.length} purchase(s)` 
+  }
+}
+
+export async function deleteAllPurchases() {
+  const supabase = await createClient()
+  
+  const { count } = await supabase
+    .from("purchases")
+    .select("*", { count: "exact", head: true })
+  
+  if (!count || count === 0) {
+    return { success: false, error: "No purchases to delete" }
+  }
+
+  const { error } = await supabase
+    .from("purchases")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000")
+
+  if (error) {
+    console.error("[v0] Error deleting all purchases:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/purchases")
+  return { 
+    success: true, 
+    deleted: count,
+    message: `Successfully deleted all ${count} purchase(s)` 
+  }
+}
+
 export async function generatePurchaseNumber(): Promise<string> {
   const supabase = await createClient()
   const year = new Date().getFullYear()

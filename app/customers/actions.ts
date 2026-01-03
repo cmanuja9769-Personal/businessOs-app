@@ -113,6 +113,61 @@ export async function deleteCustomer(id: string) {
   return { success: true }
 }
 
+export async function bulkDeleteCustomers(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: "No customers selected" }
+  }
+
+  const supabase = await createClient()
+  const { error, count } = await supabase
+    .from("customers")
+    .delete()
+    .in("id", ids)
+    .select()
+
+  if (error) {
+    console.error("[v0] Error bulk deleting customers:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/customers")
+  return { 
+    success: true, 
+    deleted: count || ids.length,
+    message: `Successfully deleted ${count || ids.length} customer(s)` 
+  }
+}
+
+export async function deleteAllCustomers() {
+  const supabase = await createClient()
+  
+  // Get count first for confirmation
+  const { count } = await supabase
+    .from("customers")
+    .select("*", { count: "exact", head: true })
+  
+  if (!count || count === 0) {
+    return { success: false, error: "No customers to delete" }
+  }
+
+  const { error } = await supabase
+    .from("customers")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000") // Delete all
+
+  if (error) {
+    console.error("[v0] Error deleting all customers:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/customers")
+  return { 
+    success: true, 
+    deleted: count,
+    message: `Successfully deleted all ${count} customer(s)` 
+  }
+}
+
 export async function bulkImportCustomers(customersData: ICustomer[]) {
   const supabase = await createClient()
 

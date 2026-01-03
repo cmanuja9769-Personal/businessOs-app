@@ -114,6 +114,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
       ? {
           itemCode: item.itemCode || "",
           name: item.name,
+          description: item.description || "",
           category: item.category || "",
           hsnCode: item.hsnCode || "",
           barcodeNo: item.barcodeNo || "",
@@ -140,6 +141,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
         }
       : {
           itemCode: "",
+          description: "",
           category: "",
           hsnCode: "",
           conversionRate: 1,
@@ -254,6 +256,23 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                   </p>
                 )}
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="description" className="text-sm font-medium">
+                Item Description
+              </Label>
+              <Input
+                id="description"
+                {...register("description")}
+                placeholder="Detailed description of the item"
+                className="h-9"
+              />
+              {errors.description && (
+                <p className="text-xs text-destructive">
+                  {errors.description.message}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-4">

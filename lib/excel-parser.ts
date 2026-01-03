@@ -27,7 +27,11 @@ function remapRowKeys(row: ParsedRow): ParsedRow {
     name: "name",
     item_name: "name",
     product_name: "name",
+    description: "description",
+    item_description: "description",
+    details: "description",
     category: "category",
+    item_category: "category",
     hsn: "hsnCode",
     hsn_code: "hsnCode",
     hsnsac: "hsnCode",
@@ -247,6 +251,8 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
 
   const headers = [
     "Item Name",
+    "Description",
+    "Category",
     "HSN Code",
     "Barcode No",
     "Unit",
@@ -271,6 +277,8 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
   // Example row
   sheet.addRow([
     "Example Item",
+    "Detailed description of the item",
+    "Electronics",
     "8471",
     "",
     "PCS",
@@ -293,6 +301,8 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
   // Column widths (roughly matching old template)
   sheet.columns = [
     { width: 20 },
+    { width: 30 },
+    { width: 15 },
     { width: 12 },
     { width: 15 },
     { width: 10 },
@@ -413,6 +423,7 @@ export async function exportItemsToExcel(items: any[], filename = "items_export.
     "ID",
     "Item Code",
     "Item Name",
+    "Description",
     "Category",
     "HSN Code",
     "Barcode No",
@@ -446,6 +457,7 @@ export async function exportItemsToExcel(items: any[], filename = "items_export.
       item.id,
       item.itemCode || "",
       item.name,
+      item.description || "",
       item.category || "",
       item.hsnCode || "",
       item.barcodeNo || "",
@@ -477,6 +489,7 @@ export async function exportItemsToExcel(items: any[], filename = "items_export.
     { width: 38 }, // ID (UUID)
     { width: 12 }, // Item Code
     { width: 25 }, // Item Name
+    { width: 30 }, // Description
     { width: 15 }, // Category
     { width: 12 }, // HSN Code
     { width: 15 }, // Barcode No

@@ -226,50 +226,68 @@
     size: A4 portrait;
   }
 
-  body {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-    margin: 0;
-    padding: 0;
+  * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 
-  /* Hide everything except the barcode grid */
-  body > *:not(.barcode-label-grid) {
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all elements with print:hidden class (Next.js convention) */
+  .print\:hidden {
     display: none !important;
   }
 
-  /* Ensure the grid is at page top */
+  /* Show barcode grid */
   .barcode-label-grid {
-    position: absolute;
-    top: 0;
-    left: 0;
+    display: grid !important;
+    position: relative;
+    margin: 0;
+    page-break-inside: avoid;
   }
 
-  /* Remove borders in print for clean labels */
+  /* Ensure labels print correctly */
+  .barcode-label {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Add borders in print for easy cutting */
   .barcode-label-content {
-    border: none !important;
+    border: 1px solid #d1d5db !important;
     box-shadow: none !important;
+    background: white !important;
   }
 
   /* Hide placeholders completely in print */
   .barcode-label-placeholder {
-    visibility: hidden;
+    visibility: hidden !important;
     border: none !important;
-  }
-
-  /* Force page breaks after each sheet */
-  .barcode-label:nth-child(24n) {
-    page-break-after: always;
-  }
-
-  /* Hide scroll bars and ensure full content visibility */
-  * {
-    overflow: visible !important;
   }
 
   /* Ensure canvas barcode prints correctly */
   canvas {
+    display: block !important;
+    max-width: 100% !important;
+    height: auto !important;
     image-rendering: crisp-edges;
     -ms-interpolation-mode: nearest-neighbor;
+  }
+
+  /* Force print colors */
+  p, span, div {
+    color: black !important;
+  }
+
+  .text-blue-600 {
+    color: #2563eb !important;
+  }
+
+  .text-muted-foreground {
+    color: #6b7280 !important;
   }
 }

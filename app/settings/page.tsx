@@ -116,7 +116,7 @@ export default async function SettingsPage() {
             </Card>
           </div>
 
-          <SettingsForm settings={settings} activeTab="business" />
+          <SettingsForm settings={settings} organization={organization} activeTab="business" />
         </TabsContent>
 
         <TabsContent value="invoice" className="space-y-6">

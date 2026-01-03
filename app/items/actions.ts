@@ -51,6 +51,7 @@ export async function getItems(): Promise<IItem[]> {
       id: item.id,
       itemCode: item.item_code || "",
       name: item.name,
+      description: item.description || "",
       category: item.category || "",
       hsnCode: item.hsn || "",
       salePrice: Number(item.sale_price) || 0,
@@ -129,6 +130,7 @@ export async function createItem(formData: FormData) {
     .insert({
       item_code: validated.itemCode || null,
       name: validated.name,
+      description: validated.description || null,
       category: validated.category || null,
       hsn: validated.hsnCode || null,
       barcode_no: barcodeNo,
@@ -163,6 +165,7 @@ export async function updateItem(id: string, formData: FormData) {
   const data = {
     name: formData.get("name"),
     itemCode: formData.get("itemCode"),
+    description: formData.get("description"),
     category: formData.get("category"),
     hsnCode: formData.get("hsnCode"),
     salePrice: formData.get("salePrice"),
@@ -196,6 +199,7 @@ export async function updateItem(id: string, formData: FormData) {
     .update({
       item_code: validated.itemCode || null,
       name: validated.name,
+      description: validated.description || null,
       category: validated.category || null,
       hsn: validated.hsnCode || null,
       sale_price: validated.salePrice,

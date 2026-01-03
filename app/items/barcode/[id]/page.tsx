@@ -25,6 +25,7 @@ export default function BarcodePage({
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [showPrice, setShowPrice] = useState(false);
+  const [showPerCartonQty, setShowPerCartonQty] = useState(false);
   const [layoutId, setLayoutId] = useState("standard");
   const [startPosition, setStartPosition] = useState(1);
   const [id, setId] = useState<string>("");
@@ -203,6 +204,17 @@ export default function BarcodePage({
                 Show price on labels
               </Label>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-carton-qty"
+                checked={showPerCartonQty}
+                onCheckedChange={(checked) => setShowPerCartonQty(checked === true)}
+              />
+              <Label htmlFor="show-carton-qty" className="text-sm font-normal cursor-pointer">
+                Show per carton quantity
+              </Label>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -243,6 +255,7 @@ export default function BarcodePage({
         item={item} 
         quantity={quantity} 
         showPrice={showPrice}
+        showPerCartonQty={showPerCartonQty}
         layout={selectedLayout}
         startPosition={startPosition}
       />

@@ -23,6 +23,7 @@ export const itemSchema = z
   .object({
     itemCode: z.string().optional().or(z.literal("")), // Added itemCode field
     name: z.string().min(2, "Item name must be at least 2 characters"),
+    description: z.string().optional().or(z.literal("")), // Item description
     category: z.string().optional().or(z.literal("")), // Added category field
     hsnCode: z.string().optional().or(z.literal("")), // Made HSN optional
     barcodeNo: z.string().optional().or(z.literal("")),
@@ -46,7 +47,7 @@ export const itemSchema = z
     gstRate: z.coerce.number().min(0).max(100, "GST rate must be between 0-100"),
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),
-    inclusiveOfTax: z.boolean().optional().default(false), // Added inclusive of tax flag
+    inclusiveOfTax: z.coerce.boolean().optional().default(false), // Added inclusive of tax flag
     godownId: z.string().uuid().optional().nullable(),
   })
   .refine((data) => data.salePrice >= data.purchasePrice, {
@@ -121,7 +122,7 @@ export const invoiceSchema = z.object({
     "cancelled",
     "delivered",
   ]).default("draft"),
-  gstEnabled: z.boolean(),
+  gstEnabled: z.coerce.boolean(),
   notes: z.string().optional().or(z.literal("")),
   // E-invoice fields
   irn: z.string().optional(),
@@ -185,7 +186,7 @@ export const purchaseSchema = z.object({
   paidAmount: z.coerce.number().default(0),
   balance: z.coerce.number(),
   status: z.enum(["paid", "unpaid", "partial"]).default("unpaid"),
-  gstEnabled: z.boolean(),
+  gstEnabled: z.coerce.boolean(),
   notes: z.string().optional().or(z.literal("")),
 })
 

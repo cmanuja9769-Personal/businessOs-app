@@ -17,6 +17,7 @@ export interface IItem {
   id: string
   itemCode?: string // Added optional item code/SKU
   name: string
+  description?: string // Item description
   category?: string // Added category field
   hsnCode?: string // Made HSN optional
   barcodeNo?: string

@@ -15,6 +15,7 @@ interface BarcodeDisplayProps {
   item: IItem
   quantity?: number
   showPrice?: boolean
+  showPerCartonQty?: boolean
   layout?: LabelLayout
   startPosition?: number
 }
@@ -97,6 +98,7 @@ export function BarcodeDisplay({
   item, 
   quantity = 1, 
   showPrice = false,
+  showPerCartonQty = false,
   layout,
   startPosition = 1
 }: BarcodeDisplayProps) {
@@ -160,13 +162,13 @@ export function BarcodeDisplay({
     const width = currentLayout?.labelWidth || 70
     
     if (width <= 40) {
-      return { name: 'text-[6px]', code: 'text-[5px]', barcode: 'text-[5px]', price: 'text-[8px]', mrp: 'text-[5px]' }
+      return { name: 'text-[6px]', code: 'text-[5px]', barcode: 'text-[5px]', price: 'text-[8px]', mrp: 'text-[5px]', cartonQty: 'text-[5px]' }
     } else if (width <= 55) {
-      return { name: 'text-[8px]', code: 'text-[6px]', barcode: 'text-[6px]', price: 'text-xs', mrp: 'text-[6px]' }
+      return { name: 'text-[8px]', code: 'text-[6px]', barcode: 'text-[6px]', price: 'text-xs', mrp: 'text-[6px]', cartonQty: 'text-[6px]' }
     } else if (width <= 75) {
-      return { name: 'text-[10px]', code: 'text-[7px]', barcode: 'text-[7px]', price: 'text-sm', mrp: 'text-[7px]' }
+      return { name: 'text-[10px]', code: 'text-[7px]', barcode: 'text-[7px]', price: 'text-sm', mrp: 'text-[7px]', cartonQty: 'text-[7px]' }
     } else {
-      return { name: 'text-xs', code: 'text-[8px]', barcode: 'text-[8px]', price: 'text-base', mrp: 'text-xs' }
+      return { name: 'text-xs', code: 'text-[8px]', barcode: 'text-[8px]', price: 'text-base', mrp: 'text-xs', cartonQty: 'text-[8px]' }
     }
   }
 
@@ -210,6 +212,11 @@ export function BarcodeDisplay({
                   </p>
                 )}
               </div>
+            )}
+            {showPerCartonQty && item.perCartonQuantity && item.perCartonQuantity > 1 && (
+              <p className={`text-center font-medium text-blue-600 ${fonts.cartonQty}`}>
+                {item.perCartonQuantity} pcs/carton
+              </p>
             )}
           </div>
         </div>

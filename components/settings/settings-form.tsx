@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
-import { updateSettings, type ISettings } from "@/app/settings/actions"
+import { updateSettings, type ISettings, type IOrganization } from "@/app/settings/actions"
 import { lookupGSTDetails } from "@/app/customers/actions"
 import { ImageUpload } from "@/components/settings/image-upload"
 import { TemplateSelector } from "@/components/settings/template-selector"
@@ -22,20 +22,23 @@ import { Loader2, Save, Search } from "lucide-react"
 
 interface SettingsFormProps {
   settings: ISettings
+  organization?: IOrganization | null
   activeTab?: "business" | "invoice" | "payment" | "preferences"
 }
 
-export function SettingsForm({ settings, activeTab = "business" }: SettingsFormProps) {
+export function SettingsForm({ settings, organization, activeTab = "business" }: SettingsFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isFetchingGST, setIsFetchingGST] = useState(false)
+  
+  // Use organization data if available, otherwise fall back to settings
   const [formData, setFormData] = useState({
-    businessName: settings.businessName,
-    businessAddress: settings.businessAddress || "",
-    businessPhone: settings.businessPhone || "",
-    businessEmail: settings.businessEmail || "",
-    businessGst: settings.businessGst || "",
-    businessPan: settings.businessPan || "",
+    businessName: organization?.name || settings.businessName,
+    businessAddress: organization?.address || settings.businessAddress || "",
+    businessPhone: organization?.phone || settings.businessPhone || "",
+    businessEmail: organization?.email || settings.businessEmail || "",
+    businessGst: organization?.gstNumber || settings.businessGst || "",
+    businessPan: organization?.panNumber || settings.businessPan || "",
     businessLogoUrl: settings.businessLogoUrl || "",
     signatureImageUrl: settings.signatureImageUrl || "",
     bankName: settings.bankName || "",

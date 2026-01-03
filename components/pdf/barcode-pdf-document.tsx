@@ -199,7 +199,7 @@ export function BarcodePDFDocument({
     if (w <= 40) return { name: 5, hindi: 5, code: 4, price: 6 }
     if (w <= 55) return { name: 6, hindi: 6, code: 4.5, price: 7 }
     if (w <= 75) return { name: 7, hindi: 7, code: 5, price: 8 }
-    return { name: 10, hindi: 11, code: 12, price: 9 }
+    return { name: 11, hindi: 12, code: 12, price: 9 }
   }
 
   const fontSize = getFontSize()

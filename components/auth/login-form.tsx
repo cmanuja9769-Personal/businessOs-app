@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,7 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -48,8 +49,12 @@ export function LoginForm() {
         description: "You have been signed in successfully.",
       })
 
-      // Redirect to dashboard
-      router.push("/")
+      // Redirect to the intended page (or dashboard) and refresh server components.
+      // This avoids the "sidebar missing until refresh" issue where RootLayout
+      // hasn't re-evaluated server-side auth state yet.
+      const redirectTo = searchParams.get("redirect") || "/"
+      router.replace(redirectTo)
+      router.refresh()
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred"
       setError(message)

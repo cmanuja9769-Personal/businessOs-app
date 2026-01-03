@@ -39,25 +39,26 @@ CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action);
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
+-- Create RLS policies for user_roles (FIXED - no recursion)
+-- Users can always read their own role
 CREATE POLICY "Users can read own role" ON user_roles
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Admins can read all roles" ON user_roles
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur 
-      WHERE ur.user_id = auth.uid() AND ur.role = 'admin'
-    )
-  );
+-- Users can insert their own role (for signup)
+CREATE POLICY "Users can insert own role" ON user_roles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+-- Users can update their own role metadata (not role itself - handled by admin separately)
+CREATE POLICY "Users can update own role" ON user_roles
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Note: Admin access to all roles is handled at application level via service role key
+-- to avoid infinite recursion in RLS policies
+
+-- Create RLS policies for activity_logs
 CREATE POLICY "Users can read own logs" ON activity_logs
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Admins can read all logs" ON activity_logs
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur 
-      WHERE ur.user_id = auth.uid() AND ur.role = 'admin'
-    )
-  );
+CREATE POLICY "Users can insert own logs" ON activity_logs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);

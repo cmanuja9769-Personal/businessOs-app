@@ -3,12 +3,25 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Users, Package, FileText, Settings, Menu, X, ShoppingCart, Truck, Warehouse } from "lucide-react"
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  FileText,
+  Settings,
+  Menu,
+  X,
+  ShoppingCart,
+  Truck,
+  Warehouse,
+  Building2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Organizations", href: "/organizations", icon: Building2 },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Items", href: "/items", icon: Package },

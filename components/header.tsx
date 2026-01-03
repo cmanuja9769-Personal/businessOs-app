@@ -65,7 +65,7 @@ export function Header() {
     <header className="sticky top-0 z-30 bg-background border-b border-border">
       <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-3 gap-2 sm:gap-4">
         {/* Organization Switcher */}
-        <div className="hidden sm:block">
+        <div className="flex-shrink-0">
           <OrganizationSwitcher />
         </div>
 

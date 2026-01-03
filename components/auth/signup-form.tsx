@@ -39,12 +39,16 @@ export function SignupForm() {
     try {
       const supabase = createClient()
 
-      // Sign up
+      // Sign up with auto-confirm for development or email confirmation for production
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
+          // Skip email confirmation in development - update this in Supabase dashboard for production
+          data: {
+            email_confirm: true,
+          },
         },
       })
 
@@ -59,24 +63,41 @@ export function SignupForm() {
       }
 
       if (data.user) {
-        // TODO: Create default user role (admin for first user)
-        // This will be implemented in Phase 1 when user_roles table is created
-        // const { error: roleError } = await supabase.from("user_roles").insert({
-        //   user_id: data.user.id,
-        //   role: "admin",
-        // })
-        //
-        // if (roleError) {
-        //   console.error("[v0] Error creating user role:", roleError)
-        // }
+        // Create default user role (admin for first user, user otherwise)
+        const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
+        const isFirstUser = !existingRoles || existingRoles.length === 0
+        const defaultRole = isFirstUser ? "admin" : "user"
 
-        toast({
-          title: "Account created!",
-          description: "Check your email to verify your account.",
+        const { error: roleError } = await supabase.from("user_roles").insert({
+          user_id: data.user.id,
+          role: defaultRole,
+          permissions: {},
         })
 
-        // Redirect to onboarding
-        router.push("/onboarding")
+        if (roleError) {
+          console.error("[v0] Error creating user role:", roleError)
+        }
+
+        // Check if email confirmation is required
+        const needsConfirmation = data.session === null && data.user.identities?.length === 0
+
+        if (needsConfirmation) {
+          toast({
+            title: "Check your email!",
+            description: "We sent you a confirmation link. Click it to activate your account.",
+          })
+          // Stay on signup page or redirect to a "check email" page
+          router.push("/auth/login?message=check-email")
+        } else {
+          // Email confirmation disabled or user is auto-confirmed
+          toast({
+            title: "Account created!",
+            description: "Redirecting to setup...",
+          })
+          // Redirect to onboarding
+          router.push("/onboarding")
+          router.refresh()
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred"

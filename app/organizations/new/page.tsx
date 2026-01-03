@@ -13,6 +13,6 @@ export default async function CreateOrganizationPage() {
     redirect("/auth/login")
   }
 
-  // Canonical organization creation flow lives in /onboarding.
+  // Redirect to onboarding page (which now supports multiple orgs)
   redirect("/onboarding")
 }

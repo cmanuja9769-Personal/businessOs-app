@@ -8,12 +8,19 @@ export const metadata = {
   description: "Sign in to your BusinessOS account",
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ message?: string; redirect?: string }>
+}) {
   // If already logged in, redirect to dashboard
   const user = await getCurrentUser()
   if (user) {
     redirect("/")
   }
+
+  const params = await searchParams
+  const message = params.message
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/30 p-4">
@@ -29,6 +36,16 @@ export default async function LoginPage() {
           <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-muted-foreground">Sign in to your account to continue</p>
         </div>
+
+        {/* Email Confirmation Message */}
+        {message === "check-email" && (
+          <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm">
+            <p className="text-blue-900 dark:text-blue-100 font-medium mb-1">Check your email!</p>
+            <p className="text-blue-700 dark:text-blue-300">
+              We sent you a confirmation link. Click it to activate your account, then come back to login.
+            </p>
+          </div>
+        )}
 
         {/* Login Form */}
         <div className="bg-card rounded-lg shadow-sm border border-border p-8 space-y-6">

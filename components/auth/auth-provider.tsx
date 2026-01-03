@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 
 export interface UserRole {
-  role: "admin" | "salesperson" | "accountant" | "viewer"
+  role: "admin" | "salesperson" | "accountant" | "viewer" | "user"
   permissions: Record<string, any>
 }
 
@@ -37,82 +37,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Wrapper to persist active organization in localStorage
+  const setOrganization = (org: Organization | null) => {
+    setOrganizationState(org)
+    try {
+      if (org) {
+        localStorage.setItem("activeOrganizationId", org.id)
+      } else {
+        localStorage.removeItem("activeOrganizationId")
+      }
+    } catch (e) {
+      // ignore localStorage errors
+    }
+  }
+
   useEffect(() => {
-    const supabase = createClient()
+    let isMounted = true
 
-    // Get initial user
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      setUser(user)
+    const hydrateFromServer = async () => {
+      try {
+        const res = await fetch("/api/me", { credentials: "include" })
+        const json = await res.json()
+        if (!isMounted) return
 
-      if (user) {
-        // Fetch user role
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role, permissions")
-          .eq("user_id", user.id)
-          .single()
+        setUser((json.user ?? null) as User | null)
+        setUserRole((json.userRole ?? null) as UserRole | null)
 
-        if (roleData) {
-          setUserRole(roleData as UserRole)
-        }
-
-        // Fetch organizations
-        const { data: orgData } = await supabase
-          .from("app_user_organizations")
-          .select("app_organizations(id, name, email, phone)")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-
-        const orgs = orgData?.map((item: any) => item.app_organizations) || []
+        const orgs: Organization[] = Array.isArray(json.organizations) ? json.organizations : []
         setOrganizations(orgs)
 
-        // Set first organization as current
-        if (orgs.length > 0) {
-          setOrganizationState(orgs[0])
+        try {
+          const savedId = localStorage.getItem("activeOrganizationId")
+          const saved = savedId ? orgs.find((o) => o.id === savedId) : null
+          if (saved) {
+            setOrganizationState(saved)
+          } else if (orgs.length > 0) {
+            setOrganization(orgs[0])
+          } else {
+            setOrganization(null)
+          }
+        } catch {
+          if (orgs.length > 0) {
+            setOrganization(orgs[0])
+          } else {
+            setOrganization(null)
+          }
         }
+
+        setLoading(false)
+      } catch {
+        if (!isMounted) return
+        setUser(null)
+        setUserRole(null)
+        setOrganization(null)
+        setOrganizations([])
+        setLoading(false)
       }
+    }
 
-      setLoading(false)
-    })
+    hydrateFromServer()
 
-    // Listen for auth changes
+    // Use Supabase client only for the auth change signal; data still comes from /api/me.
+    const supabase = createClient()
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user || null)
-
-      if (session?.user) {
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role, permissions")
-          .eq("user_id", session.user.id)
-          .single()
-
-        if (roleData) {
-          setUserRole(roleData as UserRole)
-        }
-
-        // Fetch organizations
-        const { data: orgData } = await supabase
-          .from("app_user_organizations")
-          .select("app_organizations(id, name, email, phone)")
-          .eq("user_id", session.user.id)
-          .eq("is_active", true)
-
-        const orgs = orgData?.map((item: any) => item.app_organizations) || []
-        setOrganizations(orgs)
-
-        if (orgs.length > 0) {
-          setOrganizationState(orgs[0])
-        }
-      } else {
-        setUserRole(null)
-        setOrganizationState(null)
-        setOrganizations([])
-      }
+    } = supabase.auth.onAuthStateChange(async () => {
+      await hydrateFromServer()
     })
 
     return () => {
+      isMounted = false
       subscription?.unsubscribe()
     }
   }, [])
@@ -120,9 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
+    // Also call server endpoint to clear server-side cookies used by SSR
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+    } catch (e) {
+      // ignore
+    }
+
     setUser(null)
     setUserRole(null)
-    setOrganizationState(null)
+    setOrganization(null)
     setOrganizations([])
   }
 
@@ -134,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organization,
         organizations,
         loading,
-        setOrganization: setOrganizationState,
+        setOrganization: setOrganization,
         signOut,
       }}
     >

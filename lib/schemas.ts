@@ -71,6 +71,15 @@ export const invoiceItemSchema = z.object({
   gstRate: z.coerce.number().min(0).max(100),
   cessRate: z.coerce.number().min(0).max(100).default(0),
   discount: z.coerce.number().min(0).max(100, "Discount must be between 0-100").default(0),
+  customField1Value: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .transform((val) => (val ? val : undefined)),
+  customField2Value: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined ? undefined : val),
+    z.coerce.number().optional(),
+  ),
   amount: z.coerce.number(),
 })
 

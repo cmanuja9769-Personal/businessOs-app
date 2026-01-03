@@ -10,8 +10,9 @@ import { Save, Send, FileText, Loader2 } from "lucide-react"
 import { createInvoice, generateInvoiceNumber } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
 import { getItems } from "@/app/items/actions"
+import { getSettings } from "@/app/settings/actions"
 import { toast } from "sonner"
-import type { ICustomer, IItem, IInvoiceItem, BillingMode, PricingMode } from "@/types"
+import type { ICustomer, IItem, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types"
 import { calculateInvoiceTotals } from "@/lib/invoice-calculations"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -30,20 +31,29 @@ export function InvoiceBuilder() {
   const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
   const [billingMode, setBillingMode] = useState<BillingMode>("gst")
   const [pricingMode, setPricingMode] = useState<PricingMode>("sale") // Added pricing mode state
+  const [packingType, setPackingType] = useState<PackingType>("loose") // Added packing type state
   const [invoiceItems, setInvoiceItems] = useState<IInvoiceItem[]>([])
   const [notes, setNotes] = useState("")
+  const [customFieldsConfig, setCustomFieldsConfig] = useState({ field1Enabled: false, field1Label: "", field2Enabled: false, field2Label: "" })
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, itemsData, invoiceNumber] = await Promise.all([
+        const [customersData, itemsData, invoiceNumber, settingsData] = await Promise.all([
           getCustomers(),
           getItems(),
           generateInvoiceNumber(),
+          getSettings(),
         ])
         setCustomers(customersData)
         setItems(itemsData)
         setInvoiceNo(invoiceNumber)
+        setCustomFieldsConfig({
+          field1Enabled: settingsData.customField1Enabled,
+          field1Label: settingsData.customField1Label,
+          field2Enabled: settingsData.customField2Enabled,
+          field2Label: settingsData.customField2Label,
+        })
       } catch (error) {
         toast.error("Failed to load data")
       } finally {
@@ -122,6 +132,8 @@ export function InvoiceBuilder() {
             onBillingModeChange={setBillingMode}
             pricingMode={pricingMode}
             onPricingModeChange={setPricingMode}
+            packingType={packingType}
+            onPackingTypeChange={setPackingType}
           />
         </CardContent>
       </Card>
@@ -137,6 +149,11 @@ export function InvoiceBuilder() {
             onItemsChange={setInvoiceItems}
             billingMode={billingMode}
             pricingMode={pricingMode}
+            packingType={packingType}
+            customField1Enabled={customFieldsConfig.field1Enabled}
+            customField1Label={customFieldsConfig.field1Label}
+            customField2Enabled={customFieldsConfig.field2Enabled}
+            customField2Label={customFieldsConfig.field2Label}
           />
         </CardContent>
       </Card>

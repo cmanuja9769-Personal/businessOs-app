@@ -14,7 +14,7 @@ export async function getInvoices(): Promise<IInvoice[]> {
     .order("created_at", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching invoices:", error)
+    console.error("[Invoices] Error fetching invoices:", error.message || error)
     return []
   }
 
@@ -42,6 +42,8 @@ export async function getInvoices(): Promise<IInvoice[]> {
         gstRate: Number(item.tax_rate || item.gst_rate || 0),
         cessRate: Number(item.cess_rate || 0),
         discount: Number(item.discount || 0),
+        customField1Value: item.custom_field_1_value ?? undefined,
+        customField2Value: item.custom_field_2_value == null ? undefined : Number(item.custom_field_2_value),
         amount: Number(item.amount),
       })),
       subtotal: Number(invoice.subtotal),
@@ -117,6 +119,8 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
       gstRate: Number(item.tax_rate || item.gst_rate || 0),
       cessRate: Number(item.cess_rate || 0),
       discount: Number(item.discount || 0),
+      customField1Value: item.custom_field_1_value ?? undefined,
+      customField2Value: item.custom_field_2_value == null ? undefined : Number(item.custom_field_2_value),
       amount: Number(item.amount),
     })),
     subtotal: Number(data.subtotal),
@@ -208,6 +212,8 @@ export async function createInvoice(data: unknown) {
       gst_rate: item.gstRate || 0,
       cess_rate: item.cessRate || 0,
       discount: item.discount || 0,
+      custom_field_1_value: item.customField1Value ?? null,
+      custom_field_2_value: item.customField2Value ?? null,
       amount: item.amount,
     }))
 
@@ -296,6 +302,8 @@ export async function updateInvoice(id: string, data: unknown) {
       gst_rate: item.gstRate || 0,
       cess_rate: item.cessRate || 0,
       discount: item.discount || 0,
+      custom_field_1_value: item.customField1Value ?? null,
+      custom_field_2_value: item.customField2Value ?? null,
       amount: item.amount,
     }))
 

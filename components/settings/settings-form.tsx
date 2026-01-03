@@ -57,6 +57,10 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
     dateFormat: settings.dateFormat,
     financialYearStart: settings.financialYearStart,
     lowStockAlert: settings.lowStockAlert,
+    customField1Enabled: settings.customField1Enabled,
+    customField1Label: settings.customField1Label,
+    customField2Enabled: settings.customField2Enabled,
+    customField2Label: settings.customField2Label,
   })
 
   // Auto-fetch GST details when valid GSTIN is entered
@@ -481,6 +485,61 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                     onCheckedChange={(checked) => setFormData({ ...formData, lowStockAlert: checked })}
                   />
                   <input type="hidden" name="lowStockAlert" value={formData.lowStockAlert.toString()} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Custom Invoice Fields</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-start justify-between rounded-lg border p-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-4">
+                      <Switch
+                        id="customField1Enabled"
+                        checked={formData.customField1Enabled}
+                        onCheckedChange={(checked) => setFormData({ ...formData, customField1Enabled: checked })}
+                      />
+                      <Label htmlFor="customField1Enabled" className="cursor-pointer">Enable Custom Field 1 (Text)</Label>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Add a text field to each invoice line item</p>
+                    <Input
+                      id="customField1Label"
+                      name="customField1Label"
+                      value={formData.customField1Label}
+                      onChange={(e) => setFormData({ ...formData, customField1Label: e.target.value })}
+                      placeholder="e.g., Serial Number, Batch Code, etc."
+                      disabled={!formData.customField1Enabled}
+                    />
+                  </div>
+                  <input type="hidden" name="customField1Enabled" value={formData.customField1Enabled.toString()} />
+                </div>
+
+                <div className="flex items-start justify-between rounded-lg border p-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-4">
+                      <Switch
+                        id="customField2Enabled"
+                        checked={formData.customField2Enabled}
+                        onCheckedChange={(checked) => setFormData({ ...formData, customField2Enabled: checked })}
+                      />
+                      <Label htmlFor="customField2Enabled" className="cursor-pointer">Enable Custom Field 2 (Number)</Label>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Add a numeric field to each invoice line item</p>
+                    <Input
+                      id="customField2Label"
+                      name="customField2Label"
+                      value={formData.customField2Label}
+                      onChange={(e) => setFormData({ ...formData, customField2Label: e.target.value })}
+                      placeholder="e.g., Carton Number, Box Count, etc."
+                      disabled={!formData.customField2Enabled}
+                    />
+                  </div>
+                  <input type="hidden" name="customField2Enabled" value={formData.customField2Enabled.toString()} />
                 </div>
               </div>
             </CardContent>

@@ -180,7 +180,10 @@
   display: grid;
   grid-template-columns: repeat(var(--label-columns), var(--label-width));
   gap: var(--vertical-gap) var(--horizontal-gap);
-  padding: var(--margin-top) var(--margin-left);
+  padding: var(--margin-top, 0mm)
+    var(--margin-right, var(--margin-left, 0mm))
+    var(--margin-bottom, var(--margin-top, 0mm))
+    var(--margin-left, 0mm);
   width: fit-content;
 }
 
@@ -226,6 +229,35 @@
     size: A4 portrait;
   }
 
+  /* Force page breaks between barcode pages */
+  .barcode-page-break {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .barcode-label-page {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .barcode-label-page + .barcode-label-page {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  /* Generic print-page helper for any paginated print component */
+  .print-page {
+    display: block;
+    width: 100%;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   * {
     print-color-adjust: exact !important;
     -webkit-print-color-adjust: exact !important;
@@ -246,8 +278,9 @@
   .barcode-label-grid {
     display: grid !important;
     position: relative;
-    margin: 0;
-    page-break-inside: avoid;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    /* page-break-inside: avoid; REMOVED to allow multi-page printing */
   }
 
   /* Ensure labels print correctly */
@@ -278,16 +311,11 @@
     -ms-interpolation-mode: nearest-neighbor;
   }
 
-  /* Force print colors */
-  p, span, div {
-    color: black !important;
-  }
-
-  .text-blue-600 {
-    color: #2563eb !important;
-  }
-
-  .text-muted-foreground {
-    color: #6b7280 !important;
+  /* Avoid constraining page content width in print */
+  .container {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 }

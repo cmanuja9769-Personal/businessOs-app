@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, Barcode } from "lucide-react";
-import type { IItem, IInvoiceItem, BillingMode, PricingMode } from "@/types";
+import type { IItem, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types";
 import { calculateItemAmount } from "@/lib/invoice-calculations";
 import { useEffect, useRef, useState } from "react";
 import { ItemSelect } from "@/components/items/item-select";
@@ -23,6 +23,11 @@ interface InvoiceTableProps {
   onItemsChange: (items: IInvoiceItem[]) => void;
   billingMode: BillingMode;
   pricingMode: PricingMode; // Added pricing mode prop
+  packingType: PackingType; // Added packing type prop
+  customField1Enabled?: boolean;
+  customField1Label?: string;
+  customField2Enabled?: boolean;
+  customField2Label?: string;
 }
 
 export function InvoiceTable({
@@ -31,9 +36,17 @@ export function InvoiceTable({
   onItemsChange,
   billingMode,
   pricingMode,
+  packingType,
+  customField1Enabled,
+  customField1Label,
+  customField2Enabled,
+  customField2Label,
 }: InvoiceTableProps) {
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  
+  // Cache for storing loose quantities when switching to carton mode
+  const [looseQuantityCache, setLooseQuantityCache] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (invoiceItems.length === 0) return;
@@ -64,6 +77,56 @@ export function InvoiceTable({
     onItemsChange(updatedItems);
   }, [pricingMode]); // Only re-run when pricing mode changes
 
+  // Handle packing type changes with quantity caching
+  useEffect(() => {
+    if (invoiceItems.length === 0) return;
+
+    const updatedItems = invoiceItems.map((invoiceItem) => {
+      if (!invoiceItem.itemId) return invoiceItem;
+
+      const selectedItem = items.find((i) => i.id === invoiceItem.itemId);
+      if (!selectedItem) return invoiceItem;
+
+      let newQuantity = invoiceItem.quantity;
+
+      if (packingType === "carton") {
+        // Switching to carton mode - cache loose quantity and convert to cartons
+        const perCartonQty = Math.floor(selectedItem.perCartonQuantity || 1);
+        
+        // Save current loose quantity to cache
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [invoiceItem.itemId]: Math.floor(invoiceItem.quantity)
+        }));
+
+        // Convert to cartons (use per carton quantity)
+        newQuantity = perCartonQty;
+      } else {
+        // Switching to loose mode - restore cached quantity if available
+        if (looseQuantityCache[invoiceItem.itemId]) {
+          newQuantity = looseQuantityCache[invoiceItem.itemId];
+        }
+      }
+
+      const newAmount = calculateItemAmount(
+        newQuantity,
+        invoiceItem.rate,
+        invoiceItem.gstRate,
+        invoiceItem.cessRate,
+        invoiceItem.discount,
+        billingMode
+      );
+
+      return {
+        ...invoiceItem,
+        quantity: newQuantity,
+        amount: newAmount,
+      };
+    });
+
+    onItemsChange(updatedItems);
+  }, [packingType]); // Only re-run when packing type changes
+
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
@@ -88,7 +151,21 @@ export function InvoiceTable({
       // Increase quantity of existing item
       const updatedItems = [...invoiceItems];
       const existingItem = updatedItems[existingItemIndex];
-      const newQuantity = existingItem.quantity + 1;
+      
+      // Determine increment based on packing type (always integer)
+      const increment = packingType === "carton" 
+        ? Math.floor(item.perCartonQuantity || 1)
+        : 1;
+      
+      const newQuantity = existingItem.quantity + increment;
+      
+      // Update cache if in loose mode
+      if (packingType === "loose") {
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [item.id]: newQuantity
+        }));
+      }
       
       updatedItems[existingItemIndex] = {
         ...existingItem,
@@ -106,10 +183,22 @@ export function InvoiceTable({
       onItemsChange(updatedItems);
       toast.success(`Updated quantity for ${item.name}`);
     } else {
-      // Add new item to invoice
+      // Add new item to invoice with initial quantity based on packing type
       const rate = getPriceByMode(item);
+      const initialQuantity = packingType === "carton" 
+        ? Math.floor(item.perCartonQuantity || 1)
+        : 1;
+      
+      // Cache initial loose quantity
+      if (packingType === "loose") {
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [item.id]: initialQuantity
+        }));
+      }
+      
       const amount = calculateItemAmount(
-        1,
+        initialQuantity,
         rate,
         item.gstRate,
         item.cessRate,
@@ -123,7 +212,7 @@ export function InvoiceTable({
           itemId: item.id,
           itemName: item.name,
           hsnCode: item.hsnCode,
-          quantity: 1,
+          quantity: initialQuantity,
           unit: item.unit,
           rate,
           gstRate: item.gstRate,
@@ -181,6 +270,14 @@ export function InvoiceTable({
     const updatedItems = [...invoiceItems];
     const item = { ...updatedItems[index], [field]: value };
 
+    // Update cache when quantity is manually changed in loose mode
+    if (field === "quantity" && packingType === "loose" && item.itemId) {
+      setLooseQuantityCache(prev => ({
+        ...prev,
+        [item.itemId]: value as number
+      }));
+    }
+
     // Auto-calculate amount
     if (
       ["quantity", "rate", "gstRate", "cessRate", "discount"].includes(field)
@@ -203,6 +300,22 @@ export function InvoiceTable({
         item.rate = getPriceByMode(selectedItem); // Use pricing mode to determine rate
         item.gstRate = selectedItem.gstRate;
         item.cessRate = selectedItem.cessRate;
+        
+        // Set initial quantity based on packing type
+        const initialQuantity = packingType === "carton" 
+          ? Math.floor(selectedItem.perCartonQuantity || 1)
+          : 1;
+        
+        item.quantity = initialQuantity;
+        
+        // Cache if loose mode
+        if (packingType === "loose") {
+          setLooseQuantityCache(prev => ({
+            ...prev,
+            [selectedItem.id]: initialQuantity
+          }));
+        }
+        
         item.amount = calculateItemAmount(
           item.quantity,
           getPriceByMode(selectedItem),
@@ -245,6 +358,12 @@ export function InvoiceTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-62.5">Item</TableHead>
+              {customField1Enabled && (
+                <TableHead className="w-30">{customField1Label}</TableHead>
+              )}
+              {customField2Enabled && (
+                <TableHead className="w-30">{customField2Label}</TableHead>
+              )}
               <TableHead className="w-25">Quantity</TableHead>
               <TableHead className="w-20">Unit</TableHead>
               <TableHead className="w-30">Rate</TableHead>
@@ -252,6 +371,7 @@ export function InvoiceTable({
                 <TableHead className="w-20">GST %</TableHead>
               )}
               <TableHead className="w-25">Discount %</TableHead>
+              
               <TableHead className="w-30">Amount</TableHead>
               <TableHead className="w-15"></TableHead>
             </TableRow>
@@ -267,16 +387,48 @@ export function InvoiceTable({
                     placeholder="Select item"
                   />
                 </TableCell>
+                 {customField1Enabled && (
+                  <TableCell>
+                    <Input
+                      type="text"
+                      value={invoiceItem.customField1Value || ""}
+                      onChange={(e) =>
+                        updateRow(index, "customField1Value", e.target.value)
+                      }
+                      placeholder={customField1Label}
+                    />
+                  </TableCell>
+                )}
+                {customField2Enabled && (
+                  <TableCell>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={invoiceItem.customField2Value || ""}
+                      onChange={(e) =>
+                        updateRow(
+                          index,
+                          "customField2Value",
+                          e.target.value ? Number.parseFloat(e.target.value) : undefined
+                        )
+                      }
+                      placeholder={customField2Label}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
                   <Input
                     type="number"
-                    step="0.01"
+                    step={packingType === "carton" 
+                      ? (items.find(i => i.id === invoiceItem.itemId)?.perCartonQuantity || 1)
+                      : 1}
+                    min="0"
                     value={invoiceItem.quantity}
                     onChange={(e) =>
                       updateRow(
                         index,
                         "quantity",
-                        Number.parseFloat(e.target.value) || 0
+                        Number.parseInt(e.target.value) || 0
                       )
                     }
                   />
@@ -333,6 +485,7 @@ export function InvoiceTable({
                     placeholder="0"
                   />
                 </TableCell>
+               
                 <TableCell>
                   <div className="font-medium">
                     ₹{invoiceItem.amount.toFixed(2)}

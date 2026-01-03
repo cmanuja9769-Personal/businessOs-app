@@ -73,6 +73,11 @@ export interface ISettings {
   dateFormat: string
   financialYearStart: number
   lowStockAlert: boolean
+  // Custom invoice fields
+  customField1Enabled: boolean
+  customField1Label: string
+  customField2Enabled: boolean
+  customField2Label: string
   createdAt: Date
   updatedAt: Date
 }
@@ -96,6 +101,10 @@ export async function getSettings(): Promise<ISettings> {
         date_format: "dd/MM/yyyy",
         financial_year_start: 4,
         low_stock_alert: true,
+        custom_field_1_enabled: false,
+        custom_field_1_label: "Custom Field 1",
+        custom_field_2_enabled: false,
+        custom_field_2_label: "Custom Field 2",
       })
       .select()
       .single()
@@ -116,6 +125,10 @@ export async function getSettings(): Promise<ISettings> {
         dateFormat: "dd/MM/yyyy",
         financialYearStart: 4,
         lowStockAlert: true,
+        customField1Enabled: false,
+        customField1Label: "Custom Field 1",
+        customField2Enabled: false,
+        customField2Label: "Custom Field 2",
         createdAt: new Date(),
         updatedAt: new Date(),
       }
@@ -147,9 +160,13 @@ export async function getSettings(): Promise<ISettings> {
     taxEnabled: data.tax_enabled,
     defaultTaxRate: Number(data.default_tax_rate),
     currencySymbol: data.currency_symbol,
-    dateFormat: data.date_format,
+    dateFormat: data.date_format, 
     financialYearStart: data.financial_year_start,
     lowStockAlert: data.low_stock_alert,
+    customField1Enabled: data.custom_field_1_enabled ?? false,
+    customField1Label: data.custom_field_1_label || "Custom Field 1",
+    customField2Enabled: data.custom_field_2_enabled ?? false,
+    customField2Label: data.custom_field_2_label || "Custom Field 2",
     createdAt: new Date(data.created_at),
     updatedAt: new Date(data.updated_at),
   }
@@ -232,6 +249,18 @@ export async function updateSettings(formData: FormData) {
   
   const lowStockAlert = formData.get("lowStockAlert")
   if (lowStockAlert !== null) data.low_stock_alert = lowStockAlert === "true"
+
+  const customField1Enabled = formData.get("customField1Enabled")
+  if (customField1Enabled !== null) data.custom_field_1_enabled = customField1Enabled === "true"
+  
+  const customField1Label = formData.get("customField1Label")
+  if (customField1Label) data.custom_field_1_label = customField1Label
+  
+  const customField2Enabled = formData.get("customField2Enabled")
+  if (customField2Enabled !== null) data.custom_field_2_enabled = customField2Enabled === "true"
+  
+  const customField2Label = formData.get("customField2Label")
+  if (customField2Label) data.custom_field_2_label = customField2Label
 
   // Get the first settings record
   const { data: existingSettings } = await supabase.from("settings").select("id").limit(1).single()

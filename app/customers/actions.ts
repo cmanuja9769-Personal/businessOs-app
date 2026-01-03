@@ -11,7 +11,7 @@ export async function getCustomers(): Promise<ICustomer[]> {
   const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching customers:", error)
+    console.error("[Customers] Error fetching customers:", error.message || error)
     return []
   }
 

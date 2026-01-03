@@ -18,6 +18,7 @@ interface BarcodeDisplayProps {
   showPerCartonQty?: boolean
   layout?: LabelLayout
   startPosition?: number
+  hindiName?: string
 }
 
 interface BarcodeCanvasProps {
@@ -100,7 +101,8 @@ export function BarcodeDisplay({
   showPrice = false,
   showPerCartonQty = false,
   layout,
-  startPosition = 1
+  startPosition = 1,
+  hindiName,
 }: BarcodeDisplayProps) {
   // Validate item
   if (!item || typeof item !== 'object') {
@@ -162,62 +164,102 @@ export function BarcodeDisplay({
     const width = currentLayout?.labelWidth || 70
     
     if (width <= 40) {
-      return { name: 'text-[6px]', code: 'text-[5px]', barcode: 'text-[5px]', price: 'text-[8px]', mrp: 'text-[5px]', cartonQty: 'text-[5px]' }
+      return { name: 'text-[6px]', hindi: 'text-[6px]', code: 'text-[5px]', barcode: 'text-[5px]', price: 'text-[7px]', cartonQty: 'text-[5px]' }
     } else if (width <= 55) {
-      return { name: 'text-[8px]', code: 'text-[6px]', barcode: 'text-[6px]', price: 'text-xs', mrp: 'text-[6px]', cartonQty: 'text-[6px]' }
+      return { name: 'text-[7px]', hindi: 'text-[7px]', code: 'text-[5.5px]', barcode: 'text-[5.5px]', price: 'text-[8px]', cartonQty: 'text-[5.5px]' }
     } else if (width <= 75) {
-      return { name: 'text-[10px]', code: 'text-[7px]', barcode: 'text-[7px]', price: 'text-sm', mrp: 'text-[7px]', cartonQty: 'text-[7px]' }
+      return { name: 'text-[8px]', hindi: 'text-[8px]', code: 'text-[6px]', barcode: 'text-[6px]', price: 'text-[9px]', cartonQty: 'text-[6px]' }
     } else {
-      return { name: 'text-xs', code: 'text-[8px]', barcode: 'text-[8px]', price: 'text-base', mrp: 'text-xs', cartonQty: 'text-[8px]' }
+      return { name: 'text-[11px]', hindi: 'text-xs', code: 'text-[9px]', barcode: 'text-[9px]', price: 'text-[10px]', cartonQty: 'text-[9px]' }
     }
   }
 
   const fonts = getFontSizes()
   const itemName = item.name || 'Unnamed Item'
 
+  const showCarton = !!(showPerCartonQty && item.perCartonQuantity && item.perCartonQuantity > 1)
+  const showPriceBlock = !!(showPrice && currentLayout.labelHeight >= 35)
+  const showFooter = showCarton || showPriceBlock
+  const headerClamp = showFooter ? 'line-clamp-1' : 'line-clamp-2'
+
+  // Pagination logic
+  const labelsPerPage = currentLayout.columns * currentLayout.rows
+  const totalItems = placeholders.length + barcodesToPrint
+  const totalPages = Math.ceil(totalItems / labelsPerPage)
+  
+  const pages = []
+  for (let i = 0; i < totalPages; i++) {
+    const pageItems = []
+    const startIndex = i * labelsPerPage
+    const endIndex = Math.min(startIndex + labelsPerPage, totalItems)
+    
+    for (let j = startIndex; j < endIndex; j++) {
+      if (j < placeholders.length) {
+        pageItems.push({ type: 'placeholder', key: `placeholder-${j}` })
+      } else {
+        const labelIndex = j - placeholders.length
+        pageItems.push({ type: 'label', key: `label-${labelIndex}`, index: labelIndex })
+      }
+    }
+    pages.push(pageItems)
+  }
+
   return (
-    <div 
-      className="barcode-label-grid"
-      style={cssVars as React.CSSProperties}
-    >
-      {/* Placeholder labels for start position offset */}
-      {placeholders.map((_, index) => (
-        <div key={`placeholder-${index}`} className="barcode-label barcode-label-placeholder" />
-      ))}
-      
-      {/* Actual barcode labels */}
-      {[...Array(barcodesToPrint)].map((_, index) => (
-        <div key={`label-${index}`} className="barcode-label">
-          <div className="barcode-label-content">
-            <p className={`text-center font-semibold line-clamp-2 ${fonts.name}`}>{itemName}</p>
-            {item.itemCode && currentLayout.labelHeight >= 35 && (
-              <p className={`text-center text-muted-foreground font-mono ${fonts.code}`}>
-                {item.itemCode}
-              </p>
-            )}
-            <div className="flex justify-center py-1">
-              <BarcodeCanvas value={barcodeValue} layout={currentLayout} />
-            </div>
-            <p className={`text-center font-mono text-muted-foreground ${fonts.barcode}`}>
-              {barcodeValue}
-            </p>
-            {showPrice && currentLayout.labelHeight >= 35 && (
-              <div className="text-center space-y-0.5 pt-1 border-t">
-                <p className={`font-bold ${fonts.price}`}>
-                  ₹{(typeof item.salePrice === 'number' && !isNaN(item.salePrice) ? item.salePrice : 0).toFixed(2)}
-                </p>
-                {item.mrp && typeof item.mrp === 'number' && !isNaN(item.mrp) && item.mrp > (item.salePrice || 0) && (
-                  <p className={`text-muted-foreground line-through ${fonts.mrp}`}>
-                    MRP: ₹{item.mrp.toFixed(2)}
-                  </p>
-                )}
+    <div>
+      {pages.map((pageItems, pageIndex) => (
+        <div 
+          key={`page-${pageIndex}`}
+          className={`print-page barcode-label-page ${pageIndex < pages.length - 1 ? 'barcode-page-break' : ''}`}
+          style={pageIndex > 0 ? { breakBefore: 'page', pageBreakBefore: 'always' } : undefined}
+        >
+          <div 
+            className="barcode-label-grid"
+            style={cssVars as React.CSSProperties}
+          >
+            {pageItems.map(pageItem => {
+            if (pageItem.type === 'placeholder') {
+              return <div key={pageItem.key} className="barcode-label barcode-label-placeholder" />
+            }
+            
+            return (
+              <div key={pageItem.key} className="barcode-label">
+                <div className="barcode-label-content">
+                  <p className={`text-center font-semibold ${headerClamp} ${fonts.name}`}>{itemName}</p>
+                  {hindiName && (
+                    <p className={`text-center font-medium text-muted-foreground ${headerClamp} ${fonts.hindi}`}>{hindiName}</p>
+                  )}
+                  {item.itemCode && currentLayout.labelHeight >= 35 && (
+                    <p className={`text-center text-muted-foreground font-mono ${fonts.code}`}>
+                      {item.itemCode}
+                    </p>
+                  )}
+                  <div className="flex flex-col items-center justify-center py-1">
+                    <BarcodeCanvas value={barcodeValue} layout={currentLayout} />
+                    <p className={`text-center font-mono text-muted-foreground mt-1 ${fonts.barcode}`}>{barcodeValue}</p>
+                  </div>
+
+                  {showFooter && (
+                    <div className="flex items-center justify-between gap-1 pt-1 border-t">
+                      <div>
+                        {showPriceBlock && (
+                          <span className={`font-bold ${fonts.price}`}>
+                            ₹{(typeof item.salePrice === 'number' && !isNaN(item.salePrice) ? item.salePrice : 0).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline gap-2 whitespace-nowrap">
+                        {showCarton && (
+                          <span className={`font-medium text-blue-600 ${fonts.cartonQty}`}>
+                            {item.perCartonQuantity}pcs/ctn
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-            {showPerCartonQty && item.perCartonQuantity && item.perCartonQuantity > 1 && (
-              <p className={`text-center font-medium text-blue-600 ${fonts.cartonQty}`}>
-                {item.perCartonQuantity} pcs/carton
-              </p>
-            )}
+            )
+          })}
           </div>
         </div>
       ))}

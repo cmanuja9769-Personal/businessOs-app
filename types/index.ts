@@ -57,6 +57,8 @@ export interface IInvoiceItem {
   cessRate: number
   discount: number
   amount: number
+  customField1Value?: string
+  customField2Value?: number
 }
 
 export interface IInvoice {
@@ -108,6 +110,7 @@ export interface IInvoice {
 
 export type BillingMode = "gst" | "non-gst"
 export type PricingMode = "sale" | "wholesale" | "quantity" // Added pricing mode type
+export type PackingType = "loose" | "carton" // Packing type for invoice items
 
 // Document types for different invoice variations
 export type DocumentType =

@@ -7,39 +7,35 @@ import { itemSchema } from "@/lib/schemas"
 
 export async function getItems(): Promise<IItem[]> {
   const supabase = await createClient()
-  // Prefer fetching warehouse join (Godown), but fall back if the DB migration
-  // adding `items.warehouse_id` hasn't been applied yet.
-  let data: any[] | null = null
-  let error: any = null
+  // Fetch items without relying on a Supabase schema relationship.
+  // (The DB may not have an FK from items.warehouse_id -> godowns.id, which breaks joins.)
+  const itemsRes = await supabase.from("items").select("*").order("created_at", { ascending: false })
+  if (itemsRes.error) {
+    console.error("[Items] Critical: query failed:", itemsRes.error.message || itemsRes.error)
+    return []
+  }
 
-  const joined = await supabase
-    .from("items")
-    .select("*, godowns!warehouse_id ( id, name )")
-    .order("created_at", { ascending: false })
+  const data = (itemsRes.data as any[]) || []
 
-  data = joined.data as any
-  error = joined.error as any
+  // Manual lookup for godownName (works even when no FK relationship exists)
+  const godownIds = Array.from(
+    new Set(
+      data
+        .map((item) => item?.warehouse_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    )
+  )
 
-  if (error) {
-    const code = error?.code
-    const message = error?.message
-    const details = error?.details
-    const hint = error?.hint
-    console.error("[v0] Error fetching items:", { code, message, details, hint })
-
-    // Fallback query without join (keeps the app functional until migration is applied)
-    const fallback = await supabase.from("items").select("*").order("created_at", { ascending: false })
-    if (fallback.error) {
-      const fe = fallback.error as any
-      console.error("[v0] Error fetching items (fallback):", {
-        code: fe?.code,
-        message: fe?.message,
-        details: fe?.details,
-        hint: fe?.hint,
-      })
-      return []
+  const godownNameById = new Map<string, string>()
+  if (godownIds.length > 0) {
+    const godownsRes = await supabase.from("godowns").select("id, name").in("id", godownIds)
+    if (!godownsRes.error && godownsRes.data) {
+      for (const godown of godownsRes.data as any[]) {
+        if (godown?.id && typeof godown?.name === "string") {
+          godownNameById.set(godown.id, godown.name)
+        }
+      }
     }
-    data = fallback.data as any
   }
 
   if (!data) {
@@ -71,7 +67,7 @@ export async function getItems(): Promise<IItem[]> {
       itemLocation: item.item_location || "",
       perCartonQuantity: item.per_carton_quantity || undefined,
       godownId: item.warehouse_id || null,
-      godownName: item.godowns?.name || null,
+      godownName: godownNameById.get(item.warehouse_id) || null,
       taxRate: Number(item.tax_rate) || 0,
       inclusiveOfTax: item.inclusive_of_tax || false,
       gstRate: Number(item.tax_rate) || 0,

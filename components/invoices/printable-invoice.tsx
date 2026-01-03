@@ -11,13 +11,23 @@ interface PrintableInvoiceProps {
 
 export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
   const primaryColor = settings.templateColor || "#6366f1"
+  const showCustomField1 = !!settings.customField1Enabled
+  const showCustomField2 = !!settings.customField2Enabled
+
+  const hideOnImageError: React.ReactEventHandler<HTMLImageElement> = (e) => {
+    e.currentTarget.style.display = "none"
+  }
 
   return (
     <div className="hidden print:block bg-white">
       <div
-        className="w-210 min-h-297 mx-auto"
+        className="print-page"
         style={{
-          padding: "8px",
+          width: "100%",
+          maxWidth: "190mm",
+          margin: "0 auto",
+          boxSizing: "border-box",
+          padding: "6mm",
           fontSize: "11px",
           lineHeight: "1.4",
           fontFamily: "Arial, sans-serif",
@@ -38,9 +48,10 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
           <div style={{ flex: 1 }}>
             {settings.businessLogoUrl && (
               <img
-                src={settings.businessLogoUrl || "/placeholder.svg"}
+                src={settings.businessLogoUrl}
                 alt="Logo"
                 style={{ height: "40px", marginBottom: "8px", objectFit: "contain" }}
+                onError={hideOnImageError}
               />
             )}
             <h1 style={{ fontSize: "18px", fontWeight: "bold", color: primaryColor, margin: "4px 0" }}>
@@ -128,6 +139,32 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
               >
                 Qty
               </th>
+              {showCustomField1 && (
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "6px 4px",
+                    fontWeight: "bold",
+                    color: primaryColor,
+                    fontSize: "9px",
+                  }}
+                >
+                  {settings.customField1Label || "Custom Field 1"}
+                </th>
+              )}
+              {showCustomField2 && (
+                <th
+                  style={{
+                    textAlign: "right",
+                    padding: "6px 4px",
+                    fontWeight: "bold",
+                    color: primaryColor,
+                    fontSize: "9px",
+                  }}
+                >
+                  {settings.customField2Label || "Custom Field 2"}
+                </th>
+              )}
               <th
                 style={{
                   textAlign: "right",
@@ -174,6 +211,16 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
                   <div style={{ fontSize: "8px", color: "#666" }}>{item.unit}</div>
                 </td>
                 <td style={{ padding: "4px", textAlign: "center", fontSize: "9px" }}>{item.quantity}</td>
+                {showCustomField1 && (
+                  <td style={{ padding: "4px", textAlign: "left", fontSize: "9px", color: "#666" }}>
+                    {item.customField1Value || ""}
+                  </td>
+                )}
+                {showCustomField2 && (
+                  <td style={{ padding: "4px", textAlign: "right", fontSize: "9px", color: "#666" }}>
+                    {item.customField2Value == null ? "" : item.customField2Value}
+                  </td>
+                )}
                 <td style={{ padding: "4px", textAlign: "right", fontSize: "9px" }}>
                   {settings.currencySymbol}
                   {item.rate.toFixed(2)}
@@ -326,9 +373,10 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
             </div>
             {invoice.qrCode && (
               <img
-                src={invoice.qrCode || "/placeholder.svg"}
+                src={invoice.qrCode}
                 alt="QR"
                 style={{ width: "60px", height: "60px", marginTop: "4px" }}
+                onError={hideOnImageError}
               />
             )}
           </div>
@@ -351,9 +399,10 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
           {settings.signatureImageUrl && (
             <div style={{ textAlign: "center" }}>
               <img
-                src={settings.signatureImageUrl || "/placeholder.svg"}
+                src={settings.signatureImageUrl}
                 alt="Signature"
                 style={{ height: "30px", marginBottom: "2px" }}
+                onError={hideOnImageError}
               />
               <div style={{ borderTop: "1px solid #333", paddingTop: "2px", fontSize: "8px" }}>
                 Authorized Signatory

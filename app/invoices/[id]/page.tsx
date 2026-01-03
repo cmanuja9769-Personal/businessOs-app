@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, Edit } from "lucide-react"
 import Link from "next/link"
-import { PrintButton } from "@/components/ui/print-button"
-import { DownloadPdfButton } from "@/components/ui/download-pdf-button"
 import { GenerateEInvoiceButton } from "@/components/invoices/generate-einvoice-button"
 import { GenerateEWayBillButton } from "@/components/invoices/generate-ewaybill-button"
 import { EWayBillStatusCard } from "@/components/invoices/e-waybill-status-card"
@@ -14,8 +12,8 @@ import { ModernTemplate } from "@/components/invoices/templates/modern-template"
 import { MinimalTemplate } from "@/components/invoices/templates/minimal-template"
 import { DOCUMENT_TYPE_CONFIG } from "@/types"
 import { SendInvoiceEmailDialog } from "@/components/invoices/send-invoice-email-dialog"
-import { PrintableInvoice } from "@/components/invoices/printable-invoice"
 import { InvoiceViewDisplay } from "@/components/invoices/invoice-view-display"
+import { InvoicePDFButtons } from "@/components/invoices/invoice-pdf-buttons"
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -97,8 +95,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               Edit
             </Button>
           </Link>
-          <DownloadPdfButton />
-          <PrintButton />
+          <InvoicePDFButtons invoice={invoice} settings={settings} />
           <SendInvoiceEmailDialog invoice={invoice} />
         </div>
       </div>
@@ -110,9 +107,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
       {/* Professional View */}
       <InvoiceViewDisplay invoice={invoice} settings={settings} />
-
-      {/* Printable Invoice (Hidden but available for printing) */}
-      <PrintableInvoice invoice={invoice} settings={settings} />
     </div>
   )
 }

@@ -100,6 +100,36 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
     marginLeft: 0,
     recommended: false,
   },
+  {
+    id: 'layout-8',
+    name: 'Large (8 labels)',
+    description: 'Shipping labels - 99×67mm',
+    columns: 2,
+    rows: 4,
+    totalLabels: 8,
+    labelWidth: 99,
+    labelHeight: 67,
+    horizontalGap: 2,
+    verticalGap: 2,
+    marginTop: 10,
+    marginLeft: 5,
+    recommended: false,
+  },
+  {
+    id: 'layout-4',
+    name: 'Extra Large (4 labels)',
+    description: 'Warehouse labels - 99×135mm',
+    columns: 2,
+    rows: 2,
+    totalLabels: 4,
+    labelWidth: 99,
+    labelHeight: 135,
+    horizontalGap: 2,
+    verticalGap: 2,
+    marginTop: 10,
+    marginLeft: 5,
+    recommended: false,
+  },
 ]
 
 /**
@@ -264,15 +294,55 @@ export function validateStartPosition(startPosition: number, layout: LabelLayout
 export function getLayoutCSSVariables(layout: LabelLayout | null | undefined): Record<string, string> {
   // Validate and use default if invalid
   const validLayout = layout && isValidLayout(layout) ? layout : getDefaultLayout()
+
+  // Match the PDF output: A4 page with clamped gaps/margins so the grid always fits.
+  const A4_WIDTH_MM = 210
+  const A4_HEIGHT_MM = 297
+  const DESIRED_SAFE_MARGIN_MM = 5
+  const EPS_MM = 0.5
+
+  const cols = Math.max(1, Math.floor(validLayout.columns))
+  const rows = Math.max(1, Math.floor(validLayout.rows))
+  const labelWidthMm = Math.max(1, validLayout.labelWidth)
+  const labelHeightMm = Math.max(1, validLayout.labelHeight)
+
+  const requestedHorizontalGapMm = Math.max(0, validLayout.horizontalGap)
+  const requestedVerticalGapMm = Math.max(0, validLayout.verticalGap)
+
+  const maxHorizontalGapMm = cols > 1 ? Math.max(0, (A4_WIDTH_MM - cols * labelWidthMm) / (cols - 1)) : 0
+  const maxVerticalGapMm = rows > 1 ? Math.max(0, (A4_HEIGHT_MM - rows * labelHeightMm) / (rows - 1)) : 0
+
+  const horizontalGapMm = Math.max(0, Math.min(requestedHorizontalGapMm, maxHorizontalGapMm))
+  const verticalGapMm = Math.max(0, Math.min(requestedVerticalGapMm, maxVerticalGapMm))
+
+  const gridWidthMm = cols * labelWidthMm + (cols - 1) * horizontalGapMm
+  const gridHeightMm = rows * labelHeightMm + (rows - 1) * verticalGapMm
+
+  const availableX = A4_WIDTH_MM - gridWidthMm
+  const availableY = A4_HEIGHT_MM - gridHeightMm
+
+  const safeMarginX = Math.max(0, Math.min(DESIRED_SAFE_MARGIN_MM, availableX > 0 ? (availableX - EPS_MM) / 2 : 0))
+  const safeMarginY = Math.max(0, Math.min(DESIRED_SAFE_MARGIN_MM, availableY > 0 ? (availableY - EPS_MM) / 2 : 0))
+
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max))
+  const requestedMarginLeftMm = Math.max(0, validLayout.marginLeft)
+  const requestedMarginTopMm = Math.max(0, validLayout.marginTop)
+
+  const marginLeftMm = clamp(requestedMarginLeftMm, safeMarginX, Math.max(safeMarginX, availableX - safeMarginX))
+  const marginTopMm = clamp(requestedMarginTopMm, safeMarginY, Math.max(safeMarginY, availableY - safeMarginY))
+  const marginRightMm = Math.max(0, availableX - marginLeftMm)
+  const marginBottomMm = Math.max(0, availableY - marginTopMm)
   
   return {
-    '--label-width': `${validLayout.labelWidth}mm`,
-    '--label-height': `${validLayout.labelHeight}mm`,
+    '--label-width': `${labelWidthMm}mm`,
+    '--label-height': `${labelHeightMm}mm`,
     '--label-columns': validLayout.columns.toString(),
     '--label-rows': validLayout.rows.toString(),
-    '--horizontal-gap': `${validLayout.horizontalGap}mm`,
-    '--vertical-gap': `${validLayout.verticalGap}mm`,
-    '--margin-top': `${validLayout.marginTop}mm`,
-    '--margin-left': `${validLayout.marginLeft}mm`,
+    '--horizontal-gap': `${horizontalGapMm}mm`,
+    '--vertical-gap': `${verticalGapMm}mm`,
+    '--margin-top': `${marginTopMm}mm`,
+    '--margin-right': `${marginRightMm}mm`,
+    '--margin-bottom': `${marginBottomMm}mm`,
+    '--margin-left': `${marginLeftMm}mm`,
   }
 }

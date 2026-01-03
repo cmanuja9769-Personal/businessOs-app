@@ -57,7 +57,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased`} suppressHydrationWarning>
+      <body className={`font-sans antialiased h-screen overflow-hidden`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
             {user ? (
@@ -77,7 +77,7 @@ export default async function RootLayout({
               </div>
             ) : (
               // Unauthenticated layout (for login/signup pages)
-              <>{children}</>
+              <main className="min-h-screen overflow-y-auto">{children}</main>
             )}
             <Toaster />
           </AuthProvider>

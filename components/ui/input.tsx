@@ -1,8 +1,10 @@
+"use client"
+
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
+function Input({ className, type, step, onFocus, onClick, onChange, ...props }: React.ComponentProps<'input'>) {
   return (
     <input
       type={type}
@@ -13,6 +15,67 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
         'aria-invalid:ring-0 aria-invalid:border-destructive',
         className,
       )}
+      onFocus={(e) => {
+        onFocus?.(e)
+
+        if (type !== 'number') return
+
+        const input = e.currentTarget
+        if (input.value !== '0') return
+
+        requestAnimationFrame(() => {
+          try {
+            input.select()
+          } catch {
+            // no-op
+          }
+        })
+      }}
+      onClick={(e) => {
+        onClick?.(e)
+
+        if (type !== 'number') return
+
+        const input = e.currentTarget
+        if (input.value !== '0') return
+
+        requestAnimationFrame(() => {
+          try {
+            input.select()
+          } catch {
+            // no-op
+          }
+        })
+      }}
+      onChange={(e) => {
+        if (type === 'number') {
+          const stepString = step === undefined || step === null ? '1' : String(step)
+          const isIntegerStep = stepString !== 'any' && !stepString.includes('.')
+
+          if (isIntegerStep) {
+            const input = e.currentTarget
+            const current = input.value
+
+            if (current !== '') {
+              const isNegative = current.startsWith('-')
+              const sign = isNegative ? '-' : ''
+              let rest = isNegative ? current.slice(1) : current
+
+              if (rest.startsWith('0') && rest.length > 1 && !rest.startsWith('0.')) {
+                rest = rest.replace(/^0+(?=\d)/, '')
+                if (rest === '') rest = '0'
+              }
+
+              const normalized = sign + rest
+              if (normalized !== current) {
+                input.value = normalized
+              }
+            }
+          }
+        }
+
+        onChange?.(e)
+      }}
       {...props}
     />
   )

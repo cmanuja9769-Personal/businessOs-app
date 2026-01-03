@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import type { ICustomer, BillingMode, PricingMode } from "@/types"
+import type { ICustomer, BillingMode, PricingMode, PackingType } from "@/types"
 
 interface InvoiceHeaderProps {
   invoiceNo: string
@@ -19,6 +19,8 @@ interface InvoiceHeaderProps {
   onBillingModeChange: (mode: BillingMode) => void
   pricingMode: PricingMode // Added pricing mode prop
   onPricingModeChange: (mode: PricingMode) => void // Added pricing mode change handler
+  packingType: PackingType // Added packing type prop
+  onPackingTypeChange: (type: PackingType) => void // Added packing type change handler
 }
 
 export function InvoiceHeader({
@@ -34,6 +36,8 @@ export function InvoiceHeader({
   onBillingModeChange,
   pricingMode,
   onPricingModeChange,
+  packingType,
+  onPackingTypeChange,
 }: InvoiceHeaderProps) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -127,6 +131,28 @@ export function InvoiceHeader({
               onClick={() => onPricingModeChange("quantity")}
             >
               Quantity Price (Bulk)
+            </Badge>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>
+            Packing Type <span className="text-destructive">*</span>
+          </Label>
+          <div className="flex gap-2">
+            <Badge
+              variant={packingType === "loose" ? "default" : "outline"}
+              className="cursor-pointer px-4 py-2"
+              onClick={() => onPackingTypeChange("loose")}
+            >
+              Loose Quantity
+            </Badge>
+            <Badge
+              variant={packingType === "carton" ? "default" : "outline"}
+              className="cursor-pointer px-4 py-2"
+              onClick={() => onPackingTypeChange("carton")}
+            >
+              Pack Cartons
             </Badge>
           </div>
         </div>

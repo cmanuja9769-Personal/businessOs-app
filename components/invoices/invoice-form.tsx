@@ -12,8 +12,9 @@ import { Save, Send, FileText, Loader2 } from "lucide-react"
 import { createInvoice, updateInvoice, generateInvoiceNumber, getInvoices } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
 import { getItems } from "@/app/items/actions"
+import { getSettings } from "@/app/settings/actions"
 import { toast } from "sonner"
-import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, DocumentType } from "@/types"
+import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, PackingType, DocumentType } from "@/types"
 import { DOCUMENT_TYPE_CONFIG } from "@/types"
 import { calculateInvoiceTotals } from "@/lib/invoice-calculations"
 import { Textarea } from "@/components/ui/textarea"
@@ -54,22 +55,31 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   )
   const [billingMode, setBillingMode] = useState<BillingMode>(invoice?.billingMode || "gst")
   const [pricingMode, setPricingMode] = useState<PricingMode>("sale")
+  const [packingType, setPackingType] = useState<PackingType>("loose")
   const [invoiceItems, setInvoiceItems] = useState<IInvoiceItem[]>(invoice?.items || [])
   const [notes, setNotes] = useState(invoice?.notes || "")
   const [parentInvoice, setParentInvoice] = useState<IInvoice | null>(null)
+  const [customFieldsConfig, setCustomFieldsConfig] = useState({ field1Enabled: false, field1Label: "", field2Enabled: false, field2Label: "" })
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, itemsData, invoicesData] = await Promise.all([
+        const [customersData, itemsData, invoicesData, settingsData] = await Promise.all([
           getCustomers(),
           getItems(),
           getInvoices(),
+          getSettings(),
         ])
         
         setCustomers(customersData)
         setItems(itemsData)
         setAllInvoices(invoicesData)
+        setCustomFieldsConfig({
+          field1Enabled: settingsData.customField1Enabled,
+          field1Label: settingsData.customField1Label,
+          field2Enabled: settingsData.customField2Enabled,
+          field2Label: settingsData.customField2Label,
+        })
 
         if (isEditMode && invoice) {
           // Find and set the customer in edit mode
@@ -244,6 +254,8 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             onBillingModeChange={setBillingMode}
             pricingMode={pricingMode}
             onPricingModeChange={setPricingMode}
+            packingType={packingType}
+            onPackingTypeChange={setPackingType}
           />
 
           {/* Validity Date - For quotations and proforma invoices */}
@@ -276,6 +288,11 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             onItemsChange={setInvoiceItems}
             billingMode={billingMode}
             pricingMode={pricingMode}
+            packingType={packingType}
+            customField1Enabled={customFieldsConfig.field1Enabled}
+            customField1Label={customFieldsConfig.field1Label}
+            customField2Enabled={customFieldsConfig.field2Enabled}
+            customField2Label={customFieldsConfig.field2Label}
           />
         </CardContent>
       </Card>

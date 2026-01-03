@@ -6,15 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Info } from "lucide-react";
+import { ArrowLeft, Loader2, Info, Download, Printer } from "lucide-react";
 import Link from "next/link";
 import { BarcodeDisplay } from "@/components/items/barcode-display";
-import { PrintButton } from "@/components/ui/print-button";
 import { getItems } from "@/app/items/actions";
 import type { IItem } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LABEL_LAYOUTS, getLayoutById, type LabelLayout, calculateSheetsNeeded, calculateWastedLabels } from "@/lib/label-layouts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { translateToHindi } from "@/lib/translate";
+import { pdf } from "@react-pdf/renderer";
+import { BarcodePDFDocument } from "@/components/pdf/barcode-pdf-document";
 
 export default function BarcodePage({
   params,
@@ -29,6 +31,8 @@ export default function BarcodePage({
   const [layoutId, setLayoutId] = useState("standard");
   const [startPosition, setStartPosition] = useState(1);
   const [id, setId] = useState<string>("");
+  const [hindiName, setHindiName] = useState<string | undefined>(undefined);
+  const [isGenerating, setIsGenerating] = useState(false);
   
   const selectedLayout = getLayoutById(layoutId);
   const sheetsNeeded = calculateSheetsNeeded(quantity, selectedLayout);
@@ -56,6 +60,81 @@ export default function BarcodePage({
 
     loadItem();
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHindiName() {
+      if (!item?.name) {
+        setHindiName(undefined);
+        return;
+      }
+
+      const translated = await translateToHindi(item.name);
+      if (!cancelled) setHindiName(translated);
+    }
+
+    loadHindiName();
+    return () => {
+      cancelled = true;
+    }
+  }, [item?.name]);
+
+  const handleDownloadPDF = async () => {
+    if (!item) return;
+    setIsGenerating(true);
+    try {
+      const blob = await pdf(
+        <BarcodePDFDocument
+          item={item}
+          quantity={quantity}
+          layout={selectedLayout}
+          startPosition={startPosition}
+          showPrice={showPrice}
+          showPerCartonQty={showPerCartonQty}
+          hindiName={hindiName}
+        />
+      ).toBlob();
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Barcode Labels - ${item.name.replace(/[^a-zA-Z0-9 ]/g, "")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePrintPDF = async () => {
+    if (!item) return;
+    setIsGenerating(true);
+    try {
+      const blob = await pdf(
+        <BarcodePDFDocument
+          item={item}
+          quantity={quantity}
+          layout={selectedLayout}
+          startPosition={startPosition}
+          showPrice={showPrice}
+          showPerCartonQty={showPerCartonQty}
+          hindiName={hindiName}
+        />
+      ).toBlob();
+      
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (error) {
+      console.error("PDF print failed:", error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -93,7 +172,31 @@ export default function BarcodePage({
             </p>
           </div>
         </div>
-        <PrintButton />
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleDownloadPDF} 
+            disabled={isGenerating}
+            variant="outline"
+          >
+            {isGenerating ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Download PDF
+          </Button>
+          <Button 
+            onClick={handlePrintPDF} 
+            disabled={isGenerating}
+          >
+            {isGenerating ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Printer className="w-4 h-4 mr-2" />
+            )}
+            Print
+          </Button>
+        </div>
       </div>
 
       {/* Print Settings */}
@@ -258,6 +361,7 @@ export default function BarcodePage({
         showPerCartonQty={showPerCartonQty}
         layout={selectedLayout}
         startPosition={startPosition}
+        hindiName={hindiName}
       />
     </div>
   );

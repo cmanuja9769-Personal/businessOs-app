@@ -111,7 +111,7 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
             <div className="space-y-2">
               <p className="text-sm font-medium text-gray-700">QR Code</p>
               <div className="p-2 bg-white rounded border border-gray-200 flex items-center justify-center">
-                <img src={invoice.qrCode || "/placeholder.svg"} alt="E-Invoice QR Code" className="w-32 h-32" />
+                <img src={invoice.qrCode} alt="E-Invoice QR Code" className="w-32 h-32" />
               </div>
               <p className="text-xs text-gray-600">Scan for invoice verification</p>
             </div>

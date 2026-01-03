@@ -82,6 +82,7 @@ const STEPS = [
 
 type PricingMode = 'sale' | 'wholesale' | 'quantity';
 type BillingMode = 'gst' | 'non-gst';
+type PackingType = 'loose' | 'carton';
 
 export default function CreateInvoiceScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
@@ -109,6 +110,10 @@ export default function CreateInvoiceScreen() {
   // Pricing & Billing mode
   const [pricingMode, setPricingMode] = useState<PricingMode>('sale');
   const [billingMode, setBillingMode] = useState<BillingMode>('gst');
+  const [packingType, setPackingType] = useState<PackingType>('loose');
+  
+  // Quantity cache for packing type switching
+  const [looseQuantityCache, setLooseQuantityCache] = useState<Record<string, number>>({});
   
   // Customer selection
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -197,6 +202,47 @@ export default function CreateInvoiceScreen() {
     fetchCustomers();
     fetchItems();
   }, [organizationId]);
+
+  // Handle packing type changes with quantity caching
+  useEffect(() => {
+    if (invoiceItems.length === 0) return;
+
+    const updatedItems = invoiceItems.map((invoiceItem) => {
+      if (!invoiceItem.itemId) return invoiceItem;
+
+      const selectedItem = availableItems.find((i) => i.id === invoiceItem.itemId);
+      if (!selectedItem) return invoiceItem;
+
+      let newQuantity = invoiceItem.quantity;
+
+      if (packingType === 'carton') {
+        // Switching to carton mode - cache loose quantity and convert to cartons
+        const perCartonQty = Math.floor(selectedItem.per_carton_quantity || 1);
+        
+        // Save current loose quantity to cache (as integer)
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [invoiceItem.itemId]: Math.floor(invoiceItem.quantity)
+        }));
+
+        // Convert to cartons (use per carton quantity)
+        newQuantity = perCartonQty;
+      } else {
+        // Switching to loose mode - restore cached quantity if available
+        if (looseQuantityCache[invoiceItem.itemId]) {
+          newQuantity = looseQuantityCache[invoiceItem.itemId];
+        }
+      }
+
+      return {
+        ...invoiceItem,
+        quantity: newQuantity,
+        amount: newQuantity * invoiceItem.rate,
+      };
+    });
+
+    setInvoiceItems(updatedItems);
+  }, [packingType]); // Only re-run when packing type changes
 
   useEffect(() => {
     const title = isEditing 
@@ -370,26 +416,54 @@ export default function CreateInvoiceScreen() {
     const gstRate = billingMode === 'gst' ? (item.tax_rate ?? 0) : 0;
     const hsnCode = item.hsn;
     
-    console.log('[ITEMS] Adding item:', item.name, 'price:', price, 'mode:', pricingMode);
+    console.log('[ITEMS] Adding item:', item.name, 'price:', price, 'mode:', pricingMode, 'packingType:', packingType);
     
     const existingIndex = invoiceItems.findIndex(i => i.itemId === item.id);
     
     if (existingIndex >= 0) {
       const updated = [...invoiceItems];
-      updated[existingIndex].quantity += 1;
+      
+      // Determine increment based on packing type (always integer)
+      const increment = packingType === 'carton' 
+        ? Math.floor(item.per_carton_quantity || 1)
+        : 1;
+      
+      updated[existingIndex].quantity += increment;
       updated[existingIndex].amount = updated[existingIndex].quantity * updated[existingIndex].rate;
+      
+      // Update cache if in loose mode
+      if (packingType === 'loose') {
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [item.id]: updated[existingIndex].quantity
+        }));
+      }
+      
       setInvoiceItems(updated);
     } else {
+      // Determine initial quantity based on packing type (always integer)
+      const initialQuantity = packingType === 'carton' 
+        ? Math.floor(item.per_carton_quantity || 1)
+        : 1;
+      
+      // Cache initial loose quantity
+      if (packingType === 'loose') {
+        setLooseQuantityCache(prev => ({
+          ...prev,
+          [item.id]: initialQuantity
+        }));
+      }
+      
       const newItem: IInvoiceItem = {
         itemId: item.id,
         itemName: item.name,
-        quantity: 1,
+        quantity: initialQuantity,
         unit: 'pcs',
         rate: price,
         gstRate: gstRate,
         cessRate: 0,
         discount: 0,
-        amount: price,
+        amount: price * initialQuantity,
         hsn: hsnCode,
       };
       setInvoiceItems([...invoiceItems, newItem]);
@@ -397,14 +471,26 @@ export default function CreateInvoiceScreen() {
   };
 
   const updateItemQuantity = (index: number, quantity: number) => {
-    if (quantity <= 0) {
+    // Ensure quantity is always an integer
+    const intQuantity = Math.floor(Math.max(0, quantity));
+    
+    if (intQuantity <= 0) {
       removeItem(index);
       return;
     }
     
     const updated = [...invoiceItems];
-    updated[index].quantity = quantity;
-    updated[index].amount = quantity * updated[index].rate;
+    updated[index].quantity = intQuantity;
+    updated[index].amount = intQuantity * updated[index].rate;
+    
+    // Update cache if in loose mode
+    if (packingType === 'loose' && updated[index].itemId) {
+      setLooseQuantityCache(prev => ({
+        ...prev,
+        [updated[index].itemId]: intQuantity
+      }));
+    }
+    
     setInvoiceItems(updated);
   };
 
@@ -928,6 +1014,57 @@ export default function CreateInvoiceScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Packing Type Section */}
+      <View style={styles.modeSection}>
+        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
+          Packing Type <Text style={{ color: colors.error }}>*</Text>
+        </Text>
+        <View style={styles.modeButtonsRow}>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              styles.modeButtonWide,
+              { backgroundColor: colors.card, ...shadows.sm },
+              packingType === 'loose' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+            ]}
+            onPress={() => setPackingType('loose')}
+          >
+            <Ionicons 
+              name="cube-outline" 
+              size={16} 
+              color={packingType === 'loose' ? colors.info : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.modeButtonText,
+              { color: packingType === 'loose' ? colors.info : colors.text }
+            ]}>
+              Loose Quantity
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              styles.modeButtonWide,
+              { backgroundColor: colors.card, ...shadows.sm },
+              packingType === 'carton' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+            ]}
+            onPress={() => setPackingType('carton')}
+          >
+            <Ionicons 
+              name="apps-outline" 
+              size={16} 
+              color={packingType === 'carton' ? colors.info : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.modeButtonText,
+              { color: packingType === 'carton' ? colors.info : colors.text }
+            ]}>
+              Pack Cartons
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
       
       {/* Barcode Scanner Input */}
       <View style={[styles.barcodeContainer, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
@@ -1008,14 +1145,24 @@ export default function CreateInvoiceScreen() {
               <View style={styles.qtyControls}>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.errorLight }]}
-                  onPress={() => updateItemQuantity(index, item.quantity - 1)}
+                  onPress={() => {
+                    const step = packingType === 'carton' 
+                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
+                      : 1;
+                    updateItemQuantity(index, item.quantity - step);
+                  }}
                 >
                   <Ionicons name="remove" size={16} color={colors.error} />
                 </TouchableOpacity>
                 <Text style={[styles.qtyText, { color: colors.text }]}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.successLight }]}
-                  onPress={() => updateItemQuantity(index, item.quantity + 1)}
+                  onPress={() => {
+                    const step = packingType === 'carton' 
+                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
+                      : 1;
+                    updateItemQuantity(index, item.quantity + step);
+                  }}
                 >
                   <Ionicons name="add" size={16} color={colors.success} />
                 </TouchableOpacity>
@@ -1149,6 +1296,57 @@ export default function CreateInvoiceScreen() {
         </View>
       </View>
 
+      {/* Packing Type Section */}
+      <View style={styles.modeSection}>
+        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
+          Packing Type <Text style={{ color: colors.error }}>*</Text>
+        </Text>
+        <View style={styles.modeButtonsRow}>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              styles.modeButtonWide,
+              { backgroundColor: colors.card, ...shadows.sm },
+              packingType === 'loose' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+            ]}
+            onPress={() => setPackingType('loose')}
+          >
+            <Ionicons 
+              name="cube-outline" 
+              size={16} 
+              color={packingType === 'loose' ? colors.info : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.modeButtonText,
+              { color: packingType === 'loose' ? colors.info : colors.text }
+            ]}>
+              Loose Quantity
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              styles.modeButtonWide,
+              { backgroundColor: colors.card, ...shadows.sm },
+              packingType === 'carton' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+            ]}
+            onPress={() => setPackingType('carton')}
+          >
+            <Ionicons 
+              name="apps-outline" 
+              size={16} 
+              color={packingType === 'carton' ? colors.info : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.modeButtonText,
+              { color: packingType === 'carton' ? colors.info : colors.text }
+            ]}>
+              Pack Cartons
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Add Items Button */}
       <TouchableOpacity
         style={[styles.addItemsButton, { backgroundColor: colors.primary, ...shadows.md }]}
@@ -1205,14 +1403,24 @@ export default function CreateInvoiceScreen() {
               <View style={styles.qtyControls}>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.errorLight }]}
-                  onPress={() => updateItemQuantity(index, item.quantity - 1)}
+                  onPress={() => {
+                    const step = packingType === 'carton' 
+                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
+                      : 1;
+                    updateItemQuantity(index, item.quantity - step);
+                  }}
                 >
                   <Ionicons name="remove" size={16} color={colors.error} />
                 </TouchableOpacity>
                 <Text style={[styles.qtyText, { color: colors.text }]}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.successLight }]}
-                  onPress={() => updateItemQuantity(index, item.quantity + 1)}
+                  onPress={() => {
+                    const step = packingType === 'carton' 
+                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
+                      : 1;
+                    updateItemQuantity(index, item.quantity + step);
+                  }}
                 >
                   <Ionicons name="add" size={16} color={colors.success} />
                 </TouchableOpacity>

@@ -23,6 +23,9 @@ export function InvoiceViewDisplay({ invoice, settings }: InvoiceViewDisplayProp
     converted: "bg-purple-100 text-purple-800",
   }
 
+  const showCustomField1 = !!settings.customField1Enabled
+  const showCustomField2 = !!settings.customField2Enabled
+
   return (
     <div className="space-y-6 print:hidden">
       {/* Header Card */}
@@ -101,6 +104,12 @@ export function InvoiceViewDisplay({ invoice, settings }: InvoiceViewDisplayProp
                 <tr className="border-b-2 border-primary/20">
                   <th className="text-left py-3 px-3 font-semibold">#</th>
                   <th className="text-left py-3 px-3 font-semibold">Description</th>
+                  {showCustomField1 && (
+                    <th className="text-left py-3 px-3 font-semibold">{settings.customField1Label || "Custom Field 1"}</th>
+                  )}
+                  {showCustomField2 && (
+                    <th className="text-right py-3 px-3 font-semibold">{settings.customField2Label || "Custom Field 2"}</th>
+                  )}
                   <th className="text-center py-3 px-3 font-semibold">Qty</th>
                   <th className="text-center py-3 px-3 font-semibold">Unit</th>
                   <th className="text-right py-3 px-3 font-semibold">Rate</th>
@@ -113,6 +122,14 @@ export function InvoiceViewDisplay({ invoice, settings }: InvoiceViewDisplayProp
                   <tr key={index} className="border-b border-border/50 hover:bg-muted/50">
                     <td className="py-3 px-3 text-muted-foreground">{index + 1}</td>
                     <td className="py-3 px-3 font-medium">{item.itemName}</td>
+                    {showCustomField1 && (
+                      <td className="py-3 px-3 text-muted-foreground">{item.customField1Value || ""}</td>
+                    )}
+                    {showCustomField2 && (
+                      <td className="py-3 px-3 text-right text-muted-foreground">
+                        {item.customField2Value == null ? "" : item.customField2Value}
+                      </td>
+                    )}
                     <td className="py-3 px-3 text-center">{item.quantity}</td>
                     <td className="py-3 px-3 text-center text-muted-foreground text-xs">{item.unit}</td>
                     <td className="py-3 px-3 text-right">
@@ -265,7 +282,7 @@ export function InvoiceViewDisplay({ invoice, settings }: InvoiceViewDisplayProp
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block">QR Code</Label>
                 <img
-                  src={invoice.qrCode || "/placeholder.svg"}
+                  src={invoice.qrCode}
                   alt="E-Invoice QR Code"
                   className="w-48 h-48 border rounded"
                 />

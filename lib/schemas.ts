@@ -48,7 +48,7 @@ export const itemSchema = z
     minStock: z.coerce.number().min(0, "Minimum stock cannot be negative").default(0),
     maxStock: z.coerce.number().min(0, "Maximum stock cannot be negative").default(0),
     itemLocation: z.string().optional().or(z.literal("")), // Added item location
-    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1"), // Added per carton quantity
+    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1").optional(), // Added per carton quantity - optional for bulk uploads
     gstRate: z.coerce.number().min(0).max(100, "GST rate must be between 0-100"),
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),

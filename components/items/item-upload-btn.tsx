@@ -31,6 +31,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   const [isProcessing, setIsProcessing] = useState(false)
   const [parsedData, setParsedData] = useState<ParsedItemRow[]>([])
   const [parseProgress, setParseProgress] = useState(0)
+  const [showOnlyInvalid, setShowOnlyInvalid] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const validUnits: Array<"PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
@@ -125,6 +126,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         itemSchema.parse({
           itemCode: newData[index].data.itemCode?.toString() || "",
           name: newData[index].data.name,
+          description: (newData[index].data.description?.toString() || "").trim() || undefined, // Skip empty description
           category: newData[index].data.category?.toString() || "",
           hsnCode: newData[index].data.hsnCode?.toString() || "",
           barcodeNo: newData[index].data.barcodeNo?.toString() || "",
@@ -255,7 +257,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
           const validated = itemSchema.parse({
             itemCode: row.itemCode?.toString() || "",
             name: row.name,
-            description: row.description?.toString() || "",
+            description: (row.description?.toString() || "").trim() || undefined, // Skip empty description
             category: row.category?.toString() || "",
             hsnCode: row.hsnCode?.toString() || "",
             barcodeNo: row.barcodeNo?.toString() || "",
@@ -303,7 +305,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                 id: row.id?.toString() || "",
                 itemCode: row.itemCode?.toString() || "",
                 name: String(row.name || ""),
-                description: row.description?.toString() || "",
+                description: (row.description?.toString() || "").trim() || "", // Skip empty description
                 category: row.category?.toString() || "",
                 hsnCode: String(row.hsnCode || ""),
                 barcodeNo: String(row.barcodeNo || ""),
@@ -342,7 +344,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                 id: row.id?.toString() || "",
                 itemCode: row.itemCode?.toString() || "",
                 name: String(row.name || ""),
-                description: row.description?.toString() || "",
+                description: (row.description?.toString() || "").trim() || "", // Skip empty description
                 category: row.category?.toString() || "",
                 hsnCode: String(row.hsnCode || ""),
                 barcodeNo: String(row.barcodeNo || ""),
@@ -489,6 +491,17 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     setParsedData([])
   }
 
+  // Prevent closing dialog by clicking outside - only allow programmatic close via Cancel button
+  const handleDialogOpenChange = (newOpen: boolean) => {
+    if (!newOpen && step === "confirm") {
+      // Don't close if user clicks outside during confirm step
+      return
+    }
+    if (!newOpen) {
+      setOpen(false)
+    }
+  }
+
   const validCount = parsedData.filter((row) => row.isValid).length
   const invalidCount = parsedData.length - validCount
 
@@ -499,8 +512,8 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         Bulk Upload
       </Button>
 
-      <Dialog open={open} onOpenChange={handleCancel}>
-        <DialogContent className="w-[95vw] max-w-[1400px] h-auto max-h-[90vh] overflow-y-auto p-6">
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-full h-auto max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>{step === "upload" ? "Bulk Upload Items" : "Review & Confirm Upload"}</DialogTitle>
           </DialogHeader>
@@ -564,6 +577,19 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
             </div>
           ) : (
             <div className="space-y-4 mt-4">
+              {/* Update Fields Info Banner */}
+              <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
+                  <strong>⚙️ Update Fields:</strong> For matched items (by name & category), the following fields will be updated:
+                  <div className="mt-2 ml-4">
+                    <div>✅ <strong>Unit</strong> (PCS, KG, LTR, etc.)</div>
+                    <div>✅ <strong>Description</strong></div>
+                  </div>
+                  <div className="mt-2 text-sm italic">Note: This is a temporary modification. Other fields will be updatable in future versions.</div>
+                </AlertDescription>
+              </Alert>
+
               {/* Summary Stats */}
               <div className="flex gap-3 items-center">
                 <Badge
@@ -586,6 +612,26 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                   Showing {parsedData.length} of {parsedData.length} records
                 </div>
               </div>
+
+              {/* Filter Invalid Items Toggle */}
+              {invalidCount > 0 && (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant={showOnlyInvalid ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowOnlyInvalid(!showOnlyInvalid)}
+                    className="gap-2"
+                  >
+                    <AlertCircle className="w-4 h-4" />
+                    {showOnlyInvalid ? `Show Only Invalid (${invalidCount})` : `Show All (${parsedData.length})`}
+                  </Button>
+                  {showOnlyInvalid && (
+                    <span className="text-sm text-orange-600 dark:text-orange-400">
+                      Filtered to show {invalidCount} invalid record{invalidCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Help Text for Invalid Records */}
               {invalidCount > 0 && (
@@ -622,7 +668,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {parsedData.map((row, index) => (
+                      {(showOnlyInvalid ? parsedData.filter(row => !row.isValid) : parsedData).map((row, index) => (
                         <TableRow key={index} className={!row.isValid ? "bg-orange-500/5" : ""}>
                           <TableCell className="w-12">
                             {row.isValid ? (

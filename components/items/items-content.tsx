@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Package, Barcode, AlertTriangle } from "lucide-react"
+import { Edit, Package, Barcode, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react"
 import { DeleteItemButton } from "@/components/items/delete-item-button"
 import Link from "next/link"
 import { ItemsFilters } from "@/components/items/items-filters"
@@ -30,6 +30,8 @@ type ItemsContentProps = {
 
 export function ItemsContent({ items, godowns, initialFilters }: ItemsContentProps) {
   const [filters, setFilters] = useState(initialFilters)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
 
   const unitOptions = useMemo(
     () => Array.from(new Set(items.map((i) => (i.unit || "").toUpperCase()).filter(Boolean))).sort(),
@@ -80,6 +82,17 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
         return m * (a.updatedAt.getTime() - b.updatedAt.getTime())
       })
   }, [items, filters])
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1)
+  }, [filters])
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedItems = filteredItems.slice(startIndex, endIndex)
 
   const handleFiltersChange = (newFilters: Partial<typeof filters>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }))
@@ -134,102 +147,159 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
               <ItemForm godowns={godowns} />
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[120px]">Item Name</TableHead>
-                  <TableHead className="min-w-[80px]">HSN Code</TableHead>
-                  <TableHead className="min-w-[60px]">Unit</TableHead>
-                  <TableHead className="min-w-[90px] text-right">Purchase Price</TableHead>
-                  <TableHead className="min-w-[80px] text-right">Sale Price</TableHead>
-                  <TableHead className="min-w-[60px] text-right">Stock</TableHead>
-                  <TableHead className="min-w-[70px] text-right">GST Rate</TableHead>
-                  <TableHead className="min-w-[80px]">Status</TableHead>
-                  <TableHead className="min-w-[80px] text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.map((item) => {
-                  const stockStatus =
-                    item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
+            <div className="space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[120px]">Item Name</TableHead>
+                    <TableHead className="min-w-[80px]">HSN Code</TableHead>
+                    <TableHead className="min-w-[60px]">Unit</TableHead>
+                    <TableHead className="min-w-[90px] text-right">Purchase Price</TableHead>
+                    <TableHead className="min-w-[80px] text-right">Sale Price</TableHead>
+                    <TableHead className="min-w-[60px] text-right">Stock</TableHead>
+                    <TableHead className="min-w-[70px] text-right">GST Rate</TableHead>
+                    <TableHead className="min-w-[80px]">Status</TableHead>
+                    <TableHead className="min-w-[80px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.map((item) => {
+                    const stockStatus =
+                      item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
 
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium truncate" title={item.name}>
-                        {item.name}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs" title={item.hsnCode || ""}>
-                        {item.hsnCode || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {item.unit}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-xs sm:text-sm" title={`₹${item.purchasePrice.toFixed(2)}`}>
-                        ₹{item.purchasePrice.toFixed(2)}
-                      </TableCell>
-                      <TableCell
-                        className="font-semibold text-right text-xs sm:text-sm"
-                        title={`₹${item.salePrice.toFixed(2)}`}
-                      >
-                        ₹{item.salePrice.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <span className="font-medium text-xs sm:text-sm" title={`Stock: ${item.stock}`}>
-                            {item.stock}
-                          </span>
-                          {stockStatus === "low" && (
-                            <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 flex-shrink-0" />
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium truncate" title={item.name}>
+                          {item.name}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs" title={item.hsnCode || ""}>
+                          {item.hsnCode || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {item.unit}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-xs sm:text-sm" title={`₹${item.purchasePrice.toFixed(2)}`}>
+                          ₹{item.purchasePrice.toFixed(2)}
+                        </TableCell>
+                        <TableCell
+                          className="font-semibold text-right text-xs sm:text-sm"
+                          title={`₹${item.salePrice.toFixed(2)}`}
+                        >
+                          ₹{item.salePrice.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="font-medium text-xs sm:text-sm" title={`Stock: ${item.stock}`}>
+                              {item.stock}
+                            </span>
+                            {stockStatus === "low" && (
+                              <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 flex-shrink-0" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs sm:text-sm" title={`${item.gstRate}%`}>
+                          {item.gstRate}%
+                        </TableCell>
+                        <TableCell>
+                          {stockStatus === "low" ? (
+                            <Badge variant="destructive" className="bg-orange-500 text-background text-xs">
+                              Low Stock
+                            </Badge>
+                          ) : stockStatus === "high" ? (
+                            <Badge variant="secondary" className="text-xs">
+                              Overstock
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs"
+                            >
+                              In Stock
+                            </Badge>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-xs sm:text-sm" title={`${item.gstRate}%`}>
-                        {item.gstRate}%
-                      </TableCell>
-                      <TableCell>
-                        {stockStatus === "low" ? (
-                          <Badge variant="destructive" className="bg-orange-500 text-background text-xs">
-                            Low Stock
-                          </Badge>
-                        ) : stockStatus === "high" ? (
-                          <Badge variant="secondary" className="text-xs">
-                            Overstock
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs"
-                          >
-                            In Stock
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link href={`/items/barcode/${item.id}`}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Print Barcode">
-                              <Barcode className="w-3 h-3 sm:w-4 sm:h-4" />
-                            </Button>
-                          </Link>
-                          <ItemForm
-                            item={item}
-                            godowns={godowns}
-                            trigger={
-                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Item">
-                                <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Link href={`/items/barcode/${item.id}`}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Print Barcode">
+                                <Barcode className="w-3 h-3 sm:w-4 sm:h-4" />
                               </Button>
-                            }
-                          />
-                          <DeleteItemButton itemId={item.id} />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                            </Link>
+                            <ItemForm
+                              item={item}
+                              godowns={godowns}
+                              trigger={
+                                <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Item">
+                                  <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
+                                </Button>
+                              }
+                            />
+                            <DeleteItemButton itemId={item.id} />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing <span className="font-semibold">{startIndex + 1}</span> to{" "}
+                    <span className="font-semibold">{Math.min(endIndex, filteredItems.length)}</span> of{" "}
+                    <span className="font-semibold">{filteredItems.length}</span> items
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="gap-2"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1 flex-wrap justify-center">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter((page) => {
+                          // Show first 3 pages, last 3 pages, and pages around current page
+                          if (page <= 3 || page > totalPages - 3) return true
+                          if (Math.abs(page - currentPage) <= 1) return true
+                          return false
+                        })
+                        .map((page, idx, arr) => (
+                          <div key={page} className="flex items-center gap-1">
+                            {idx > 0 && arr[idx - 1] !== page - 1 && <span className="text-muted-foreground">...</span>}
+                            <Button
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page)}
+                              className="min-w-10"
+                            >
+                              {page}
+                            </Button>
+                          </div>
+                        ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

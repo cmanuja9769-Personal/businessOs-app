@@ -3,10 +3,14 @@
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
+import { useNumberInputScrollPrevention } from '@/hooks/use-number-input-scroll-prevention'
 
 function Input({ className, type, step, onFocus, onClick, onChange, ...props }: React.ComponentProps<'input'>) {
+  const inputRef = useNumberInputScrollPrevention()
+  
   return (
     <input
+      ref={inputRef}
       type={type}
       data-slot="input"
       className={cn(

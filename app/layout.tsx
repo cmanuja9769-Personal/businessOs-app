@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/components/auth/auth-provider"
+import { NumberInputScrollProvider } from "@/components/providers/number-input-scroll-provider"
 import { getCurrentUser } from "@/lib/auth"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -60,25 +61,27 @@ export default async function RootLayout({
       <body className={`font-sans antialiased h-screen overflow-hidden`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            {user ? (
-              // Authenticated layout
-              <div className="flex h-screen overflow-hidden">
-                <div className="print:hidden">
-                  <Sidebar />
-                </div>
-                <div className="flex-1 flex flex-col overflow-hidden md:ml-64 lg:ml-64 print:ml-0">
+            <NumberInputScrollProvider>
+              {user ? (
+                // Authenticated layout
+                <div className="flex h-screen overflow-hidden">
                   <div className="print:hidden">
-                    <Header />
+                    <Sidebar />
                   </div>
-                  <main className="flex-1 overflow-y-auto bg-muted/30 print:bg-white print:overflow-visible">
-                    {children}
-                  </main>
+                  <div className="flex-1 flex flex-col overflow-hidden md:ml-64 lg:ml-64 print:ml-0">
+                    <div className="print:hidden">
+                      <Header />
+                    </div>
+                    <main className="flex-1 overflow-y-auto bg-muted/30 print:bg-white print:overflow-visible">
+                      {children}
+                    </main>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              // Unauthenticated layout (for login/signup pages)
-              <main className="min-h-screen overflow-y-auto">{children}</main>
-            )}
+              ) : (
+                // Unauthenticated layout (for login/signup pages)
+                <main className="min-h-screen overflow-y-auto">{children}</main>
+              )}
+            </NumberInputScrollProvider>
             <Toaster />
           </AuthProvider>
         </ThemeProvider>

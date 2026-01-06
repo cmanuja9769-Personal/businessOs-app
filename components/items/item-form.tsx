@@ -155,7 +155,8 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           gstRate: 18,
           taxRate: 18,
           cessRate: 0,
-          inclusiveOfTax: false,
+          inclusiveOfTax: true,
+          perCartonQuantity: 1,
           godownId: null,
         },
   });
@@ -358,6 +359,8 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                     <SelectItem value="MTR">Meter (MTR)</SelectItem>
                     <SelectItem value="BOX">Box</SelectItem>
                     <SelectItem value="DOZEN">Dozen</SelectItem>
+                    <SelectItem value="PKT">Packet (PKT)</SelectItem>
+                    <SelectItem value="BAG">Bag</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.unit && (

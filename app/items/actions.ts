@@ -7,75 +7,110 @@ import { itemSchema } from "@/lib/schemas"
 
 export async function getItems(): Promise<IItem[]> {
   const supabase = await createClient()
-  // Fetch items without relying on a Supabase schema relationship.
-  // (The DB may not have an FK from items.warehouse_id -> godowns.id, which breaks joins.)
-  const itemsRes = await supabase.from("items").select("*").order("created_at", { ascending: false })
-  if (itemsRes.error) {
-    console.error("[Items] Critical: query failed:", itemsRes.error.message || itemsRes.error)
-    return []
-  }
+  // Supabase PostgREST enforces a 1000-row limit per request.
+  // Fetch all items by batching requests in 1000-row chunks.
+  try {
+    const allData: Record<string, unknown>[] = []
+    let offset = 0
+    const pageSize = 1000
 
-  const data = (itemsRes.data as any[]) || []
+    // Keep fetching until we get fewer items than the page size (indicating end of data)
+    while (true) {
+      const itemsRes = await supabase
+        .from("items")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1)
 
-  // Manual lookup for godownName (works even when no FK relationship exists)
-  const godownIds = Array.from(
-    new Set(
-      data
-        .map((item) => item?.warehouse_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0)
+      if (itemsRes.error) {
+        console.error("[Items] Critical: query failed:", itemsRes.error.message || itemsRes.error)
+        break
+      }
+
+      const data = (itemsRes.data as Record<string, unknown>[]) || []
+      
+      if (data.length === 0) {
+        break // No more data
+      }
+
+      allData.push(...data)
+      console.warn(`[Items] Fetched batch: offset=${offset}, items=${data.length}, total=${allData.length}`)
+
+      if (data.length < pageSize) {
+        break // Last batch, fewer items than page size
+      }
+
+      offset += pageSize
+    }
+
+    console.warn(`[Items] API returned ${allData.length} items total (batched fetch)`)
+
+    if (!allData || allData.length === 0) {
+      return []
+    }
+
+    // Batch lookup: get all unique godown IDs from items
+    const godownIds = Array.from(
+      new Set(
+        allData
+          .map((item) => item?.warehouse_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      )
     )
-  )
 
-  const godownNameById = new Map<string, string>()
-  if (godownIds.length > 0) {
-    const godownsRes = await supabase.from("godowns").select("id, name").in("id", godownIds)
-    if (!godownsRes.error && godownsRes.data) {
-      for (const godown of godownsRes.data as any[]) {
-        if (godown?.id && typeof godown?.name === "string") {
-          godownNameById.set(godown.id, godown.name)
+    const godownNameById = new Map<string, string>()
+    if (godownIds.length > 0) {
+      const godownsRes = await supabase.from("godowns").select("id, name").in("id", godownIds)
+      if (!godownsRes.error && godownsRes.data) {
+        for (const godown of godownsRes.data as Record<string, unknown>[]) {
+          if (godown?.id && typeof godown?.name === "string") {
+            godownNameById.set(godown.id as string, godown.name)
+          }
         }
       }
     }
-  }
 
-  if (!data) {
+    const mappedItems = (
+      allData?.map((item) => ({
+        id: String(item.id) || "",
+        itemCode: String(item.item_code) || "",
+        name: String(item.name) || "",
+        description: String(item.description) || "",
+        category: String(item.category) || "",
+        hsnCode: String(item.hsn) || "",
+        salePrice: Number(item.sale_price) || 0,
+        wholesalePrice: Number(item.wholesale_price) || 0,
+        quantityPrice: Number(item.quantity_price) || 0,
+        purchasePrice: Number(item.purchase_price) || 0,
+        discountType: (item.discount_type as "percentage" | "flat") || "percentage",
+        saleDiscount: Number(item.sale_discount) || 0,
+        barcodeNo: String(item.barcode_no || item.item_code || ""),
+        unit: "PCS",
+        conversionRate: 1,
+        alternateUnit: undefined,
+        mrp: Number(item.sale_price) || 0,
+        stock: Number(item.current_stock) || 0,
+        minStock: Number(item.min_stock) || 0,
+        maxStock: (Number(item.current_stock) || 0) + 100,
+        itemLocation: String(item.item_location) || "",
+        perCartonQuantity: Number(item.per_carton_quantity) || undefined,
+        godownId: String(item.warehouse_id) || null,
+        godownName: godownNameById.get(String(item.warehouse_id)) || null,
+        taxRate: Number(item.tax_rate) || 0,
+        inclusiveOfTax: Boolean(item.inclusive_of_tax) || false,
+        gstRate: Number(item.tax_rate) || 0,
+        cessRate: 0,
+        createdAt: new Date(String(item.created_at)),
+        updatedAt: new Date(String(item.updated_at)),
+      })) || []
+    )
+
+    console.warn(`[Items] Successfully processed ${mappedItems.length} items from database`)
+    return mappedItems
+  } catch (error) {
+    console.error("[Items] Unexpected error during fetch:", error)
     return []
   }
-
-  return (
-    data?.map((item) => ({
-      id: item.id,
-      itemCode: item.item_code || "",
-      name: item.name,
-      description: item.description || "",
-      category: item.category || "",
-      hsnCode: item.hsn || "",
-      salePrice: Number(item.sale_price) || 0,
-      wholesalePrice: Number(item.wholesale_price) || 0,
-      quantityPrice: Number(item.quantity_price) || 0,
-      purchasePrice: Number(item.purchase_price) || 0,
-      discountType: (item.discount_type as "percentage" | "flat") || "percentage",
-      saleDiscount: Number(item.sale_discount) || 0,
-      barcodeNo: item.barcode_no || item.item_code || "",
-      unit: "PCS",
-      conversionRate: 1,
-      alternateUnit: undefined,
-      mrp: Number(item.sale_price) || 0,
-      stock: item.current_stock || 0,
-      minStock: item.min_stock || 0,
-      maxStock: (item.current_stock || 0) + 100,
-      itemLocation: item.item_location || "",
-      perCartonQuantity: item.per_carton_quantity || undefined,
-      godownId: item.warehouse_id || null,
-      godownName: godownNameById.get(item.warehouse_id) || null,
-      taxRate: Number(item.tax_rate) || 0,
-      inclusiveOfTax: item.inclusive_of_tax || false,
-      gstRate: Number(item.tax_rate) || 0,
-      cessRate: 0,
-      createdAt: new Date(item.created_at),
-      updatedAt: new Date(item.updated_at),
-    })) || []
-  )
 }
 
 export async function createItem(formData: FormData) {
@@ -292,137 +327,172 @@ export async function deleteAllItems() {
 }
 
 export async function bulkImportItems(itemsData: IItem[]) {
+  if (!itemsData || itemsData.length === 0) {
+    return { success: false, error: "No items to import" }
+  }
+
+  console.error(`[BULK IMPORT] Starting import of ${itemsData.length} items`)
+
   const supabase = await createClient()
-
-  // Import barcode utilities
-  const { validateBarcode, findDuplicateBarcodes, autoGenerateBarcodes, getNextBarcode } = await import("@/lib/barcode-generator")
-
-  // Validate all manually entered barcodes (skip empty ones as they'll be auto-generated)
-  for (const item of itemsData) {
-    if (item.barcodeNo && item.barcodeNo.trim() !== '') {
-      const validation = validateBarcode(item.barcodeNo)
-      if (!validation.isValid) {
-        errors.push(`Invalid barcode for "${item.name}": ${validation.error}`)
-      }
-    }
-  }
-
-  // Check for duplicate barcodes within the upload
-  const uploadBarcodes = itemsData.map((item) => item.barcodeNo)
-  const duplicateCheck = findDuplicateBarcodes(uploadBarcodes)
-  if (duplicateCheck.hasDuplicates) {
-    errors.push(
-      `Duplicate barcodes found in upload: ${duplicateCheck.duplicatesList.join(", ")}. Each barcode must be unique.`
-    )
-  }
-
-  // Check for duplicate barcodes in database
-  const nonEmptyBarcodes = uploadBarcodes.filter((bc) => bc && bc.trim() !== '')
-  if (nonEmptyBarcodes.length > 0) {
-    const { data: existingBarcodeItems } = await supabase
-      .from("items")
-      .select("barcode_no, name")
-      .in("barcode_no", nonEmptyBarcodes)
-    
-    if (existingBarcodeItems && existingBarcodeItems.length > 0) {
-      existingBarcodeItems.forEach((item) => {
-        errors.push(`Barcode "${item.barcode_no}" already exists for item "${item.name}"`)
-      })
-    }
-  }
-
-  // Get existing barcodes for auto-generation
-  const { data: allBarcodes } = await supabase.from("items").select("barcode_no")
-  const existingBarcodes = (allBarcodes || []).map((item) => item.barcode_no).filter(Boolean) as string[]
-
-  // Auto-generate barcodes for items without them
-  // Items with manually entered barcodes will keep them
-  // Items with empty barcodes will get auto-generated sequential codes
-  itemsData = autoGenerateBarcodes(itemsData, existingBarcodes, { prefix: 'BAR', strategy: 'sequential' })
-
-  // Separate items into new and existing based on ID
-  const existingItems = itemsData.filter((item) => item.id && item.id.length > 10) // UUID length check
-  const newItems = itemsData.filter((item) => !item.id || item.id.length <= 10)
-
+  const errors: string[] = []
   let insertCount = 0
   let updateCount = 0
 
-  // Handle updates for existing items
-  if (existingItems.length > 0) {
-    for (const item of existingItems) {
-      const { error } = await supabase
-        .from("items")
-        .update({
-          item_code: item.itemCode || null,
-          name: item.name,
-          category: item.category || null,
-          hsn: item.hsnCode || null,
-          barcode_no: item.barcodeNo || null,
-          sale_price: item.salePrice,
-          wholesale_price: item.wholesalePrice || 0,
-          quantity_price: item.quantityPrice || 0,
-          purchase_price: item.purchasePrice,
-          discount_type: item.discountType || "percentage",
-          sale_discount: item.saleDiscount || 0,
-          current_stock: item.stock,
-          min_stock: item.minStock || 0,
-          item_location: item.itemLocation || null,
-          per_carton_quantity: item.perCartonQuantity || null,
-          warehouse_id: item.godownId || null,
-          tax_rate: item.taxRate || item.gstRate || 0,
-          inclusive_of_tax: item.inclusiveOfTax || false,
-        })
-        .eq("id", item.id)
-
-      if (error) {
-        errors.push(`Failed to update item ${item.name}: ${error.message}`)
-      } else {
-        updateCount++
-      }
-    }
+  // Helper to check if ID is a valid UUID (36 chars, contains hyphens in right places)
+  const isValidUUID = (id: string): boolean => {
+    if (!id || typeof id !== "string") return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
   }
 
-  // Handle inserts for new items
-  if (newItems.length > 0) {
-    const records = newItems.map((item) => ({
-      item_code: item.itemCode || null,
-      name: item.name,
-      category: item.category || null,
-      hsn: item.hsnCode || null,
-      barcode_no: item.barcodeNo || null,
-      sale_price: item.salePrice,
-      wholesale_price: item.wholesalePrice || 0,
-      quantity_price: item.quantityPrice || 0,
-      purchase_price: item.purchasePrice,
-      discount_type: item.discountType || "percentage",
-      sale_discount: item.saleDiscount || 0,
-      opening_stock: item.stock,
-      current_stock: item.stock,
-      min_stock: item.minStock || 0,
-      item_location: item.itemLocation || null,
-      per_carton_quantity: item.perCartonQuantity || null,
-      warehouse_id: item.godownId || null,
-      tax_rate: item.taxRate || item.gstRate || 0,
-      inclusive_of_tax: item.inclusiveOfTax || false,
-    }))
+  // Separate items into new and existing based on ID
+  const existingItems = itemsData.filter((item) => item.id && isValidUUID(item.id))
+  const newItems = itemsData.filter((item) => !item.id || !isValidUUID(item.id))
 
-    const { error } = await supabase.from("items").insert(records)
+  console.error(`[BULK IMPORT] Existing items: ${existingItems.length}, New items: ${newItems.length}`)
 
-    if (error) {
-      console.error("[v0] Error bulk importing items:", error)
-      return { success: false, error: error.message }
+  // Helper function to generate item code if missing
+  const generateItemCode = (name: string, index: number): string => {
+    if (!name) return `ITEM-${Date.now()}-${index}`
+    // Create code from first 3 letters of name + timestamp + index
+    const prefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')
+    return `${prefix}-${Date.now()}-${index}`.substring(0, 20)
+  }
+
+  // Helper function to safely parse per carton quantity
+  const parsePerCartonQuantity = (value: unknown): number | null => {
+    if (value === null || value === undefined) return null
+    const num = Number(value)
+    if (isNaN(num) || num <= 0) return null
+    return num
+  }
+
+  // Handle updates for existing items
+  if (existingItems.length > 0) {
+    console.error(`[BULK IMPORT] Processing ${existingItems.length} updates...`)
+    for (const item of existingItems) {
+      try {
+        const { error } = await supabase
+          .from("items")
+          .update({
+            item_code: item.itemCode && item.itemCode.trim() ? item.itemCode : null,
+            name: item.name,
+            description: item.description && item.description.trim() ? item.description : null,
+            category: item.category && item.category.trim() ? item.category : null,
+            hsn: item.hsnCode && item.hsnCode.trim() ? item.hsnCode : null,
+            barcode_no: item.barcodeNo && item.barcodeNo.trim() ? item.barcodeNo : null,
+            sale_price: Number(item.salePrice) || 0,
+            wholesale_price: Number(item.wholesalePrice) || 0,
+            quantity_price: Number(item.quantityPrice) || 0,
+            purchase_price: Number(item.purchasePrice) || 0,
+            discount_type: item.discountType || "percentage",
+            sale_discount: Number(item.saleDiscount) || 0,
+            current_stock: Number(item.stock) || 0,
+            min_stock: Number(item.minStock) || 0,
+            item_location: item.itemLocation && item.itemLocation.trim() ? item.itemLocation : null,
+            per_carton_quantity: parsePerCartonQuantity(item.perCartonQuantity),
+            warehouse_id: item.godownId || null,
+            tax_rate: Number(item.taxRate || item.gstRate) || 18,
+            inclusive_of_tax: Boolean(item.inclusiveOfTax) || false,
+          })
+          .eq("id", item.id)
+
+        if (error) {
+          const errorMsg = `Update failed for item "${item.name}": ${error.message}`
+          console.error(`[BULK IMPORT] ${errorMsg}`)
+          errors.push(errorMsg)
+        } else {
+          updateCount++
+        }
+      } catch (err) {
+        const errorMsg = `Update error for item "${item.name}": ${err instanceof Error ? err.message : "Unknown error"}`
+        console.error(`[BULK IMPORT] ${errorMsg}`)
+        errors.push(errorMsg)
+      }
     }
+    console.error(`[BULK IMPORT] Updates completed: ${updateCount} successful, ${existingItems.length - updateCount} failed`)
+  }
 
-    insertCount = newItems.length
+  // Handle inserts for new items in smaller batches
+  if (newItems.length > 0) {
+    console.error(`[BULK IMPORT] Processing ${newItems.length} inserts...`)
+    const BATCH_SIZE = 100 // Smaller batch size for inserts
+
+    for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
+      const batch = newItems.slice(i, i + BATCH_SIZE)
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1
+      const totalBatches = Math.ceil(newItems.length / BATCH_SIZE)
+
+      console.error(`[BULK IMPORT] Processing insert batch ${batchNum}/${totalBatches} (${batch.length} items)`)
+
+      try {
+        const records = batch.map((item, index) => ({
+          item_code: item.itemCode && item.itemCode.trim() ? item.itemCode : generateItemCode(item.name, i + index),
+          name: item.name,
+          description: item.description && item.description.trim() ? item.description : null,
+          category: item.category && item.category.trim() ? item.category : null,
+          hsn: item.hsnCode && item.hsnCode.trim() ? item.hsnCode : null,
+          barcode_no: item.barcodeNo && item.barcodeNo.trim() ? item.barcodeNo : null,
+          sale_price: Number(item.salePrice) || 0,
+          wholesale_price: Number(item.wholesalePrice) || 0,
+          quantity_price: Number(item.quantityPrice) || 0,
+          purchase_price: Number(item.purchasePrice) || 0,
+          discount_type: item.discountType || "percentage",
+          sale_discount: Number(item.saleDiscount) || 0,
+          opening_stock: Number(item.stock) || 0,
+          current_stock: Number(item.stock) || 0,
+          min_stock: Number(item.minStock) || 0,
+          item_location: item.itemLocation && item.itemLocation.trim() ? item.itemLocation : null,
+          per_carton_quantity: parsePerCartonQuantity(item.perCartonQuantity),
+          warehouse_id: item.godownId || null,
+          tax_rate: Number(item.taxRate || item.gstRate) || 18,
+          inclusive_of_tax: Boolean(item.inclusiveOfTax) || false,
+        }))
+
+        const { error } = await supabase.from("items").insert(records)
+
+        if (error) {
+          const errorMsg = `Batch ${batchNum} insert failed: ${error.message}`
+          console.error(`[BULK IMPORT] ${errorMsg}`)
+          errors.push(errorMsg)
+          
+          // Try individual inserts as fallback
+          console.error(`[BULK IMPORT] Attempting individual inserts for batch ${batchNum}...`)
+          for (const record of records) {
+            try {
+              const { error: individualError } = await supabase.from("items").insert([record])
+              if (individualError) {
+                errors.push(`Individual insert failed for "${record.name}": ${individualError.message}`)
+              } else {
+                insertCount++
+              }
+            } catch (individualErr) {
+              errors.push(`Individual insert error for "${record.name}": ${individualErr instanceof Error ? individualErr.message : "Unknown"}`)
+            }
+          }
+        } else {
+          insertCount += batch.length
+          console.error(`[BULK IMPORT] Batch ${batchNum} succeeded (${batch.length} items)`)
+        }
+      } catch (err) {
+        const errorMsg = `Batch ${batchNum} error: ${err instanceof Error ? err.message : "Unknown error"}`
+        console.error(`[BULK IMPORT] ${errorMsg}`)
+        errors.push(errorMsg)
+      }
+    }
+    console.error(`[BULK IMPORT] Inserts completed: ${insertCount} successful`)
   }
 
   revalidatePath("/items")
 
+  console.error(`[BULK IMPORT] Import complete. Inserted: ${insertCount}, Updated: ${updateCount}, Errors: ${errors.length}`)
+
   if (errors.length > 0) {
     return {
-      success: false,
-      error: `Completed with errors. Inserted: ${insertCount}, Updated: ${updateCount}, Errors: ${errors.length}`,
-      details: errors,
+      success: insertCount + updateCount > 0, // Partial success if some items were imported
+      inserted: insertCount,
+      updated: updateCount,
+      error: `Completed with issues. Imported: ${insertCount + updateCount}/${itemsData.length}. Errors: ${errors.length}`,
+      details: errors.slice(0, 50), // Send first 50 errors
     }
   }
 
@@ -430,7 +500,7 @@ export async function bulkImportItems(itemsData: IItem[]) {
     success: true,
     inserted: insertCount,
     updated: updateCount,
-    message: `Successfully imported ${insertCount + updateCount} items (${insertCount} new, ${updateCount} updated)`,
+    message: `✅ Successfully imported ${insertCount + updateCount} items (${insertCount} new, ${updateCount} updated)`,
   }
 }
 

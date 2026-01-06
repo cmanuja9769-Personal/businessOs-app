@@ -226,10 +226,10 @@ export function BarcodeDisplay({
                 <div className="barcode-label-content">
                   <p className={`text-center font-semibold ${headerClamp} ${fonts.name}`}>{itemName}</p>
                   {hindiName && (
-                    <p className={`text-center font-medium text-muted-foreground ${headerClamp} ${fonts.hindi}`}>{hindiName}</p>
+                    <p className={`text-center font-bold text-black ${headerClamp} ${fonts.hindi}`}>{hindiName}</p>
                   )}
                   {item.itemCode && currentLayout.labelHeight >= 35 && (
-                    <p className={`text-center text-muted-foreground font-mono ${fonts.code}`}>
+                    <p className={`text-center text-muted-foreground font-mono font-bold ${fonts.code}`}>
                       {item.itemCode}
                     </p>
                   )}
@@ -249,7 +249,7 @@ export function BarcodeDisplay({
                       </div>
                       <div className="flex items-baseline gap-2 whitespace-nowrap">
                         {showCarton && (
-                          <span className={`font-medium text-blue-600 ${fonts.cartonQty}`}>
+                          <span className={`font-bold text-black ${fonts.cartonQty}`}>
                             {item.perCartonQuantity}pcs/ctn
                           </span>
                         )}

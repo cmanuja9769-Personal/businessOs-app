@@ -197,6 +197,8 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["MTR - Meter"],
     ["BOX - Box"],
     ["DOZEN - Dozen"],
+    ["PKT - Packet"],
+    ["BAG - Bag"],
   ])
 
   // Create instructions sheet
@@ -204,7 +206,7 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["Instructions for Bulk Upload"],
     [""],
     ["1. Fill in all required fields (marked with *)"],
-    ["2. Unit must be one of: PCS, KG, LTR, MTR, BOX, DOZEN"],
+    ["2. Unit must be one of: PCS, KG, LTR, MTR, BOX, DOZEN, PKT, BAG (case-insensitive)"],
     ["3. Prices should be in numbers (e.g., 100.50)"],
     ["4. Stock quantities should be whole numbers"],
     ["5. GST Rate should be between 0-100"],
@@ -213,7 +215,7 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["- name: Item name (required)"],
     ["- hsnCode: HSN/SAC code (optional)"],
     ["- barcodeNo: Barcode number (optional) - Enter manually (EAN-13, EAN-8, UPC-A, or custom) OR leave empty for auto-generation (BAR000001, BAR000002, etc.)"],
-    ["- unit: Unit of measurement - use dropdown or type: PCS, KG, LTR, MTR, BOX, DOZEN"],
+    ["- unit: Unit of measurement - use dropdown or type: PCS, KG, LTR, MTR, BOX, DOZEN, PKT, BAG"],
     ["- conversionRate: Conversion rate (default: 1)"],
     ["- alternateUnit: Alternate unit (optional)"],
     ["- purchasePrice: Purchase price (required)"],
@@ -325,7 +327,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
   // Make header row bold
   sheet.getRow(1).font = { bold: true }
 
-  const units = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN"]
+  const units = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
   const gstRates = [0, 3, 5, 12, 18, 28]
 
   // Populate lists sheet
@@ -358,7 +360,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
       errorStyle: "error",
       errorTitle: "Invalid Unit",
       error: "Please select a unit from the dropdown.",
-      formulae: ["Lists!$A$2:$A$7"],
+      formulae: ["Lists!$A$2:$A$9"],
     }
   }
 
@@ -518,7 +520,7 @@ export async function exportItemsToExcel(items: any[], filename = "items_export.
   // Make header row bold and freeze it
   sheet.getRow(1).font = { bold: true }
 
-  const units = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN"]
+  const units = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
   const gstRates = [0, 3, 5, 12, 18, 28]
   const discountTypes = ["percentage", "flat"]
 
@@ -561,7 +563,7 @@ export async function exportItemsToExcel(items: any[], filename = "items_export.
       errorStyle: "error",
       errorTitle: "Invalid Unit",
       error: "Please select a unit from the dropdown.",
-      formulae: ["Lists!$A$2:$A$7"],
+      formulae: ["Lists!$A$2:$A$9"],
     }
   }
 

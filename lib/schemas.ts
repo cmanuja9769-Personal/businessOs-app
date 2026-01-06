@@ -27,9 +27,14 @@ export const itemSchema = z
     category: z.string().optional().or(z.literal("")), // Added category field
     hsnCode: z.string().optional().or(z.literal("")), // Made HSN optional
     barcodeNo: z.string().optional().or(z.literal("")),
-    unit: z.enum(["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN"], {
-      errorMap: () => ({ message: "Please select a valid unit" }),
-    }),
+    unit: z
+      .string()
+      .min(1, "Unit is required")
+      .transform((val) => val.toUpperCase())
+      .refine(
+        (val) => ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"].includes(val),
+        { message: "Please select a valid unit" }
+      ),
     conversionRate: z.coerce.number().min(1, "Conversion rate must be at least 1"),
     alternateUnit: z.string().optional().or(z.literal("")),
     purchasePrice: z.coerce.number().min(0, "Purchase price cannot be negative"),
@@ -43,7 +48,7 @@ export const itemSchema = z
     minStock: z.coerce.number().min(0, "Minimum stock cannot be negative").default(0),
     maxStock: z.coerce.number().min(0, "Maximum stock cannot be negative").default(0),
     itemLocation: z.string().optional().or(z.literal("")), // Added item location
-    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1").optional(), // Added per carton quantity
+    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1"), // Added per carton quantity
     gstRate: z.coerce.number().min(0).max(100, "GST rate must be between 0-100"),
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),

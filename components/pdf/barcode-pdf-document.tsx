@@ -98,19 +98,28 @@ export function BarcodePDFDocument({
   const itemName = item.name || "Unnamed Item"
   const barcodeImg = generateBarcodeDataURL(barcodeValue, layout.labelWidth)
 
-  // Calculate pagination
+  // Calculate pagination with intelligent grid sizing
   const labelsPerPage = layout.columns * layout.rows
   const placeholderCount = Math.max(0, startPosition - 1)
   const totalSlots = placeholderCount + quantity
   const totalPages = Math.ceil(totalSlots / labelsPerPage)
+  const totalSlotsNeeded = placeholderCount + quantity
 
-  // Build pages
+  // Build pages with optimized row count
   const pages: Array<Array<{ type: "placeholder" | "label"; index: number }>> = []
   let currentSlot = 0
 
   for (let pageNum = 0; pageNum < totalPages; pageNum++) {
     const pageItems: Array<{ type: "placeholder" | "label"; index: number }> = []
-    for (let i = 0; i < labelsPerPage && currentSlot < totalSlots; i++) {
+    // Calculate rows for this specific page - only create rows needed for remaining labels
+    const remainingSlots = totalSlotsNeeded - currentSlot
+    const rowsThisPage = Math.min(
+      Math.ceil(remainingSlots / layout.columns),
+      layout.rows
+    )
+    const itemsThisPage = rowsThisPage * layout.columns
+
+    for (let i = 0; i < itemsThisPage && currentSlot < totalSlotsNeeded; i++) {
       if (currentSlot < placeholderCount) {
         pageItems.push({ type: "placeholder", index: currentSlot })
       } else {
@@ -146,8 +155,12 @@ export function BarcodePDFDocument({
   const horizontalGapMm = Math.max(0, Math.min(requestedHorizontalGapMm, maxHorizontalGapMm))
   const verticalGapMm = Math.max(0, Math.min(requestedVerticalGapMm, maxVerticalGapMm))
 
+  // Calculate grid dimensions based on ACTUAL rows needed, not layout maximum
+  const rowsNeeded = Math.ceil(totalSlotsNeeded / layout.columns)
+  const actualRows = Math.min(rowsNeeded, layout.rows) // Cap at layout max
+  
   const gridWidthMm = layout.columns * labelWidthMm + (layout.columns - 1) * horizontalGapMm
-  const gridHeightMm = layout.rows * labelHeightMm + (layout.rows - 1) * verticalGapMm
+  const gridHeightMm = actualRows * labelHeightMm + (actualRows - 1) * verticalGapMm
 
   const requestedMarginLeftMm = layout.marginLeft || 0
   const requestedMarginTopMm = layout.marginTop || 0
@@ -196,10 +209,10 @@ export function BarcodePDFDocument({
   // Font sizes based on label size - scale appropriately
   const getFontSize = () => {
     const w = layout.labelWidth
-    if (w <= 40) return { name: 5, hindi: 5, code: 4, price: 6 }
-    if (w <= 55) return { name: 6, hindi: 6, code: 4.5, price: 7 }
-    if (w <= 75) return { name: 7, hindi: 7, code: 5, price: 8 }
-    return { name: 11, hindi: 12, code: 12, price: 9 }
+    if (w <= 40) return { name: 5, hindi: 6, code: 4, price: 6 }
+    if (w <= 55) return { name: 6, hindi: 7, code: 4.5, price: 7 }
+    if (w <= 75) return { name: 7, hindi: 8, code: 5, price: 8 }
+    return { name: 11, hindi: 13, code: 12, price: 9 }
   }
 
   const fontSize = getFontSize()
@@ -208,13 +221,16 @@ export function BarcodePDFDocument({
   const showFooter = showCarton || showPriceBlock
 
   // Calculate barcode image height based on label height - adaptive sizing
+  // Reduce height if footer is shown to ensure footer doesn't get cut off
   const getBarcodeImageHeight = () => {
     const h = layout.labelHeight
-    if (h <= 25) return mmToPt(10) // Mini labels - 21mm
-    if (h <= 35) return mmToPt(13) // Compact labels - 30mm
-    if (h <= 45) return mmToPt(16) // Standard labels - 37mm
-    if (h <= 70) return mmToPt(20) // Large labels - 42-67mm
-    return mmToPt(30) // Extra large labels - 135mm
+    const heightReduction = showFooter ? 0.8 : 1.0 // Reduce to 80% if footer is shown
+    
+    if (h <= 25) return mmToPt(10 * heightReduction) // Mini labels - 21mm
+    if (h <= 35) return mmToPt(13 * heightReduction) // Compact labels - 30mm
+    if (h <= 45) return mmToPt(16 * heightReduction) // Standard labels - 37mm
+    if (h <= 70) return mmToPt(20 * heightReduction) // Large labels - 42-67mm
+    return mmToPt(30 * heightReduction) // Extra large labels - 135mm
   }
 
   const barcodeImageHeight = getBarcodeImageHeight()
@@ -224,7 +240,7 @@ export function BarcodePDFDocument({
       paddingTop: marginTopPt,
       paddingLeft: marginLeftPt,
       paddingRight: marginRightPt,
-      paddingBottom: marginBottomPt,
+      paddingBottom: Math.max(marginBottomPt, mmToPt(8)), // Ensure minimum 8mm bottom margin to prevent cutoff
       fontFamily: "NotoSans",
       backgroundColor: "#ffffff",
     },
@@ -252,6 +268,7 @@ export function BarcodePDFDocument({
       display: "flex",
       flexDirection: "column",
       justifyContent: "space-between",
+      paddingBottom: mmToPt(2), // Extra padding at bottom to ensure footer isn't cut
       overflow: "hidden",
     },
     placeholder: {
@@ -266,7 +283,8 @@ export function BarcodePDFDocument({
     },
     hindiName: {
       fontSize: fontSize.hindi,
-      color: "#666666",
+      fontWeight: "bold",
+      color: "#000000",
       textAlign: "center",
       marginTop: 1,
     },
@@ -274,12 +292,14 @@ export function BarcodePDFDocument({
       fontSize: fontSize.code,
       color: "#666666",
       textAlign: "center",
+      fontWeight: "bold",
       fontFamily: "Courier",
     },
     barcodeContainer: {
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 1,
+      paddingVertical: 0, // Reduced from 1 to save space
+      flex: 1, // Let it grow but constrain with reduced image height
     },
     barcodeImage: {
       maxWidth: labelWidthPt - mmToPt(5),
@@ -296,9 +316,9 @@ export function BarcodePDFDocument({
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      borderTopWidth: 0.5,
+      borderTopWidth: 0.3,
       borderTopColor: "#e5e7eb",
-      paddingTop: 2,
+      paddingTop: 1,
     },
     footerLeft: {
       fontSize: fontSize.code,
@@ -313,8 +333,10 @@ export function BarcodePDFDocument({
     },
     carton: {
       fontSize: fontSize.code,
-      color: "#2563eb",
+      fontWeight: "bold",
+      color: "#000000",
       marginLeft: 4,
+      marginTop: -3,
     },
   })
 
@@ -377,7 +399,7 @@ export function BarcodePDFDocument({
                                   <Text style={styles.price}>₹{item.salePrice.toFixed(2)}</Text>
                                 )}
                               </View>
-                              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                              <View style={{ flexDirection: "row" }}>
                                 {showCarton && (
                                   <Text style={styles.carton}>{item.perCartonQuantity}pcs/ctn</Text>
                                 )}

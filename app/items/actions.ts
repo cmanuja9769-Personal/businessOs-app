@@ -8,54 +8,134 @@ import { itemSchema } from "@/lib/schemas"
 async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
   // Desired format: 13-digit numeric code starting with 200 (EAN-13-like internal range)
   const PREFIX = "200"
-  const FALLBACK_BASE = 2000000000000 // 13 digits
+  const FALLBACK_BASE = BigInt(2000000000000) // 13 digits
 
-  const { data: lastRow, error: lastError } = await supabase
-    .from("items")
-    .select("barcode_no")
-    .like("barcode_no", `${PREFIX}%`)
-    .not("barcode_no", "is", null)
-    .order("barcode_no", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  try {
+    const pageSize = 1000
+    let offset = 0
+    let maxBarcode = FALLBACK_BASE
 
-  if (lastError) {
-    console.error("[Barcode] Failed to fetch last barcode:", lastError.message || lastError)
-  }
+    // Paginate through matching barcode rows and compute numeric max using BigInt
+    while (true) {
+      const res = await supabase
+        .from("items")
+        .select("barcode_no")
+        .like("barcode_no", `${PREFIX}%`)
+        .not("barcode_no", "is", null)
+        .range(offset, offset + pageSize - 1)
 
-  const lastBarcode = String((lastRow as any)?.barcode_no ?? "").trim()
-  let nextNumber = Number.isFinite(Number(lastBarcode)) ? Number(lastBarcode) + 1 : FALLBACK_BASE + 1
+      if (res.error) {
+        console.error("[Barcode] Failed to fetch barcodes for max computation:", res.error.message || res.error)
+        break
+      }
 
-  // Avoid collisions in case of duplicates/deletes.
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const candidate = String(nextNumber).padStart(13, "0")
-    if (!candidate.startsWith(PREFIX)) {
-      // Ensure we stay in the 200... range.
-      nextNumber = FALLBACK_BASE + 1
-      continue
+      const rows = (res.data as Array<any>) || []
+      if (rows.length === 0) break
+
+      for (const r of rows) {
+        const val = String(r?.barcode_no ?? "").trim()
+        if (!/^\d+$/.test(val)) continue
+        try {
+          const n = BigInt(val)
+          if (n > maxBarcode) maxBarcode = n
+        } catch (e) {
+          // ignore unparsable values
+        }
+      }
+
+      if (rows.length < pageSize) break
+      offset += pageSize
     }
 
-    const { data: exists, error: existsError } = await supabase
+    // next candidate
+    let nextNumber = maxBarcode + BigInt(1)
+
+    // Keep generating and checking collisions to avoid races
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const candidate = String(nextNumber).padStart(13, "0")
+      if (!candidate.startsWith(PREFIX)) {
+        nextNumber = FALLBACK_BASE + BigInt(1)
+        continue
+      }
+
+      const { data: exists, error: existsError } = await supabase
+        .from("items")
+        .select("id")
+        .eq("barcode_no", candidate)
+        .limit(1)
+
+      if (existsError) {
+        console.error("[Barcode] Failed to check barcode collision:", existsError.message || existsError)
+        // Best effort: still return candidate
+        return candidate
+      }
+
+      if (!exists || (Array.isArray(exists) && exists.length === 0)) {
+        return candidate
+      }
+
+      nextNumber = nextNumber + BigInt(1)
+    }
+
+    // Worst-case fallback
+    return String(nextNumber).padStart(13, "0")
+  } catch (err) {
+    console.error("[Barcode] Unexpected error generating barcode:", err)
+    return String(FALLBACK_BASE + BigInt(1)).padStart(13, "0")
+  }
+}
+
+export async function assignBarcodeToItem(id: string) {
+  const supabase = await createClient()
+
+  try {
+    const { data: existing, error: existingError } = await supabase
       .from("items")
-      .select("id")
-      .eq("barcode_no", candidate)
-      .limit(1)
+      .select("barcode_no")
+      .eq("id", id)
+      .maybeSingle()
 
-    if (existsError) {
-      console.error("[Barcode] Failed to check barcode collision:", existsError.message || existsError)
-      // Best effort: still return candidate
-      return candidate
+    if (existingError) {
+      console.error("[Barcode] Failed to fetch item for assignment:", existingError.message || existingError)
+      return { success: false, error: existingError.message || "DB error" }
     }
 
-    if (!exists || (Array.isArray(exists) && exists.length === 0)) {
-      return candidate
+    const existingBarcode = String((existing as any)?.barcode_no ?? "").trim()
+    if (existingBarcode) {
+      return { success: true, barcode: existingBarcode }
     }
 
-    nextNumber++
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = await generateNextNumericBarcode(supabase)
+
+      const { data: updated, error: updateError } = await supabase
+        .from("items")
+        .update({ barcode_no: candidate })
+        .eq("id", id)
+        .select()
+        .maybeSingle()
+
+      if (!updateError) {
+        try { revalidatePath("/items") } catch {}
+        return { success: true, barcode: candidate, item: updated }
+      }
+
+      const msg = String(updateError?.message || "")
+      const isUniqueViolation = msg.toLowerCase().includes("unique") || String(updateError?.code) === "23505"
+
+      console.error(`[Barcode] Failed to assign barcode (attempt ${attempt}):`, updateError.message || updateError)
+
+      if (!isUniqueViolation) {
+        return { success: false, error: updateError.message || "Update failed" }
+      }
+      // Else retry (another process may have taken the candidate)
+    }
+
+    return { success: false, error: "Failed to assign unique barcode after multiple attempts" }
+  } catch (err) {
+    console.error("[Barcode] Unexpected error assigning barcode:", err)
+    return { success: false, error: String(err) }
   }
-
-  // Worst-case fallback
-  return String(nextNumber).padStart(13, "0")
 }
 
 export async function getItems(): Promise<IItem[]> {

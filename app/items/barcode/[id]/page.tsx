@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Loader2, Info, Download, Printer } from "lucide-react";
 import Link from "next/link";
 import { BarcodeDisplay } from "@/components/items/barcode-display";
-import { getItems } from "@/app/items/actions";
+import { getItems, assignBarcodeToItem } from "@/app/items/actions";
 import type { IItem } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LABEL_LAYOUTS, getLayoutById, calculateSheetsNeeded, calculateWastedLabels } from "@/lib/label-layouts";
@@ -33,6 +33,7 @@ export default function BarcodePage({
   const [id, setId] = useState<string>("");
   const [hindiName, setHindiName] = useState<string | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
   
   const selectedLayout = getLayoutById(layoutId);
   const sheetsNeeded = calculateSheetsNeeded(quantity, selectedLayout);
@@ -46,16 +47,37 @@ export default function BarcodePage({
     if (!id) return;
 
     async function loadItem() {
-      const items = await getItems();
-      const foundItem = items.find((i) => i.id === id);
-      setItem(foundItem || null);
+      try {
+        const items = await getItems();
+        let foundItem = items.find((i) => i.id === id) || null;
 
-      // Set default quantity to stock or minimum 1
-      if (foundItem) {
-        setQuantity(Math.max(1, foundItem.stock || 1));
+        // If item exists and barcode is missing, assign one server-side
+        if (foundItem && (!foundItem.barcodeNo || String(foundItem.barcodeNo).trim() === "")) {
+          setIsAssigning(true);
+          try {
+            const res = await assignBarcodeToItem(id);
+            if (res?.success && res?.barcode) {
+              foundItem = { ...foundItem, barcodeNo: res.barcode };
+            }
+          } catch (err) {
+            console.error("[BarcodePage] assignBarcode failed:", err);
+          } finally {
+            setIsAssigning(false);
+          }
+        }
+
+        setItem(foundItem);
+
+        // Set default quantity to stock or minimum 1
+        if (foundItem) {
+          setQuantity(Math.max(1, foundItem.stock || 1));
+        }
+      } catch (err) {
+        console.error("[BarcodePage] Failed to load item:", err);
+        setItem(null);
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     }
 
     loadItem();
@@ -170,6 +192,12 @@ export default function BarcodePage({
             <p className="text-muted-foreground">
               {item.name} • Stock: {item.stock || 0}
             </p>
+            {isAssigning && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Assigning barcode...</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">

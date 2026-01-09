@@ -5,6 +5,59 @@ import { createClient } from "@/lib/supabase/server"
 import type { IItem } from "@/types"
 import { itemSchema } from "@/lib/schemas"
 
+async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
+  // Desired format: 13-digit numeric code starting with 200 (EAN-13-like internal range)
+  const PREFIX = "200"
+  const FALLBACK_BASE = 2000000000000 // 13 digits
+
+  const { data: lastRow, error: lastError } = await supabase
+    .from("items")
+    .select("barcode_no")
+    .like("barcode_no", `${PREFIX}%`)
+    .not("barcode_no", "is", null)
+    .order("barcode_no", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (lastError) {
+    console.error("[Barcode] Failed to fetch last barcode:", lastError.message || lastError)
+  }
+
+  const lastBarcode = String((lastRow as any)?.barcode_no ?? "").trim()
+  let nextNumber = Number.isFinite(Number(lastBarcode)) ? Number(lastBarcode) + 1 : FALLBACK_BASE + 1
+
+  // Avoid collisions in case of duplicates/deletes.
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = String(nextNumber).padStart(13, "0")
+    if (!candidate.startsWith(PREFIX)) {
+      // Ensure we stay in the 200... range.
+      nextNumber = FALLBACK_BASE + 1
+      continue
+    }
+
+    const { data: exists, error: existsError } = await supabase
+      .from("items")
+      .select("id")
+      .eq("barcode_no", candidate)
+      .limit(1)
+
+    if (existsError) {
+      console.error("[Barcode] Failed to check barcode collision:", existsError.message || existsError)
+      // Best effort: still return candidate
+      return candidate
+    }
+
+    if (!exists || (Array.isArray(exists) && exists.length === 0)) {
+      return candidate
+    }
+
+    nextNumber++
+  }
+
+  // Worst-case fallback
+  return String(nextNumber).padStart(13, "0")
+}
+
 export async function getItems(): Promise<IItem[]> {
   const supabase = await createClient()
   // Supabase PostgREST enforces a 1000-row limit per request.
@@ -84,8 +137,10 @@ export async function getItems(): Promise<IItem[]> {
         purchasePrice: Number(item.purchase_price) || 0,
         discountType: (item.discount_type as "percentage" | "flat") || "percentage",
         saleDiscount: Number(item.sale_discount) || 0,
-        barcodeNo: String(item.barcode_no || item.item_code || ""),
-        unit: "PCS",
+        // IMPORTANT: do not fall back to item_code.
+        // If barcode_no is null, show empty so we don't accidentally save item_code as barcode.
+        barcodeNo: String(item.barcode_no || ""),
+        unit: String(item.unit) || "PCS",
         conversionRate: 1,
         alternateUnit: undefined,
         mrp: Number(item.sale_price) || 0,
@@ -149,11 +204,7 @@ export async function createItem(formData: FormData) {
   // Generate a sequential numeric barcode if not provided
   let barcodeNo = validated.barcodeNo
   if (!barcodeNo) {
-    // Get the count of items to generate next barcode number
-    const { count } = await supabase.from("items").select("*", { count: "exact", head: true })
-    const nextNumber = (count || 0) + 1
-    // Generate 13-digit barcode (EAN-13 format): prefix 200 + 10 digits
-    barcodeNo = `200${nextNumber.toString().padStart(10, "0")}`
+    barcodeNo = await generateNextNumericBarcode(supabase)
   }
 
   const { data: newItem, error } = await supabase
@@ -165,6 +216,7 @@ export async function createItem(formData: FormData) {
       category: validated.category || null,
       hsn: validated.hsnCode || null,
       barcode_no: barcodeNo,
+      unit: validated.unit || "PCS",
       sale_price: validated.salePrice,
       wholesale_price: validated.wholesalePrice || 0,
       quantity_price: validated.quantityPrice || 0,
@@ -225,29 +277,51 @@ export async function updateItem(id: string, formData: FormData) {
   const validated = itemSchema.parse(data)
 
   const supabase = await createClient()
-  const { error } = await supabase
-    .from("items")
-    .update({
-      item_code: validated.itemCode || null,
-      name: validated.name,
-      description: validated.description || null,
-      category: validated.category || null,
-      hsn: validated.hsnCode || null,
-      sale_price: validated.salePrice,
-      wholesale_price: validated.wholesalePrice || 0,
-      quantity_price: validated.quantityPrice || 0,
-      purchase_price: validated.purchasePrice,
-      discount_type: validated.discountType || "percentage",
-      sale_discount: validated.saleDiscount || 0,
-      current_stock: validated.stock,
-      min_stock: validated.minStock || 0,
-      item_location: validated.itemLocation || null,
-      per_carton_quantity: validated.perCartonQuantity || null,
-      warehouse_id: validated.godownId || null,
-      tax_rate: validated.taxRate || 0,
-      inclusive_of_tax: validated.inclusiveOfTax || false,
-    })
-    .eq("id", id)
+  const updatePayload: Record<string, unknown> = {
+    item_code: validated.itemCode || null,
+    name: validated.name,
+    description: validated.description || null,
+    category: validated.category || null,
+    hsn: validated.hsnCode || null,
+    unit: validated.unit || "PCS",
+    sale_price: validated.salePrice,
+    wholesale_price: validated.wholesalePrice || 0,
+    quantity_price: validated.quantityPrice || 0,
+    purchase_price: validated.purchasePrice,
+    discount_type: validated.discountType || "percentage",
+    sale_discount: validated.saleDiscount || 0,
+    current_stock: validated.stock,
+    min_stock: validated.minStock || 0,
+    item_location: validated.itemLocation || null,
+    per_carton_quantity: validated.perCartonQuantity || null,
+    warehouse_id: validated.godownId || null,
+    tax_rate: validated.taxRate || 0,
+    inclusive_of_tax: validated.inclusiveOfTax || false,
+  }
+
+  const barcode = String(validated.barcodeNo || "").trim()
+  if (barcode) {
+    updatePayload.barcode_no = barcode
+  } else {
+    // If the item currently has no barcode in DB, auto-assign one.
+    // (If it already has a barcode, keep it unchanged.)
+    const { data: existing, error: existingError } = await supabase
+      .from("items")
+      .select("barcode_no")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error("[Barcode] Failed to fetch existing barcode:", existingError.message || existingError)
+    }
+
+    const existingBarcode = String((existing as any)?.barcode_no ?? "").trim()
+    if (!existingBarcode) {
+      updatePayload.barcode_no = await generateNextNumericBarcode(supabase)
+    }
+  }
+
+  const { error } = await supabase.from("items").update(updatePayload).eq("id", id)
 
   if (error) {
     console.error("[v0] Error updating item:", error)
@@ -344,163 +418,334 @@ export async function bulkImportItems(itemsData: IItem[]) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
   }
 
-  // Separate items into new and existing based on ID
-  const existingItems = itemsData.filter((item) => item.id && isValidUUID(item.id))
-  const newItems = itemsData.filter((item) => !item.id || !isValidUUID(item.id))
+  // ⚠️ TEMPORARY MODIFICATION: Robust matching for bulk updates
+  // Match primarily by item name; use category and/or per-carton quantity only to disambiguate.
+  // This avoids hard AND matching (name+category) which often fails due to formatting differences.
+  console.error(`[BULK IMPORT] Using robust matching (name-first, then category/per-carton as tie-breakers) (TEMPORARY MODE)`)
 
-  console.error(`[BULK IMPORT] Existing items: ${existingItems.length}, New items: ${newItems.length}`)
+  // Debug: print normalized keys and candidates for the first few problematic rows.
+  // Keeps logs readable while still letting you spot why certain rows don't match.
+  const DEBUG_MATCHING = true
+  const DEBUG_MAX = 30
+  let debugCount = 0
+  const debugBlocks: string[] = []
 
-  // Helper function to generate item code if missing
-  const generateItemCode = (name: string, index: number): string => {
-    if (!name) return `ITEM-${Date.now()}-${index}`
-    // Create code from first 3 letters of name + timestamp + index
-    const prefix = name.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '')
-    return `${prefix}-${Date.now()}-${index}`.substring(0, 20)
+  type DbMatchItem = {
+    id: string
+    name: string | null
+    category: string | null
+    per_carton_quantity?: number | null
   }
 
-  // Helper function to safely parse per carton quantity
-  const parsePerCartonQuantity = (value: unknown): number | null => {
-    if (value === null || value === undefined) return null
+  const canonicalizeText = (value: unknown): string => {
+    return String(value ?? "")
+      .toLowerCase()
+      .trim()
+      .replace(/&+/g, "and")
+      // normalize common unit words/abbreviations
+      .replace(/\bpce\b/g, "pcs")
+      .replace(/\bpc\b/g, "pcs")
+      .replace(/\bpcs\b/g, "pcs")
+      .replace(/\bcms\b/g, "cm")
+  }
+
+  const normalizeKey = (value: unknown): string => {
+    return canonicalizeText(value).replace(/[^a-z0-9]+/g, "")
+  }
+
+  // Relaxed normalization used ONLY as a fallback when strict matching finds no candidates.
+  // Intended to handle cases where DB names contain extra suffix descriptors like "160 Shots".
+  const normalizeKeyRelaxed = (value: unknown): string => {
+    return canonicalizeText(value)
+      .replace(/\b\d+\s*(shots?|shot)\b/g, "")
+      .replace(/\bshots?\b/g, "")
+      .replace(/[^a-z0-9]+/g, "")
+  }
+
+  const normalizePerCartonKey = (value: unknown): string => {
+    if (value === null || value === undefined || value === "") return ""
     const num = Number(value)
-    if (isNaN(num) || num <= 0) return null
-    return num
+    if (!Number.isFinite(num)) return ""
+    return String(num)
   }
 
-  // Handle updates for existing items
-  if (existingItems.length > 0) {
-    console.error(`[BULK IMPORT] Processing ${existingItems.length} updates...`)
-    for (const item of existingItems) {
-      try {
-        const { error } = await supabase
-          .from("items")
-          .update({
-            item_code: item.itemCode && item.itemCode.trim() ? item.itemCode : null,
-            name: item.name,
-            description: item.description && item.description.trim() ? item.description : null,
-            category: item.category && item.category.trim() ? item.category : null,
-            hsn: item.hsnCode && item.hsnCode.trim() ? item.hsnCode : null,
-            barcode_no: item.barcodeNo && item.barcodeNo.trim() ? item.barcodeNo : null,
-            sale_price: Number(item.salePrice) || 0,
-            wholesale_price: Number(item.wholesalePrice) || 0,
-            quantity_price: Number(item.quantityPrice) || 0,
-            purchase_price: Number(item.purchasePrice) || 0,
-            discount_type: item.discountType || "percentage",
-            sale_discount: Number(item.saleDiscount) || 0,
-            current_stock: Number(item.stock) || 0,
-            min_stock: Number(item.minStock) || 0,
-            item_location: item.itemLocation && item.itemLocation.trim() ? item.itemLocation : null,
-            per_carton_quantity: parsePerCartonQuantity(item.perCartonQuantity),
-            warehouse_id: item.godownId || null,
-            tax_rate: Number(item.taxRate || item.gstRate) || 18,
-            inclusive_of_tax: Boolean(item.inclusiveOfTax) || false,
-          })
-          .eq("id", item.id)
+  // Fetch ALL existing items from database for matching.
+  // Supabase/PostgREST enforces a 1000-row limit per request, so we must batch.
+  const dbItems: DbMatchItem[] = []
+  const pageSize = 1000
+  let offset = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from("items")
+      .select("id, name, category, per_carton_quantity")
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1)
 
-        if (error) {
-          const errorMsg = `Update failed for item "${item.name}": ${error.message}`
-          console.error(`[BULK IMPORT] ${errorMsg}`)
-          errors.push(errorMsg)
-        } else {
-          updateCount++
-        }
-      } catch (err) {
-        const errorMsg = `Update error for item "${item.name}": ${err instanceof Error ? err.message : "Unknown error"}`
-        console.error(`[BULK IMPORT] ${errorMsg}`)
-        errors.push(errorMsg)
+    if (error) {
+      console.error(`[BULK IMPORT] Failed to fetch existing items (offset=${offset}): ${error.message}`)
+      return { success: false, error: `Failed to fetch existing items: ${error.message}` }
+    }
+
+    const batch = ((data as DbMatchItem[]) || []).filter((x) => x && typeof x.id === "string")
+    if (batch.length === 0) break
+
+    dbItems.push(...batch)
+    if (batch.length < pageSize) break
+    offset += pageSize
+  }
+
+  // Index by name-key for fast candidate lookup
+  const byNameKey = new Map<string, DbMatchItem[]>()
+  const byNameKeyRelaxed = new Map<string, DbMatchItem[]>()
+  for (const dbItem of dbItems) {
+    const nameKey = normalizeKey(dbItem.name)
+    if (!nameKey) continue
+    const bucket = byNameKey.get(nameKey)
+    if (bucket) bucket.push(dbItem)
+    else byNameKey.set(nameKey, [dbItem])
+
+    const relaxedKey = normalizeKeyRelaxed(dbItem.name)
+    if (relaxedKey) {
+      const relaxedBucket = byNameKeyRelaxed.get(relaxedKey)
+      if (relaxedBucket) relaxedBucket.push(dbItem)
+      else byNameKeyRelaxed.set(relaxedKey, [dbItem])
+    }
+  }
+
+  console.error(`[BULK IMPORT] Loaded ${dbItems.length} items (${byNameKey.size} strict keys, ${byNameKeyRelaxed.size} relaxed keys) for matching`)
+
+  // Process each item from upload and match by name+category
+  const itemsToUpdateById = new Map<string, {id: string, itemCode: string | null, unit: string, description: string | null}>()
+  
+  const formatCandidate = (c: DbMatchItem) => {
+    return {
+      id: c.id,
+      name: String(c.name ?? ""),
+      nameKey: normalizeKey(c.name),
+      category: String(c.category ?? ""),
+      categoryKey: normalizeKey(c.category),
+      perCarton: c.per_carton_quantity ?? null,
+    }
+  }
+
+  const debugMismatch = (payload: {
+    item: IItem
+    reason: string
+    nameKey: string
+    categoryKey: string
+    perCartonKey: string
+    candidates: DbMatchItem[]
+  }) => {
+    if (!DEBUG_MATCHING) return
+    if (debugCount >= DEBUG_MAX) return
+    debugCount++
+
+    const { item, reason, nameKey, categoryKey, perCartonKey, candidates } = payload
+    console.warn(`[BULK IMPORT][DEBUG ${debugCount}/${DEBUG_MAX}] ${reason}`)
+    console.warn(`[BULK IMPORT][DEBUG] raw: name="${String(item.name ?? "")}", category="${String(item.category ?? "")}", perCarton="${String(item.perCartonQuantity ?? "")}"`)
+    console.warn(`[BULK IMPORT][DEBUG] keys: nameKey="${nameKey}", categoryKey="${categoryKey}", perCartonKey="${perCartonKey}"`)
+    if (candidates.length > 0) {
+      console.warn(`[BULK IMPORT][DEBUG] candidates (${candidates.length}):`, candidates.slice(0, 10).map(formatCandidate))
+      if (candidates.length > 10) {
+        console.warn(`[BULK IMPORT][DEBUG] (showing first 10 candidates)`)
       }
     }
-    console.error(`[BULK IMPORT] Updates completed: ${updateCount} successful, ${existingItems.length - updateCount} failed`)
+
+    try {
+      const candidatesFormatted = candidates.slice(0, 10).map(formatCandidate)
+      const block = [
+        `[BULK IMPORT][DEBUG ${debugCount}/${DEBUG_MAX}] ${reason}`,
+        `raw: name="${String(item.name ?? "")}", category="${String(item.category ?? "")}", perCarton="${String(item.perCartonQuantity ?? "")}"`,
+        `keys: nameKey="${nameKey}", categoryKey="${categoryKey}", perCartonKey="${perCartonKey}"`,
+        candidates.length > 0
+          ? `candidates (${candidates.length}) first ${Math.min(10, candidates.length)}: ${JSON.stringify(candidatesFormatted, null, 2)}`
+          : `candidates (0)`
+      ].join("\n")
+      debugBlocks.push(block)
+    } catch {
+      // Best-effort only; never fail import for debug serialization.
+    }
   }
 
-  // Handle inserts for new items in smaller batches
-  if (newItems.length > 0) {
-    console.error(`[BULK IMPORT] Processing ${newItems.length} inserts...`)
-    const BATCH_SIZE = 100 // Smaller batch size for inserts
+  const resolveMatch = (item: IItem): { matches?: DbMatchItem[]; reason?: string; debug?: { nameKey: string; categoryKey: string; perCartonKey: string; candidates: DbMatchItem[]; keyType: "strict" | "relaxed" } } => {
+    const strictNameKey = normalizeKey(item.name)
+    const categoryKey = normalizeKey(item.category)
+    const perCartonKey = normalizePerCartonKey(item.perCartonQuantity)
 
-    for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
-      const batch = newItems.slice(i, i + BATCH_SIZE)
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1
-      const totalBatches = Math.ceil(newItems.length / BATCH_SIZE)
+    if (!strictNameKey) {
+      return { reason: "Missing name", debug: { nameKey: strictNameKey, categoryKey, perCartonKey, candidates: [], keyType: "strict" } }
+    }
 
-      console.error(`[BULK IMPORT] Processing insert batch ${batchNum}/${totalBatches} (${batch.length} items)`)
+    let keyType: "strict" | "relaxed" = "strict"
+    let nameKeyForDebug = strictNameKey
 
-      try {
-        const records = batch.map((item, index) => ({
-          item_code: item.itemCode && item.itemCode.trim() ? item.itemCode : generateItemCode(item.name, i + index),
-          name: item.name,
-          description: item.description && item.description.trim() ? item.description : null,
-          category: item.category && item.category.trim() ? item.category : null,
-          hsn: item.hsnCode && item.hsnCode.trim() ? item.hsnCode : null,
-          barcode_no: item.barcodeNo && item.barcodeNo.trim() ? item.barcodeNo : null,
-          sale_price: Number(item.salePrice) || 0,
-          wholesale_price: Number(item.wholesalePrice) || 0,
-          quantity_price: Number(item.quantityPrice) || 0,
-          purchase_price: Number(item.purchasePrice) || 0,
-          discount_type: item.discountType || "percentage",
-          sale_discount: Number(item.saleDiscount) || 0,
-          opening_stock: Number(item.stock) || 0,
-          current_stock: Number(item.stock) || 0,
-          min_stock: Number(item.minStock) || 0,
-          item_location: item.itemLocation && item.itemLocation.trim() ? item.itemLocation : null,
-          per_carton_quantity: parsePerCartonQuantity(item.perCartonQuantity),
-          warehouse_id: item.godownId || null,
-          tax_rate: Number(item.taxRate || item.gstRate) || 18,
-          inclusive_of_tax: Boolean(item.inclusiveOfTax) || false,
-        }))
-
-        const { error } = await supabase.from("items").insert(records)
-
-        if (error) {
-          const errorMsg = `Batch ${batchNum} insert failed: ${error.message}`
-          console.error(`[BULK IMPORT] ${errorMsg}`)
-          errors.push(errorMsg)
-          
-          // Try individual inserts as fallback
-          console.error(`[BULK IMPORT] Attempting individual inserts for batch ${batchNum}...`)
-          for (const record of records) {
-            try {
-              const { error: individualError } = await supabase.from("items").insert([record])
-              if (individualError) {
-                errors.push(`Individual insert failed for "${record.name}": ${individualError.message}`)
-              } else {
-                insertCount++
-              }
-            } catch (individualErr) {
-              errors.push(`Individual insert error for "${record.name}": ${individualErr instanceof Error ? individualErr.message : "Unknown"}`)
-            }
-          }
-        } else {
-          insertCount += batch.length
-          console.error(`[BULK IMPORT] Batch ${batchNum} succeeded (${batch.length} items)`)
+    let candidates = byNameKey.get(strictNameKey) || []
+    if (candidates.length === 0) {
+      const relaxedKey = normalizeKeyRelaxed(item.name)
+      if (relaxedKey) {
+        candidates = byNameKeyRelaxed.get(relaxedKey) || []
+        if (candidates.length > 0) {
+          keyType = "relaxed"
+          nameKeyForDebug = relaxedKey
         }
-      } catch (err) {
-        const errorMsg = `Batch ${batchNum} error: ${err instanceof Error ? err.message : "Unknown error"}`
-        console.error(`[BULK IMPORT] ${errorMsg}`)
-        errors.push(errorMsg)
       }
     }
-    console.error(`[BULK IMPORT] Inserts completed: ${insertCount} successful`)
+
+    if (candidates.length === 0) {
+      return { reason: "No name match", debug: { nameKey: nameKeyForDebug, categoryKey, perCartonKey, candidates: [], keyType } }
+    }
+    if (candidates.length === 1) {
+      return { matches: [candidates[0]] }
+    }
+
+    let filtered = candidates
+    if (categoryKey) {
+      const byCategory = filtered.filter((c) => normalizeKey(c.category) === categoryKey)
+      if (byCategory.length === 1) return { matches: [byCategory[0]] }
+      if (byCategory.length > 1) filtered = byCategory
+    }
+
+    if (perCartonKey) {
+      const byPerCarton = filtered.filter((c) => normalizePerCartonKey(c.per_carton_quantity) === perCartonKey)
+      if (byPerCarton.length === 1) return { matches: [byPerCarton[0]] }
+      if (byPerCarton.length > 1) filtered = byPerCarton
+    }
+
+    // If multiple candidates remain but they are true duplicates (same normalized name/category/perCarton),
+    // update all of them (safe for unit/description/item_code syncing).
+    const signature = (c: DbMatchItem) => {
+      return `${normalizeKey(c.name)}|${normalizeKey(c.category)}|${normalizePerCartonKey(c.per_carton_quantity)}`
+    }
+    const sigs = new Set(filtered.map(signature))
+    if (sigs.size === 1) {
+      return { matches: filtered }
+    }
+
+    return {
+      reason: `Ambiguous match (candidates=${filtered.length})`,
+      debug: { nameKey: nameKeyForDebug, categoryKey, perCartonKey, candidates: filtered, keyType },
+    }
   }
+
+  for (const item of itemsData) {
+    const { matches, reason, debug } = resolveMatch(item)
+
+    if (matches && matches.length > 0) {
+      // Item(s) found - prepare update for item_code, unit, and description
+      const descriptionValue = item.description && item.description.trim() ? item.description.trim() : null
+      const itemCodeValue = item.itemCode && item.itemCode.trim() ? item.itemCode.trim() : null
+
+      for (const m of matches) {
+        if (!m?.id) continue
+        itemsToUpdateById.set(m.id, {
+          id: m.id,
+          itemCode: itemCodeValue,
+          unit: String(item.unit || "PCS"),
+          description: descriptionValue,
+        })
+      }
+
+      if (matches.length === 1) {
+        console.error(`[BULK IMPORT] Matched "${item.name}" (${item.category || ""}) -> ID: ${matches[0].id}`)
+      } else {
+        console.warn(`[BULK IMPORT] Matched duplicates for "${item.name}" (${item.category || ""}) -> IDs: ${matches.map((m) => m.id).join(", ")}`)
+      }
+    } else {
+      errors.push(`No unique match for "${item.name}" (category="${item.category || ""}", perCarton="${String(item.perCartonQuantity ?? "")}")${reason ? `: ${reason}` : ""}`)
+      console.error(`[BULK IMPORT] No match for "${item.name}" (${item.category || ""})${reason ? `: ${reason}` : ""}`)
+
+      if (debug) {
+        debugMismatch({
+          item,
+          reason: reason || "No match",
+          nameKey: debug.nameKey,
+          categoryKey: debug.categoryKey,
+          perCartonKey: debug.perCartonKey,
+          candidates: debug.candidates,
+        })
+      }
+    }
+  }
+
+  const itemsToUpdate = Array.from(itemsToUpdateById.values())
+  console.error(`[BULK IMPORT] Found ${itemsToUpdate.length} unique item IDs to update`)
+
+  // Perform updates - update ALL columns from the uploaded data
+  for (const updateItem of itemsToUpdate) {
+    try {
+      // You may need to map/validate fields as per your DB schema
+      const updatePayload: Record<string, unknown> = {
+        item_code: updateItem.itemCode,
+        name: updateItem.name,
+        description: updateItem.description,
+        category: updateItem.category,
+        hsn: updateItem.hsnCode,
+        barcode_no: updateItem.barcodeNo,
+        unit: updateItem.unit,
+        conversion_rate: updateItem.conversionRate,
+        alternate_unit: updateItem.alternateUnit,
+        purchase_price: updateItem.purchasePrice,
+        sale_price: updateItem.salePrice,
+        wholesale_price: updateItem.wholesalePrice,
+        quantity_price: updateItem.quantityPrice,
+        mrp: updateItem.mrp,
+        stock: updateItem.stock,
+        min_stock: updateItem.minStock,
+        max_stock: updateItem.maxStock,
+        item_location: updateItem.itemLocation,
+        per_carton_quantity: updateItem.perCartonQuantity,
+        godown_id: updateItem.godownId,
+        gst_rate: updateItem.gstRate,
+        tax_rate: updateItem.taxRate,
+        cess_rate: updateItem.cessRate,
+        inclusive_of_tax: updateItem.inclusiveOfTax,
+        updated_at: new Date().toISOString(),
+      }
+      // Remove undefined/null fields to avoid overwriting with null
+      Object.keys(updatePayload).forEach((k) => {
+        if (updatePayload[k] === undefined) delete updatePayload[k]
+      })
+      const { error } = await supabase
+        .from("items")
+        .update(updatePayload)
+        .eq("id", updateItem.id)
+      if (error) {
+        const errorMsg = `Update failed for item ID "${updateItem.id}": ${error.message}`
+        console.error(`[BULK IMPORT] ${errorMsg}`)
+        errors.push(errorMsg)
+      } else {
+        updateCount++
+      }
+    } catch (err) {
+      const errorMsg = `Update error for item ID "${updateItem.id}": ${err instanceof Error ? err.message : "Unknown error"}`
+      console.error(`[BULK IMPORT] ${errorMsg}`)
+      errors.push(errorMsg)
+    }
+  }
+
+  console.error(`[BULK IMPORT] Updates completed: ${updateCount} successful, ${itemsToUpdate.length - updateCount} failed`)
 
   revalidatePath("/items")
 
-  console.error(`[BULK IMPORT] Import complete. Inserted: ${insertCount}, Updated: ${updateCount}, Errors: ${errors.length}`)
+  console.error(`[BULK IMPORT] Import complete. Updated: ${updateCount}, Errors: ${errors.length}`)
 
   if (errors.length > 0) {
     return {
-      success: insertCount + updateCount > 0, // Partial success if some items were imported
-      inserted: insertCount,
+      success: updateCount > 0,
+      inserted: 0,
       updated: updateCount,
-      error: `Completed with issues. Imported: ${insertCount + updateCount}/${itemsData.length}. Errors: ${errors.length}`,
-      details: errors.slice(0, 50), // Send first 50 errors
+      error: `Completed with issues. Updated: ${updateCount}/${itemsData.length}. Errors: ${errors.length}`,
+      details: errors.slice(0, 50),
+      debugBlocks: debugBlocks.slice(0, DEBUG_MAX),
     }
   }
 
   return {
     success: true,
-    inserted: insertCount,
+    inserted: 0,
     updated: updateCount,
-    message: `✅ Successfully imported ${insertCount + updateCount} items (${insertCount} new, ${updateCount} updated)`,
+    message: `✅ Successfully updated ${updateCount} items (item code, unit & description)`,
+    debugBlocks: debugBlocks.slice(0, DEBUG_MAX),
   }
 }
 

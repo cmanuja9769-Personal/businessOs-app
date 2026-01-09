@@ -121,7 +121,7 @@ export function BarcodeDisplay({
     if (item.barcodeNo && typeof item.barcodeNo === 'string' && item.barcodeNo.trim()) {
       return item.barcodeNo.trim()
     }
-    if (item.itemCode && typeof item.itemCode === 'string' && item.itemCode.trim()) {
+     if (item.itemCode && typeof item.itemCode === 'string' && item.itemCode.trim()) {
       return item.itemCode.trim()
     }
     return "0000000000000" // Fallback value
@@ -152,7 +152,7 @@ export function BarcodeDisplay({
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 space-y-3">
           <h3 className="text-lg font-semibold text-yellow-900">Barcode Not Available</h3>
           <p className="text-yellow-700">
-            This item doesn't have a barcode yet. The system will auto-generate one during bulk upload if left empty.
+            This item doesn't have a barcode yet. A barcode is generated for new items if left empty.
           </p>
         </div>
       </div>

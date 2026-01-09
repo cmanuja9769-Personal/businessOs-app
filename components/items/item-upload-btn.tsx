@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 
 type UploadStep = "upload" | "confirm"
 
@@ -32,6 +33,13 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   const [parsedData, setParsedData] = useState<ParsedItemRow[]>([])
   const [parseProgress, setParseProgress] = useState(0)
   const [showOnlyInvalid, setShowOnlyInvalid] = useState(false)
+  const [uploadSummary, setUploadSummary] = useState<{
+    finished: boolean
+    totalImported: number
+    totalErrors: number
+    errors: string[]
+    debugBlocks: string[]
+  } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const validUnits: Array<"PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
@@ -102,8 +110,9 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   // Helper function to safely parse numeric fields, handling NaN
   const safeParseNumber = (value: unknown): number | undefined => {
     if (value === null || value === undefined || value === "") return undefined
+    if (typeof value === 'string' && value.trim() === '') return undefined
     const num = Number(value)
-    return isNaN(num) ? undefined : num
+    return isNaN(num) || !isFinite(num) ? undefined : num
   }
 
   const updateRow = (index: number, field: keyof IItem, value: string | number) => {
@@ -215,6 +224,64 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     toast.success("Template downloaded successfully")
   }
 
+  // Helper function to generate item code if missing
+  const generateItemCode = (name: string, index: number): string => {
+    if (!name) return `ITEM-${Date.now()}-${index}`
+
+    // Words to skip (common articles, prepositions, etc.)
+    const skipWords = new Set([
+      "the",
+      "a",
+      "an",
+      "of",
+      "for",
+      "and",
+      "or",
+      "in",
+      "on",
+      "at",
+      "to",
+      "cm",
+      "mm",
+      "m",
+      "kg",
+      "g",
+      "l",
+      "ml",
+    ])
+
+    const words = name.trim().split(/\s+/)
+    const codeParts: string[] = []
+
+    for (const word of words) {
+      const lowerWord = word.toLowerCase()
+
+      // Skip common words
+      if (skipWords.has(lowerWord)) continue
+
+      // If it's a number, keep it as-is
+      if (/^\d+$/.test(word)) {
+        codeParts.push(word)
+        continue
+      }
+
+      // Remove special characters
+      const cleanWord = word.replace(/[^a-zA-Z0-9]/g, "")
+      if (!cleanWord) continue
+
+      // Take first 3-5 characters based on word length
+      if (cleanWord.length <= 3) {
+        codeParts.push(cleanWord)
+      } else if (cleanWord.length <= 6) {
+        codeParts.push(cleanWord.slice(0, 4))
+      } else {
+        codeParts.push(cleanWord.slice(0, 5))
+      }
+    }
+
+    return codeParts.join("").toUpperCase()
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -255,7 +322,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
           }
 
           const validated = itemSchema.parse({
-            itemCode: row.itemCode?.toString() || "",
+            itemCode: row.itemCode?.toString() || generateItemCode(String(row.name || ""), rowIndex),
             name: row.name,
             description: (row.description?.toString() || "").trim() || undefined, // Skip empty description
             category: row.category?.toString() || "",
@@ -303,7 +370,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
             parsed.push({
               data: {
                 id: row.id?.toString() || "",
-                itemCode: row.itemCode?.toString() || "",
+                itemCode: row.itemCode?.toString() || generateItemCode(String(row.name || ""), rowIndex),
                 name: String(row.name || ""),
                 description: (row.description?.toString() || "").trim() || "", // Skip empty description
                 category: row.category?.toString() || "",
@@ -342,7 +409,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
             parsed.push({
               data: {
                 id: row.id?.toString() || "",
-                itemCode: row.itemCode?.toString() || "",
+                itemCode: row.itemCode?.toString() || generateItemCode(String(row.name || ""), rowIndex),
                 name: String(row.name || ""),
                 description: (row.description?.toString() || "").trim() || "", // Skip empty description
                 category: row.category?.toString() || "",
@@ -410,6 +477,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     }
 
     setIsProcessing(true)
+    setUploadSummary(null)
     try {
       const itemsToUpload = validRows.map((row) => row.data as IItem)
       const CHUNK_SIZE = 250 // Send 250 items per request (safer payload size)
@@ -417,28 +485,33 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
       let totalImported = 0
       let totalErrors = 0
       const allErrors: string[] = []
+      const allDebugBlocks: string[] = []
 
       for (let i = 0; i < itemsToUpload.length; i += CHUNK_SIZE) {
         const chunk = itemsToUpload.slice(i, i + CHUNK_SIZE)
         const chunkNum = Math.floor(i / CHUNK_SIZE) + 1
         const totalChunks = Math.ceil(itemsToUpload.length / CHUNK_SIZE)
-        
-        toast.loading(`Uploading batch ${chunkNum}/${totalChunks} (${chunk.length} items)...`)
+
+        const batchToastId = toast.loading(`Uploading batch ${chunkNum}/${totalChunks} (${chunk.length} items)...`)
         
         try {
           const result = await bulkImportItems(chunk)
+
+          if (Array.isArray((result as any)?.debugBlocks) && (result as any).debugBlocks.length > 0) {
+            allDebugBlocks.push(...((result as any).debugBlocks as string[]))
+          }
           
           if (result.success || ((result.inserted || 0) + (result.updated || 0) > 0)) {
             const imported = (result.inserted || 0) + (result.updated || 0)
             totalImported += imported
-            toast.success(`Batch ${chunkNum}: ${imported}/${chunk.length} items imported`)
+            toast.success(`Batch ${chunkNum}: ${imported}/${chunk.length} items imported`, { id: batchToastId })
             
             if (result.details && result.details.length > 0) {
               totalErrors += result.details.length
               allErrors.push(...result.details.slice(0, 5)) // Collect first 5 errors per batch
             }
           } else {
-            toast.error(`Batch ${chunkNum} failed: ${result.error}`)
+            toast.error(`Batch ${chunkNum} failed: ${result.error}`, { id: batchToastId })
             totalErrors += chunk.length
             if (result.details && result.details.length > 0) {
               allErrors.push(result.details[0])
@@ -447,7 +520,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         } catch (chunkError) {
           const errorMsg = chunkError instanceof Error ? chunkError.message : "Unknown error"
           console.error(`[CHUNK ${chunkNum}] Error:`, chunkError)
-          toast.error(`Batch ${chunkNum} error: ${errorMsg}`)
+          toast.error(`Batch ${chunkNum} error: ${errorMsg}`, { id: batchToastId })
           totalErrors += chunk.length
           allErrors.push(`Batch ${chunkNum}: ${errorMsg}`)
         }
@@ -466,20 +539,40 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
           console.error("Import errors:", allErrors)
           toast.info(`First error: ${allErrors[0]}`)
         }
-        
-        setOpen(false)
-        setStep("upload")
-        setParsedData([])
+
+        setUploadSummary({
+          finished: true,
+          totalImported,
+          totalErrors,
+          errors: allErrors,
+          debugBlocks: allDebugBlocks,
+        })
       } else {
         toast.error(`Upload failed: 0/${itemsToUpload.length} items imported`)
         if (allErrors.length > 0) {
           console.error("Import errors:", allErrors)
         }
+
+        setUploadSummary({
+          finished: true,
+          totalImported: 0,
+          totalErrors,
+          errors: allErrors,
+          debugBlocks: allDebugBlocks,
+        })
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error"
       console.error("Upload process error:", error)
       toast.error(`Upload failed: ${errorMsg}`)
+
+      setUploadSummary({
+        finished: true,
+        totalImported: 0,
+        totalErrors: 1,
+        errors: [errorMsg],
+        debugBlocks: [],
+      })
     } finally {
       setIsProcessing(false)
     }
@@ -489,17 +582,16 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     setOpen(false)
     setStep("upload")
     setParsedData([])
+    setUploadSummary(null)
   }
 
   // Prevent closing dialog by clicking outside - only allow programmatic close via Cancel button
   const handleDialogOpenChange = (newOpen: boolean) => {
-    if (!newOpen && step === "confirm") {
-      // Don't close if user clicks outside during confirm step
+    // Never allow closing by clicking outside
+    if (!newOpen) {
       return
     }
-    if (!newOpen) {
-      setOpen(false)
-    }
+    setOpen(newOpen)
   }
 
   const validCount = parsedData.filter((row) => row.isValid).length
@@ -513,7 +605,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
       </Button>
 
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="w-full h-auto max-h-[90vh] overflow-y-auto p-6">
+        <DialogContent className="!max-w-[95vw] sm:!max-w-[95vw] w-full h-auto max-h-[90vh] overflow-y-auto p-6" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{step === "upload" ? "Bulk Upload Items" : "Review & Confirm Upload"}</DialogTitle>
           </DialogHeader>
@@ -581,14 +673,49 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
               <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                 <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <AlertDescription className="text-blue-800 dark:text-blue-200">
-                  <strong>⚙️ Update Fields:</strong> For matched items (by name & category), the following fields will be updated:
+                  <strong>⚙️ Update Fields:</strong> For matched items (by name; category/per-carton only used as tie-breakers), the following fields will be updated:
                   <div className="mt-2 ml-4">
+                    <div>✅ <strong>Item Code</strong></div>
                     <div>✅ <strong>Unit</strong> (PCS, KG, LTR, etc.)</div>
                     <div>✅ <strong>Description</strong></div>
                   </div>
                   <div className="mt-2 text-sm italic">Note: This is a temporary modification. Other fields will be updatable in future versions.</div>
                 </AlertDescription>
               </Alert>
+
+              {uploadSummary?.finished && (
+                <Alert className={uploadSummary.totalErrors > 0 ? "bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800" : "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800"}>
+                  <AlertCircle className={uploadSummary.totalErrors > 0 ? "w-4 h-4 text-orange-600 dark:text-orange-400" : "w-4 h-4 text-green-600 dark:text-green-400"} />
+                  <AlertDescription className={uploadSummary.totalErrors > 0 ? "text-orange-800 dark:text-orange-200" : "text-green-800 dark:text-green-200"}>
+                    <strong>{uploadSummary.totalErrors > 0 ? "Completed with issues" : "Completed"}:</strong> Updated {uploadSummary.totalImported} items.
+                    {uploadSummary.totalErrors > 0 ? ` Errors: ${uploadSummary.totalErrors}.` : ""}
+                    {(uploadSummary.errors.length > 0 || uploadSummary.debugBlocks.length > 0) && (
+                      <div className="mt-3 space-y-2">
+                        {uploadSummary.errors.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium">Errors (first {Math.min(20, uploadSummary.errors.length)}):</div>
+                            <Textarea
+                              readOnly
+                              value={uploadSummary.errors.slice(0, 20).join("\n")}
+                              className="mt-1 font-mono text-xs min-h-24"
+                            />
+                          </div>
+                        )}
+                        {uploadSummary.debugBlocks.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium">Matching Debug Logs (copy/paste):</div>
+                            <Textarea
+                              readOnly
+                              value={uploadSummary.debugBlocks.join("\n\n---\n\n")}
+                              className="mt-1 font-mono text-xs min-h-40"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {/* Summary Stats */}
               <div className="flex gap-3 items-center">
@@ -693,7 +820,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                               value={row.data.itemCode || ""}
                               onChange={(e) => updateRow(index, "itemCode", e.target.value)}
                               className="text-sm"
-                              placeholder="Auto-generated"
+                              placeholder="Item code"
                             />
                           </TableCell>
                           <TableCell className="min-w-[200px]">

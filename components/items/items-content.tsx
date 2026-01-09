@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Package, Barcode, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react"
+import { Edit, Package, Barcode, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import { DeleteItemButton } from "@/components/items/delete-item-button"
 import Link from "next/link"
 import { ItemsFilters } from "@/components/items/items-filters"
@@ -45,22 +45,12 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
 
   const filteredItems = useMemo(() => {
     const { q, unit, category, godown, stock, sort, dir } = filters
-
     return items
       .filter((item) => {
-        if (!q) return true
-        const haystack = [item.name, item.itemCode || "", item.hsnCode || "", item.category || "", item.barcodeNo || ""]
-          .join(" ")
-          .toLowerCase()
-        return haystack.includes(q.toLowerCase())
-      })
-      .filter((item) => {
-        if (!unit) return true
-        return (item.unit || "").toUpperCase() === unit
-      })
-      .filter((item) => {
-        if (!category) return true
-        return (item.category || "") === category
+        if (q && !item.name.toLowerCase().includes(q.toLowerCase())) return false
+        if (unit && unit !== "all" && item.unit !== unit) return false
+        if (category && category !== "all" && item.category !== category) return false
+        return true
       })
       .filter((item) => {
         if (!godown) return true
@@ -68,7 +58,8 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
       })
       .filter((item) => {
         if (!stock || stock === "all") return true
-        const stockStatus = item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
+        const stockStatus =
+          item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
         return stockStatus === stock
       })
       .sort((a, b) => {
@@ -78,7 +69,6 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
         if (sort === "stock") return m * (a.stock - b.stock)
         if (sort === "saleprice") return m * (a.salePrice - b.salePrice)
         if (sort === "purchaseprice") return m * (a.purchasePrice - b.purchasePrice)
-        // updated
         return m * (a.updatedAt.getTime() - b.updatedAt.getTime())
       })
   }, [items, filters])
@@ -107,7 +97,7 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
             Manage your product catalog and stock levels
           </p>
         </div>
-        <div className="flex flex-col xs:flex-row gap-3 w-full sm:w-auto">
+        <div className="flex flex-col xs:flex-row gap-3 w-full sm:w-auto flex-wrap">
           <ItemBulkExportBtn items={items} godownNames={godowns.map((g) => g.name)} />
           <ItemUploadBtn godowns={godowns} />
           <ItemForm godowns={godowns} />
@@ -159,14 +149,17 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                     <TableHead className="min-w-[60px] text-right">Stock</TableHead>
                     <TableHead className="min-w-[70px] text-right">GST Rate</TableHead>
                     <TableHead className="min-w-[80px]">Status</TableHead>
-                    <TableHead className="min-w-[80px] text-right">Actions</TableHead>
+                    <TableHead className="min-w-[120px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedItems.map((item) => {
                     const stockStatus =
-                      item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
-
+                      item.stock <= item.minStock
+                        ? "low"
+                        : item.stock >= item.maxStock
+                        ? "high"
+                        : "normal"
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium truncate" title={item.name}>
@@ -267,14 +260,15 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                     <div className="flex items-center gap-1 flex-wrap justify-center">
                       {Array.from({ length: totalPages }, (_, i) => i + 1)
                         .filter((page) => {
-                          // Show first 3 pages, last 3 pages, and pages around current page
                           if (page <= 3 || page > totalPages - 3) return true
                           if (Math.abs(page - currentPage) <= 1) return true
                           return false
                         })
                         .map((page, idx, arr) => (
                           <div key={page} className="flex items-center gap-1">
-                            {idx > 0 && arr[idx - 1] !== page - 1 && <span className="text-muted-foreground">...</span>}
+                            {idx > 0 && arr[idx - 1] !== page - 1 && (
+                              <span className="text-muted-foreground">...</span>
+                            )}
                             <Button
                               variant={currentPage === page ? "default" : "outline"}
                               size="sm"

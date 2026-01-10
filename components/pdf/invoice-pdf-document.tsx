@@ -488,7 +488,21 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
           </View>
 
           {/* Table Rows */}
-          {invoice.items.map((item, index) => (
+          {invoice.items.map((item, index) => {
+            // Calculate packaging display if applicable
+            let displayQty = `${item.quantity}`
+            if (item.displayAsPackaging && item.packagingUnit && item.perCartonQuantity && item.perCartonQuantity > 1) {
+              // Show as packaging units if quantity is exact multiple
+              const packagingQty = Math.floor(item.quantity / item.perCartonQuantity)
+              const remainderQty = item.quantity % item.perCartonQuantity
+              if (remainderQty === 0 && packagingQty > 0) {
+                displayQty = `${packagingQty} ${item.packagingUnit}`
+              } else if (packagingQty > 0 && remainderQty > 0) {
+                displayQty = `${packagingQty} ${item.packagingUnit} + ${remainderQty} ${item.unit}`
+              }
+            }
+            
+            return (
             <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlt} wrap={false}>
               <Text style={[styles.tableCellTextMuted, { width: `${colWidths.num}%`, textAlign: "center" }]}>
                 {index + 1}
@@ -498,7 +512,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 {item.unit && <Text style={styles.tableCellTextMuted}>{item.unit}</Text>}
               </View>
               <Text style={[styles.tableCellText, { width: `${colWidths.qty}%`, textAlign: "center" }]}>
-                {item.quantity}
+                {displayQty}
               </Text>
               {showCustomField1 && (
                 <Text style={[styles.tableCellTextMuted, { width: `${colWidths.custom1}%`, textAlign: "center" }]}>
@@ -522,7 +536,8 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
                 {currencySymbol}{item.amount.toFixed(2)}
               </Text>
             </View>
-          ))}
+            )
+          })}
         </View>
 
         {/* Totals */}

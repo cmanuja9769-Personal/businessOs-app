@@ -43,6 +43,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const validUnits: Array<"PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
+  const validPackagingUnits: Array<"CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"> = ["CTN", "GONI", "BAG", "BUNDLE", "PKT", "BOX", "CASE", "ROLL", "DRUM"]
 
   // Map user input variations to standard units
   const unitMappings: Record<string, "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = {
@@ -89,6 +90,42 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     "BAG.": "BAG",
   }
 
+  // Map user input variations to standard packaging units
+  const packagingUnitMappings: Record<string, "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"> = {
+    // CTN variants
+    "CARTON": "CTN",
+    "CARTONS": "CTN",
+    "CTN.": "CTN",
+    // GONI variants
+    "SACK": "GONI",
+    "SACKS": "GONI",
+    "GONI.": "GONI",
+    // BAG variants (for packaging)
+    "BAGS": "BAG",
+    "BAG.": "BAG",
+    // BUNDLE variants
+    "BUNDLES": "BUNDLE",
+    "BUNDLE.": "BUNDLE",
+    "BDL": "BUNDLE",
+    // PKT variants
+    "PACKET": "PKT",
+    "PACKETS": "PKT",
+    "PKT.": "PKT",
+    // BOX variants
+    "BOXES": "BOX",
+    "BOX.": "BOX",
+    "BX": "BOX",
+    // CASE variants
+    "CASES": "CASE",
+    "CASE.": "CASE",
+    // ROLL variants
+    "ROLLS": "ROLL",
+    "ROLL.": "ROLL",
+    // DRUM variants
+    "DRUMS": "DRUM",
+    "DRUM.": "DRUM",
+  }
+
   // Function to normalize unit input
   const normalizeUnit = (input: string) => {
     const normalized = String(input || "").toUpperCase().trim()
@@ -105,6 +142,24 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     
     // Return original if not found (will fail validation later)
     return normalized as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"
+  }
+
+  // Function to normalize packaging unit input
+  const normalizePackagingUnit = (input: string) => {
+    const normalized = String(input || "").toUpperCase().trim()
+    
+    // Check if it's already a valid packaging unit
+    if (validPackagingUnits.includes(normalized as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM")) {
+      return normalized as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"
+    }
+    
+    // Check if it matches a mapping
+    if (packagingUnitMappings[normalized]) {
+      return packagingUnitMappings[normalized]
+    }
+    
+    // Default to CTN if not found
+    return "CTN" as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"
   }
 
   // Helper function to safely parse numeric fields, handling NaN
@@ -125,6 +180,9 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         const unitValue = normalizeUnit(String(newData[index].data.unit || ""))
         newData[index].data.unit = unitValue
         
+        const packagingUnitValue = normalizePackagingUnit(String(newData[index].data.packagingUnit || "CTN"))
+        newData[index].data.packagingUnit = packagingUnitValue
+        
         if (!validUnits.includes(unitValue)) {
           throw new Error(`Invalid unit "${newData[index].data.unit}". Must be one of: ${validUnits.join(", ")}`)
         }
@@ -142,6 +200,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
           unit: unitValue as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG",
           conversionRate: Number(newData[index].data.conversionRate) || 1,
           alternateUnit: newData[index].data.alternateUnit?.toString() || "",
+          packagingUnit: packagingUnitValue,
           purchasePrice: Number(newData[index].data.purchasePrice) || 0,
           salePrice: Number(newData[index].data.salePrice) || 0,
           wholesalePrice: Number(newData[index].data.wholesalePrice) || 0,
@@ -193,6 +252,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
           hsnCode: "",
           barcodeNo: "",
           unit: "PCS",
+          packagingUnit: "CTN",
           conversionRate: 1,
           alternateUnit: "",
           purchasePrice: 0,
@@ -299,6 +359,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         
         try {
           const unitValue = normalizeUnit(String(row.unit || ""))
+          const packagingUnitValue = normalizePackagingUnit(String((row as Record<string, unknown>).packagingUnit || "CTN"))
 
           if (!validUnits.includes(unitValue)) {
             throw new Error(`Invalid unit "${row.unit}". Must be one of: ${validUnits.join(", ")}`)
@@ -331,6 +392,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
             unit: unitValue as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG",
             conversionRate: Number(row.conversionRate) || 1,
             alternateUnit: row.alternateUnit?.toString() || "",
+            packagingUnit: packagingUnitValue,
             purchasePrice: Number(row.purchasePrice) || 0,
             salePrice: Number(row.salePrice) || 0,
             wholesalePrice: Number(row.wholesalePrice) || 0,
@@ -377,6 +439,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                 hsnCode: String(row.hsnCode || ""),
                 barcodeNo: String(row.barcodeNo || ""),
                 unit: normalizeUnit(String(row.unit || "PCS")),
+                packagingUnit: normalizePackagingUnit(String((row as Record<string, unknown>).packagingUnit || "CTN")),
                 conversionRate: Number(row.conversionRate) || 1,
                 alternateUnit: row.alternateUnit?.toString() || "",
                 purchasePrice: Number(row.purchasePrice) || 0,
@@ -416,6 +479,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                 hsnCode: String(row.hsnCode || ""),
                 barcodeNo: String(row.barcodeNo || ""),
                 unit: normalizeUnit(String(row.unit || "PCS")),
+                packagingUnit: normalizePackagingUnit(String((row as Record<string, unknown>).packagingUnit || "CTN")),
                 conversionRate: Number(row.conversionRate) || 1,
                 alternateUnit: String(row.alternateUnit || ""),
                 purchasePrice: Number(row.purchasePrice) || 0,

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import type { IInvoice, DocumentType } from "@/types"
 import { invoiceSchema } from "@/lib/schemas"
+import { logStockMovement } from "@/lib/stock-management"
 
 export async function getInvoices(): Promise<IInvoice[]> {
   const supabase = await createClient()
@@ -159,6 +160,10 @@ export async function createInvoice(data: unknown) {
 
     const supabase = await createClient()
 
+    // Get current user for stock movements
+    const { data: { user } } = await supabase.auth.getUser()
+    const userId = user?.id || "system"
+
     // Create invoice
     const { data: newInvoice, error: invoiceError } = await supabase
       .from("invoices")
@@ -224,7 +229,59 @@ export async function createInvoice(data: unknown) {
       return { success: false, error: itemsError.message }
     }
 
+    // Deduct stock for SALE documents (invoice, cash_memo, sales_return with negative)
+    const saleDocTypes = ["invoice", "cash_memo", "tax_invoice"]
+    const returnDocTypes = ["sales_return"]
+    const docType = validated.documentType || "invoice"
+    
+    if (saleDocTypes.includes(docType) || returnDocTypes.includes(docType)) {
+      // Get organization ID from one of the items
+      let organizationId: string | null = null
+      for (const item of validated.items) {
+        if (item.itemId) {
+          const { data: itemData } = await supabase
+            .from("items")
+            .select("organization_id")
+            .eq("id", item.itemId)
+            .single()
+          if (itemData?.organization_id) {
+            organizationId = itemData.organization_id
+            break
+          }
+        }
+      }
+
+      // Log stock movements for each item with an itemId
+      for (const item of validated.items) {
+        if (item.itemId && organizationId) {
+          const isSale = saleDocTypes.includes(docType)
+          const transactionType = isSale ? "SALE" : "RETURN"
+          
+          try {
+            await logStockMovement({
+              itemId: item.itemId,
+              organizationId,
+              transactionType,
+              entryQuantity: item.quantity,
+              entryUnit: item.unit || "PCS",
+              referenceType: "invoice",
+              referenceId: newInvoice.id,
+              referenceNo: validated.invoiceNo,
+              ratePerUnit: item.rate,
+              partyId: validated.customerId || undefined,
+              partyName: validated.customerName || undefined,
+              notes: `${docType === "invoice" ? "Invoice" : docType} ${validated.invoiceNo}`,
+            }, userId)
+          } catch (stockError) {
+            console.error("[v0] Error logging stock movement for item:", item.itemId, stockError)
+            // Don't fail the invoice creation if stock logging fails
+          }
+        }
+      }
+    }
+
     revalidatePath("/invoices")
+    revalidatePath("/items") // Revalidate items as stock has changed
     return { success: true, invoice: newInvoice }
   } catch (error) {
     console.error("[v0] Error in createInvoice:", error)

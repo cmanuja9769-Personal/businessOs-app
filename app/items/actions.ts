@@ -221,6 +221,7 @@ export async function getItems(): Promise<IItem[]> {
         // If barcode_no is null, show empty so we don't accidentally save item_code as barcode.
         barcodeNo: String(item.barcode_no || ""),
         unit: String(item.unit) || "PCS",
+        packagingUnit: String(item.packaging_unit || "CTN"),
         conversionRate: 1,
         alternateUnit: undefined,
         mrp: Number(item.sale_price) || 0,
@@ -228,7 +229,7 @@ export async function getItems(): Promise<IItem[]> {
         minStock: Number(item.min_stock) || 0,
         maxStock: (Number(item.current_stock) || 0) + 100,
         itemLocation: String(item.item_location) || "",
-        perCartonQuantity: Number(item.per_carton_quantity) || undefined,
+        perCartonQuantity: Number(item.per_carton_quantity) || 1,
         godownId: String(item.warehouse_id) || null,
         godownName: godownNameById.get(String(item.warehouse_id)) || null,
         taxRate: Number(item.tax_rate) || 0,
@@ -264,8 +265,10 @@ export async function createItem(formData: FormData) {
     unit: formData.get("unit"),
     conversionRate: formData.get("conversionRate"),
     alternateUnit: formData.get("alternateUnit"),
+    packagingUnit: formData.get("packagingUnit"),
     mrp: formData.get("mrp"),
     stock: formData.get("stock"),
+    stockEntryUnit: formData.get("stockEntryUnit"),
     minStock: formData.get("minStock"),
     maxStock: formData.get("maxStock"),
     itemLocation: formData.get("itemLocation"),
@@ -297,6 +300,7 @@ export async function createItem(formData: FormData) {
       hsn: validated.hsnCode || null,
       barcode_no: barcodeNo,
       unit: validated.unit || "PCS",
+      packaging_unit: validated.packagingUnit || "CTN",
       sale_price: validated.salePrice,
       wholesale_price: validated.wholesalePrice || 0,
       quantity_price: validated.quantityPrice || 0,
@@ -307,7 +311,7 @@ export async function createItem(formData: FormData) {
       current_stock: validated.stock,
       min_stock: validated.minStock || 0,
       item_location: validated.itemLocation || null,
-      per_carton_quantity: validated.perCartonQuantity || null,
+      per_carton_quantity: validated.perCartonQuantity || 1,
       warehouse_id: validated.godownId || null,
       tax_rate: validated.taxRate || 0,
       inclusive_of_tax: validated.inclusiveOfTax || false,
@@ -341,8 +345,10 @@ export async function updateItem(id: string, formData: FormData) {
     unit: formData.get("unit"),
     conversionRate: formData.get("conversionRate"),
     alternateUnit: formData.get("alternateUnit"),
+    packagingUnit: formData.get("packagingUnit"),
     mrp: formData.get("mrp"),
     stock: formData.get("stock"),
+    stockEntryUnit: formData.get("stockEntryUnit"),
     minStock: formData.get("minStock"),
     maxStock: formData.get("maxStock"),
     itemLocation: formData.get("itemLocation"),
@@ -364,6 +370,7 @@ export async function updateItem(id: string, formData: FormData) {
     category: validated.category || null,
     hsn: validated.hsnCode || null,
     unit: validated.unit || "PCS",
+    packaging_unit: validated.packagingUnit || "CTN",
     sale_price: validated.salePrice,
     wholesale_price: validated.wholesalePrice || 0,
     quantity_price: validated.quantityPrice || 0,
@@ -373,7 +380,7 @@ export async function updateItem(id: string, formData: FormData) {
     current_stock: validated.stock,
     min_stock: validated.minStock || 0,
     item_location: validated.itemLocation || null,
-    per_carton_quantity: validated.perCartonQuantity || null,
+    per_carton_quantity: validated.perCartonQuantity || 1,
     warehouse_id: validated.godownId || null,
     tax_rate: validated.taxRate || 0,
     inclusive_of_tax: validated.inclusiveOfTax || false,
@@ -849,3 +856,297 @@ export async function updateStock(id: string, quantity: number) {
   revalidatePath("/items")
   return { success: true }
 }
+
+// ========== Item Details Functions ==========
+
+export async function getItemById(id: string) {
+  const supabase = await createClient()
+  
+  const { data: item, error } = await supabase
+    .from("items")
+    .select("*")
+    .eq("id", id)
+    .single()
+
+  if (error || !item) {
+    console.error("[Items] Error fetching item by ID:", error)
+    return null
+  }
+
+  // Get godown name if warehouse_id exists
+  let godownName = null
+  if (item.warehouse_id) {
+    const { data: godown } = await supabase
+      .from("warehouses")
+      .select("name")
+      .eq("id", item.warehouse_id)
+      .single()
+    godownName = godown?.name || null
+  }
+
+  return {
+    id: String(item.id),
+    itemCode: String(item.item_code || ""),
+    name: String(item.name),
+    description: String(item.description || ""),
+    category: String(item.category || ""),
+    hsnCode: String(item.hsn || ""),
+    salePrice: Number(item.sale_price) || 0,
+    wholesalePrice: Number(item.wholesale_price) || 0,
+    quantityPrice: Number(item.quantity_price) || 0,
+    purchasePrice: Number(item.purchase_price) || 0,
+    discountType: (item.discount_type as "percentage" | "flat") || "percentage",
+    saleDiscount: Number(item.sale_discount) || 0,
+    barcodeNo: String(item.barcode_no || ""),
+    unit: String(item.unit) || "PCS",
+    packagingUnit: String(item.packaging_unit || "CTN"),
+    conversionRate: 1,
+    mrp: Number(item.sale_price) || 0,
+    stock: Number(item.current_stock) || 0,
+    openingStock: Number(item.opening_stock) || 0,
+    minStock: Number(item.min_stock) || 0,
+    maxStock: (Number(item.current_stock) || 0) + 100,
+    itemLocation: String(item.item_location || ""),
+    perCartonQuantity: Number(item.per_carton_quantity) || 1,
+    godownId: item.warehouse_id || null,
+    godownName,
+    taxRate: Number(item.tax_rate) || 0,
+    inclusiveOfTax: Boolean(item.inclusive_of_tax),
+    gstRate: Number(item.tax_rate) || 0,
+    cessRate: 0,
+    createdAt: new Date(item.created_at),
+    updatedAt: new Date(item.updated_at),
+  }
+}
+
+export async function getItemStockDistribution(itemId: string) {
+  const supabase = await createClient()
+  
+  // Try to get from item_warehouse_stock table first
+  const { data: warehouseStocks, error } = await supabase
+    .from("item_warehouse_stock")
+    .select(`
+      id,
+      warehouse_id,
+      quantity,
+      min_quantity,
+      max_quantity,
+      location,
+      warehouses:warehouse_id (
+        id,
+        name,
+        code
+      )
+    `)
+    .eq("item_id", itemId)
+
+  if (error) {
+    console.error("[Items] Error fetching stock distribution:", error)
+    // Fallback to items table warehouse_id
+    const { data: item } = await supabase
+      .from("items")
+      .select("warehouse_id, current_stock, item_location")
+      .eq("id", itemId)
+      .single()
+
+    if (item?.warehouse_id) {
+      const { data: warehouse } = await supabase
+        .from("warehouses")
+        .select("id, name")
+        .eq("id", item.warehouse_id)
+        .single()
+
+      return [{
+        id: "legacy",
+        warehouseId: item.warehouse_id,
+        warehouseName: warehouse?.name || "Unknown",
+        quantity: item.current_stock || 0,
+        minQuantity: 0,
+        maxQuantity: 0,
+        location: item.item_location || "",
+      }]
+    }
+    return []
+  }
+
+  return (warehouseStocks || []).map((ws: any) => ({
+    id: ws.id,
+    warehouseId: ws.warehouse_id,
+    warehouseName: ws.warehouses?.name || "Unknown",
+    quantity: ws.quantity || 0,
+    minQuantity: ws.min_quantity || 0,
+    maxQuantity: ws.max_quantity || 0,
+    location: ws.location || "",
+  }))
+}
+
+export async function getItemStockLedger(itemId: string, limit = 100) {
+  const supabase = await createClient()
+  
+  const { data: ledgerEntries, error } = await supabase
+    .from("stock_ledger")
+    .select(`
+      *,
+      warehouses:warehouse_id (
+        name
+      )
+    `)
+    .eq("item_id", itemId)
+    .order("transaction_date", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error("[Items] Error fetching stock ledger:", error)
+    return []
+  }
+
+  return (ledgerEntries || []).map((entry: any) => ({
+    id: entry.id,
+    transactionType: entry.transaction_type,
+    transactionDate: new Date(entry.transaction_date),
+    quantityBefore: entry.quantity_before || 0,
+    quantityChange: entry.quantity_change || 0,
+    quantityAfter: entry.quantity_after || 0,
+    entryQuantity: entry.entry_quantity || 0,
+    entryUnit: entry.entry_unit || "PCS",
+    baseQuantity: entry.base_quantity || 0,
+    ratePerUnit: entry.rate_per_unit,
+    totalValue: entry.total_value,
+    referenceType: entry.reference_type,
+    referenceId: entry.reference_id,
+    referenceNo: entry.reference_no || "",
+    partyName: entry.party_name || "",
+    warehouseName: entry.warehouses?.name || "",
+    notes: entry.notes || "",
+  }))
+}
+
+export async function getItemInvoiceUsage(itemId: string, limit = 50) {
+  const supabase = await createClient()
+  
+  // Query invoices and filter by item in JSON array
+  const { data: invoices, error } = await supabase
+    .from("invoices")
+    .select("id, invoice_no, document_type, invoice_date, customer_name, items")
+    .order("invoice_date", { ascending: false })
+    .limit(500) // Fetch more and filter client-side
+
+  if (error) {
+    console.error("[Items] Error fetching invoice usage:", error)
+    return []
+  }
+
+  const usage: any[] = []
+  
+  for (const invoice of invoices || []) {
+    const items = invoice.items as any[]
+    if (!Array.isArray(items)) continue
+
+    for (const item of items) {
+      const itemIdFromInvoice = item?.itemId || item?.item_id
+      if (itemIdFromInvoice === itemId) {
+        usage.push({
+          invoiceId: invoice.id,
+          invoiceNo: invoice.invoice_no,
+          documentType: invoice.document_type || "invoice",
+          invoiceDate: new Date(invoice.invoice_date),
+          customerName: invoice.customer_name,
+          quantity: Number(item?.quantity) || 0,
+          unit: item?.unit || "PCS",
+          rate: Number(item?.rate) || 0,
+          amount: Number(item?.amount) || 0,
+        })
+        break // Only count once per invoice
+      }
+    }
+
+    if (usage.length >= limit) break
+  }
+
+  return usage
+}
+
+// Add stock with ledger entry
+export async function addStockWithLedger(
+  itemId: string,
+  warehouseId: string,
+  quantity: number,
+  entryUnit: string,
+  notes?: string
+) {
+  const supabase = await createClient()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  // Get item details
+  const { data: item } = await supabase
+    .from("items")
+    .select("organization_id, per_carton_quantity, packaging_unit, unit")
+    .eq("id", itemId)
+    .single()
+
+  if (!item) {
+    return { success: false, error: "Item not found" }
+  }
+
+  // Calculate base quantity
+  let baseQuantity = quantity
+  if (entryUnit === item.packaging_unit && item.per_carton_quantity) {
+    baseQuantity = Math.round(quantity * item.per_carton_quantity)
+  }
+
+  // Try to use the database function if available
+  try {
+    const { data: ledgerId, error } = await supabase.rpc("record_stock_movement", {
+      p_organization_id: item.organization_id,
+      p_item_id: itemId,
+      p_warehouse_id: warehouseId,
+      p_transaction_type: "IN",
+      p_entry_quantity: quantity,
+      p_entry_unit: entryUnit,
+      p_notes: notes || null,
+      p_created_by: user.id,
+    })
+
+    if (error) throw error
+
+    revalidatePath("/items")
+    revalidatePath(`/items/${itemId}`)
+    return { success: true, ledgerId }
+  } catch (err) {
+    // Fallback: Direct update if function doesn't exist
+    console.warn("[Stock] RPC not available, using direct update:", err)
+    
+    const { error: updateError } = await supabase
+      .from("items")
+      .update({ current_stock: supabase.rpc("", {}) })
+      .eq("id", itemId)
+
+    // Simple fallback update
+    const { data: currentItem } = await supabase
+      .from("items")
+      .select("current_stock")
+      .eq("id", itemId)
+      .single()
+
+    const newStock = (currentItem?.current_stock || 0) + baseQuantity
+
+    const { error: fallbackError } = await supabase
+      .from("items")
+      .update({ current_stock: newStock })
+      .eq("id", itemId)
+
+    if (fallbackError) {
+      return { success: false, error: fallbackError.message }
+    }
+
+    revalidatePath("/items")
+    revalidatePath(`/items/${itemId}`)
+    return { success: true }
+  }
+}
+

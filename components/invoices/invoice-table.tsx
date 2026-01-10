@@ -219,6 +219,10 @@ export function InvoiceTable({
           cessRate: item.cessRate || 0,
           discount: 0,
           amount,
+          // Store packaging info for PDF display
+          packagingUnit: item.packagingUnit,
+          perCartonQuantity: item.perCartonQuantity,
+          displayAsPackaging: packingType === "carton",
         },
       ]);
       
@@ -300,6 +304,11 @@ export function InvoiceTable({
         item.rate = getPriceByMode(selectedItem); // Use pricing mode to determine rate
         item.gstRate = selectedItem.gstRate;
         item.cessRate = selectedItem.cessRate;
+        
+        // Store packaging info for PDF display
+        item.packagingUnit = selectedItem.packagingUnit;
+        item.perCartonQuantity = selectedItem.perCartonQuantity;
+        item.displayAsPackaging = packingType === "carton";
         
         // Set initial quantity based on packing type
         const initialQuantity = packingType === "carton" 

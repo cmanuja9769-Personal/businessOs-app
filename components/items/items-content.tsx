@@ -5,11 +5,12 @@ import type { IItem } from "@/types"
 import { ItemForm } from "@/components/items/item-form"
 import { ItemUploadBtn } from "@/components/items/item-upload-btn"
 import { ItemBulkExportBtn } from "@/components/items/item-bulk-export-btn"
+import { AddStockDialog } from "@/components/items/add-stock-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Package, Barcode, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
+import { Edit, Package, Barcode, ChevronLeft, ChevronRight, AlertTriangle, Plus } from "lucide-react"
 import { DeleteItemButton } from "@/components/items/delete-item-button"
 import Link from "next/link"
 import { ItemsFilters } from "@/components/items/items-filters"
@@ -163,7 +164,17 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium truncate" title={item.name}>
-                          {item.name}
+                          <Link 
+                            href={`/items/${item.id}`}
+                            className="hover:text-primary hover:underline transition-colors"
+                          >
+                            {item.name}
+                          </Link>
+                          {item.packagingUnit && item.perCartonQuantity && item.perCartonQuantity > 1 && (
+                            <span className="text-xs text-muted-foreground block">
+                              1 {item.packagingUnit} = {item.perCartonQuantity} {item.unit}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs" title={item.hsnCode || ""}>
                           {item.hsnCode || "-"}
@@ -183,12 +194,19 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                           ₹{item.salePrice.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="font-medium text-xs sm:text-sm" title={`Stock: ${item.stock}`}>
-                              {item.stock}
-                            </span>
-                            {stockStatus === "low" && (
-                              <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 flex-shrink-0" />
+                          <div className="flex flex-col items-end">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="font-medium text-xs sm:text-sm" title={`Stock: ${item.stock} ${item.packagingUnit || "CTN"}`}>
+                                {item.stock} {item.packagingUnit || "CTN"}
+                              </span>
+                              {stockStatus === "low" && (
+                                <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            {item.perCartonQuantity && item.perCartonQuantity > 1 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                = {(item.stock * item.perCartonQuantity).toLocaleString()} {item.unit}
+                              </span>
                             )}
                           </div>
                         </TableCell>
@@ -215,6 +233,15 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <AddStockDialog
+                              item={item}
+                              godowns={godowns}
+                              trigger={
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50" title="Add Stock">
+                                  <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+                                </Button>
+                              }
+                            />
                             <Link href={`/items/barcode/${item.id}`}>
                               <Button variant="ghost" size="icon" className="h-8 w-8" title="Print Barcode">
                                 <Barcode className="w-3 h-3 sm:w-4 sm:h-4" />

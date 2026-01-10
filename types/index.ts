@@ -13,6 +13,36 @@ export interface ICustomer {
   updatedAt: Date
 }
 
+// Valid packaging units for master cartons/bundles
+export type PackagingUnit = 'CTN' | 'GONI' | 'BAG' | 'BUNDLE' | 'PKT' | 'BOX' | 'CASE' | 'ROLL' | 'DRUM'
+export const PACKAGING_UNITS: { value: PackagingUnit; label: string }[] = [
+  { value: 'CTN', label: 'Carton (CTN)' },
+  { value: 'GONI', label: 'Goni/Sack (GONI)' },
+  { value: 'BAG', label: 'Bag (BAG)' },
+  { value: 'BUNDLE', label: 'Bundle (BUNDLE)' },
+  { value: 'PKT', label: 'Packet (PKT)' },
+  { value: 'BOX', label: 'Box (BOX)' },
+  { value: 'CASE', label: 'Case (CASE)' },
+  { value: 'ROLL', label: 'Roll (ROLL)' },
+  { value: 'DRUM', label: 'Drum (DRUM)' },
+]
+
+// Base units of measurement
+export type BaseUnit = 'PCS' | 'KG' | 'LTR' | 'MTR' | 'BOX' | 'DOZEN' | 'PKT' | 'BAG'
+export const BASE_UNITS: { value: BaseUnit; label: string }[] = [
+  { value: 'PCS', label: 'Pieces (PCS)' },
+  { value: 'KG', label: 'Kilogram (KG)' },
+  { value: 'LTR', label: 'Liter (LTR)' },
+  { value: 'MTR', label: 'Meter (MTR)' },
+  { value: 'BOX', label: 'Box' },
+  { value: 'DOZEN', label: 'Dozen' },
+  { value: 'PKT', label: 'Packet (PKT)' },
+  { value: 'BAG', label: 'Bag' },
+]
+
+// Stock ledger transaction types
+export type StockTransactionType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'SALE' | 'PURCHASE' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'OPENING' | 'CORRECTION'
+
 export interface IItem {
   id: string
   itemCode?: string // Added optional item code/SKU
@@ -21,9 +51,11 @@ export interface IItem {
   category?: string // Added category field
   hsnCode?: string // Made HSN optional
   barcodeNo?: string
-  unit: string
+  unit: string // Base unit (PCS, KG, etc.)
   conversionRate: number
   alternateUnit?: string
+  packagingUnit?: PackagingUnit // Master packaging unit (CTN, GONI, BAG, etc.)
+  perCartonQuantity?: number // Conversion factor: 1 packaging_unit = X base units
   purchasePrice: number
   salePrice: number
   wholesalePrice?: number // Added wholesale price
@@ -31,19 +63,73 @@ export interface IItem {
   mrp?: number
   discountType?: "percentage" | "flat" // Added discount type
   saleDiscount?: number // Added sale discount
-  stock: number
+  stock: number // Total stock (sum of all warehouses)
   minStock: number
   maxStock: number
   itemLocation?: string // Added item location/rack number
-  perCartonQuantity?: number // Number of pieces in one carton
   gstRate: number
   taxRate?: number // Added tax rate field
   cessRate: number
   inclusiveOfTax?: boolean // Added inclusive of tax flag
   createdAt: Date
   updatedAt: Date
-  godownId?: string | null
+  godownId?: string | null // Primary warehouse (for backward compatibility)
   godownName?: string | null
+  // Multi-warehouse support
+  warehouseStocks?: IItemWarehouseStock[]
+}
+
+// Multi-warehouse stock tracking
+export interface IItemWarehouseStock {
+  id: string
+  itemId: string
+  warehouseId: string
+  warehouseName?: string
+  quantity: number
+  minQuantity?: number
+  maxQuantity?: number
+  location?: string // Rack/Shelf location within warehouse
+}
+
+// Stock ledger entry for audit trail
+export interface IStockLedgerEntry {
+  id: string
+  organizationId: string
+  itemId: string
+  itemName?: string
+  warehouseId?: string
+  warehouseName?: string
+  transactionType: StockTransactionType
+  transactionDate: Date
+  quantityBefore: number
+  quantityChange: number
+  quantityAfter: number
+  entryQuantity: number // Original quantity entered by user
+  entryUnit: string // Unit selected by user (PCS, CTN, etc.)
+  baseQuantity: number // Converted quantity in base units
+  ratePerUnit?: number
+  totalValue?: number
+  referenceType?: string // invoice, purchase, adjustment, transfer, opening
+  referenceId?: string
+  referenceNo?: string
+  partyId?: string
+  partyName?: string
+  notes?: string
+  createdBy?: string
+  createdAt: Date
+}
+
+// Item invoice usage record
+export interface IItemInvoiceUsage {
+  invoiceId: string
+  invoiceNo: string
+  documentType: string
+  invoiceDate: Date
+  customerName: string
+  quantity: number
+  unit: string
+  rate: number
+  amount: number
 }
 
 export interface IInvoiceItem {
@@ -59,6 +145,10 @@ export interface IInvoiceItem {
   amount: number
   customField1Value?: string
   customField2Value?: number
+  // Packaging display fields (optional, for PDF display)
+  packagingUnit?: PackagingUnit
+  perCartonQuantity?: number
+  displayAsPackaging?: boolean // Whether to show quantity as CTN/packaging unit on PDF
 }
 
 export interface IInvoice {

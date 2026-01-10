@@ -250,7 +250,7 @@ export function BarcodeDisplay({
                       <div className="flex items-baseline gap-2 whitespace-nowrap">
                         {showCarton && (
                           <span className={`font-bold text-black ${fonts.cartonQty}`}>
-                            {item.perCartonQuantity}pcs/ctn
+                            {item.perCartonQuantity}{item.unit || 'PCS'}/{item.packagingUnit || 'CTN'}
                           </span>
                         )}
                       </div>

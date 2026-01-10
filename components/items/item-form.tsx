@@ -23,10 +23,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Package, Info } from "lucide-react";
 import { createItem, updateItem } from "@/app/items/actions";
 import { toast } from "sonner";
 import type { IItem } from "@/types";
+import { PACKAGING_UNITS, BASE_UNITS } from "@/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type GodownOption = {
   id: string;
@@ -121,6 +128,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           unit: item.unit as ItemFormData["unit"],
           conversionRate: item.conversionRate,
           alternateUnit: item.alternateUnit || "",
+          packagingUnit: item.packagingUnit || "CTN",
           purchasePrice: item.purchasePrice,
           salePrice: item.salePrice,
           wholesalePrice: item.wholesalePrice || 0,
@@ -128,11 +136,11 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           mrp: item.mrp || 0,
           discountType: item.discountType || "percentage",
           saleDiscount: item.saleDiscount || 0,
-          stock: item.stock,
+          stock: item.stock, // Stock is in packaging units (CTN, BAG, etc.)
           minStock: item.minStock,
           maxStock: item.maxStock,
           itemLocation: item.itemLocation || "",
-          perCartonQuantity: item.perCartonQuantity || undefined,
+          perCartonQuantity: item.perCartonQuantity || 1,
           godownId: item.godownId ?? null,
           gstRate: item.gstRate,
           taxRate: item.taxRate || item.gstRate,
@@ -145,7 +153,8 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           category: "",
           hsnCode: "",
           conversionRate: 1,
-          stock: 0,
+          packagingUnit: "CTN",
+          stock: 0, // Stock is in packaging units
           minStock: 0,
           maxStock: 0,
           wholesalePrice: 0,
@@ -166,6 +175,9 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const inclusiveOfTax = watch("inclusiveOfTax");
   const itemName = watch("name");
   const selectedGodownId = watch("godownId");
+  const packagingUnit = watch("packagingUnit");
+  const perCartonQuantity = watch("perCartonQuantity");
+  const enteredStock = watch("stock");
 
   // Auto-generate item code when name changes (only for new items)
   useEffect(() => {
@@ -179,6 +191,10 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
     setIsSubmitting(true);
     try {
       const formData = new FormData();
+      
+      // Stock is stored directly in packaging units (CTN, BAG, etc.)
+      // No conversion needed - what user enters is what gets stored
+      
       Object.entries(data).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           formData.append(key, value.toString());
@@ -330,18 +346,30 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             </div>
           </div>
 
-          {/* Unit & Location */}
+          {/* Unit & Packaging Configuration */}
           <div className="space-y-3 p-4 rounded-lg border bg-muted/30">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-primary text-xs">
-                📍
+                <Package className="w-3 h-3" />
               </span>
-              Unit & Location
+              Unit & Packaging
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>Configure base unit (e.g., PCS) and packaging unit (e.g., CTN). Set how many base units make up one packaging unit.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </h3>
-            <div className="grid grid-cols-6 gap-4">
+            
+            {/* Base Unit Row */}
+            <div className="grid grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="unit" className="text-sm font-medium">
-                  Unit <span className="text-destructive">*</span>
+                  Base Unit <span className="text-destructive">*</span>
                 </Label>
                 <Select
                   onValueChange={(value) =>
@@ -353,19 +381,66 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PCS">Pieces (PCS)</SelectItem>
-                    <SelectItem value="KG">Kilogram (KG)</SelectItem>
-                    <SelectItem value="LTR">Liter (LTR)</SelectItem>
-                    <SelectItem value="MTR">Meter (MTR)</SelectItem>
-                    <SelectItem value="BOX">Box</SelectItem>
-                    <SelectItem value="DOZEN">Dozen</SelectItem>
-                    <SelectItem value="PKT">Packet (PKT)</SelectItem>
-                    <SelectItem value="BAG">Bag</SelectItem>
+                    {BASE_UNITS.map((u) => (
+                      <SelectItem key={u.value} value={u.value}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.unit && (
                   <p className="text-xs text-destructive">
                     {errors.unit.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="packagingUnit" className="text-sm font-medium">
+                  Packaging Unit
+                </Label>
+                <Select
+                  onValueChange={(value) => setValue("packagingUnit", value)}
+                  defaultValue={packagingUnit || "CTN"}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select packaging" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PACKAGING_UNITS.map((u) => (
+                      <SelectItem key={u.value} value={u.value}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="perCartonQuantity" className="text-sm font-medium flex items-center gap-1">
+                  Per {packagingUnit || "CTN"} Qty
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>How many {selectedUnit || "PCS"} in one {packagingUnit || "CTN"}?</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <Input
+                  id="perCartonQuantity"
+                  type="number"
+                  min="1"
+                  {...register("perCartonQuantity")}
+                  placeholder="e.g., 12, 24, 1500"
+                  className="h-9"
+                />
+                {errors.perCartonQuantity && (
+                  <p className="text-xs text-destructive">
+                    {errors.perCartonQuantity.message}
                   </p>
                 )}
               </div>
@@ -388,38 +463,40 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                   </p>
                 )}
               </div>
+            </div>
 
+            {/* Packaging Summary */}
+            {perCartonQuantity && perCartonQuantity > 1 && (
+              <div className="text-xs text-muted-foreground bg-primary/5 p-2 rounded-md border border-primary/10">
+                <span className="font-medium text-primary">Packaging:</span> 1 {packagingUnit || "CTN"} = {perCartonQuantity} {selectedUnit || "PCS"}
+              </div>
+            )}
+
+            {/* Location Row */}
+            <div className="grid grid-cols-3 gap-4 pt-2">
               <div className="space-y-1.5">
                 <Label htmlFor="alternateUnit" className="text-sm font-medium">
                   Alternate Unit
                 </Label>
-                <Input
-                  id="alternateUnit"
-                  {...register("alternateUnit")}
-                  placeholder="e.g., CTN"
-                  className="h-9"
-                />
+                <Select
+                  value={watch("alternateUnit") || "__none__"}
+                  onValueChange={(value) => setValue("alternateUnit", value === "__none__" ? "" : value)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {BASE_UNITS.filter(u => u.value !== selectedUnit).map((u) => (
+                      <SelectItem key={u.value} value={u.value}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {errors.alternateUnit && (
                   <p className="text-xs text-destructive">
                     {errors.alternateUnit.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="perCartonQuantity" className="text-sm font-medium">
-                  Per Carton Qty
-                </Label>
-                <Input
-                  id="perCartonQuantity"
-                  type="number"
-                  {...register("perCartonQuantity")}
-                  placeholder="e.g., 12"
-                  className="h-9"
-                />
-                {errors.perCartonQuantity && (
-                  <p className="text-xs text-destructive">
-                    {errors.perCartonQuantity.message}
                   </p>
                 )}
               </div>
@@ -606,29 +683,45 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                 📦
               </span>
               Stock Management
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                Stock is maintained in {packagingUnit || "CTN"}
+              </span>
             </h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5">
+            
+            {/* Opening Stock - Always in Packaging Units */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="stock" className="text-sm font-medium">
-                  Current Stock
+                  Opening/Current Stock
                 </Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  {...register("stock")}
-                  placeholder="0"
-                  className="h-9"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="stock"
+                    type="number"
+                    {...register("stock")}
+                    placeholder="0"
+                    className="h-9 flex-1"
+                  />
+                  <div className="h-9 px-3 flex items-center justify-center border rounded-md bg-muted text-muted-foreground min-w-[80px]">
+                    {packagingUnit || "CTN"}
+                  </div>
+                </div>
                 {errors.stock && (
                   <p className="text-xs text-destructive">
                     {errors.stock.message}
                   </p>
                 )}
+                {/* Show conversion to base units */}
+                {perCartonQuantity && perCartonQuantity > 1 && enteredStock ? (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    = <span className="font-medium text-primary">{(enteredStock * perCartonQuantity).toLocaleString()}</span> {selectedUnit || "PCS"} ({enteredStock} × {perCartonQuantity})
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="minStock" className="text-sm font-medium">
-                  Min Stock (Alert Threshold)
+                  Min Stock ({packagingUnit || "CTN"})
                 </Label>
                 <Input
                   id="minStock"
@@ -646,7 +739,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="maxStock" className="text-sm font-medium">
-                  Max Stock
+                  Max Stock ({packagingUnit || "CTN"})
                 </Label>
                 <Input
                   id="maxStock"

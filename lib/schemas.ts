@@ -37,6 +37,8 @@ export const itemSchema = z
       ),
     conversionRate: z.coerce.number().min(1, "Conversion rate must be at least 1"),
     alternateUnit: z.string().optional().or(z.literal("")),
+    // Packaging unit for master cartons (CTN, GONI, BAG, etc.)
+    packagingUnit: z.string().optional().or(z.literal("")),
     purchasePrice: z.coerce.number().min(0, "Purchase price cannot be negative"),
     salePrice: z.coerce.number().min(0, "Sale price cannot be negative"),
     wholesalePrice: z.coerce.number().min(0, "Wholesale price cannot be negative").optional(), // Added wholesale price
@@ -44,11 +46,11 @@ export const itemSchema = z
     mrp: z.coerce.number().min(0, "MRP cannot be negative").optional(),
     discountType: z.enum(["percentage", "flat"]).optional(), // Added discount type
     saleDiscount: z.coerce.number().min(0, "Discount cannot be negative").optional(), // Added sale discount
-    stock: z.coerce.number().min(0, "Stock cannot be negative").default(0),
-    minStock: z.coerce.number().min(0, "Minimum stock cannot be negative").default(0),
-    maxStock: z.coerce.number().min(0, "Maximum stock cannot be negative").default(0),
+    stock: z.coerce.number().min(0, "Stock cannot be negative").default(0), // Stock in packaging units (CTN, BAG, etc.)
+    minStock: z.coerce.number().min(0, "Minimum stock cannot be negative").default(0), // Min stock in packaging units
+    maxStock: z.coerce.number().min(0, "Maximum stock cannot be negative").default(0), // Max stock in packaging units
     itemLocation: z.string().optional().or(z.literal("")), // Added item location
-    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1").optional(), // Added per carton quantity - optional for bulk uploads
+    perCartonQuantity: z.coerce.number().min(1, "Per carton quantity must be at least 1").optional(), // Conversion factor: 1 packaging_unit = X base units
     gstRate: z.coerce.number().min(0).max(100, "GST rate must be between 0-100"),
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),
@@ -86,6 +88,10 @@ export const invoiceItemSchema = z.object({
     z.coerce.number().optional(),
   ),
   amount: z.coerce.number(),
+  // Packaging display fields (optional)
+  packagingUnit: z.string().optional(),
+  perCartonQuantity: z.number().optional(),
+  displayAsPackaging: z.boolean().optional(),
 })
 
 export type InvoiceItemFormData = z.infer<typeof invoiceItemSchema>

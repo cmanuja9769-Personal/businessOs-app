@@ -76,6 +76,22 @@ function remapRowKeys(row: ParsedRow): ParsedRow {
     per_carton_qty: "perCartonQuantity",
     carton_quantity: "perCartonQuantity",
     carton_qty: "perCartonQuantity",
+    per_packaging_qty: "perCartonQuantity",
+    perpackagingqty: "perCartonQuantity",
+    packaging_qty: "perCartonQuantity",
+    packaging_unit: "packagingUnit",
+    packagingunit: "packagingUnit",
+    packaging: "packagingUnit",
+    unit_base: "unit",
+    unitbase: "unit",
+    base_unit: "unit",
+    baseunit: "unit",
+    stock_in_packaging: "stock",
+    stockinpackaging: "stock",
+    min_stock_pkg: "minStock",
+    minstockpkg: "minStock",
+    max_stock_pkg: "maxStock",
+    maxstockpkg: "maxStock",
     gst_rate: "gstRate",
     gstrate: "gstRate",
     gst: "gstRate",
@@ -257,7 +273,9 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
     "Category",
     "HSN Code",
     "Barcode No",
-    "Unit",
+    "Unit (Base)",           // Base unit (PCS, KG, etc.)
+    "Packaging Unit",        // Packaging unit (CTN, GONI, BAG, etc.)
+    "Per Packaging Qty",     // How many base units in 1 packaging unit
     "Conversion Rate",
     "Alternate Unit",
     "Purchase Price",
@@ -265,10 +283,9 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
     "Wholesale Price",
     "Quantity Price",
     "MRP",
-    "Stock",
-    "Min Stock",
-    "Max Stock",
-    "Per Carton Qty",
+    "Stock (in Packaging)",  // Stock is in packaging units
+    "Min Stock (Pkg)",       // Min stock in packaging units
+    "Max Stock (Pkg)",       // Max stock in packaging units
     "Godown",
     "GST Rate (%)",
     "Cess Rate (%)",
@@ -276,63 +293,68 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
 
   sheet.addRow(headers)
 
-  // Example row
+  // Example row - Updated for packaging unit system
   sheet.addRow([
     "Example Item",
     "Detailed description of the item",
     "Electronics",
     "8471",
     "",
-    "PCS",
-    1,
-    "",
-    100,
-    150,
-    140,
-    130,
-    160,
-    50,
-    10,
-    100,
-    12,
-    "",
-    18,
-    0,
+    "PCS",        // Base unit
+    "CTN",        // Packaging unit
+    12,           // Per packaging qty (1 CTN = 12 PCS)
+    1,            // Conversion rate
+    "",           // Alternate unit
+    100,          // Purchase price
+    150,          // Sale price
+    140,          // Wholesale price
+    130,          // Quantity price
+    160,          // MRP
+    50,           // Stock in packaging units (50 CTN)
+    10,           // Min stock in packaging units
+    100,          // Max stock in packaging units
+    "",           // Godown
+    18,           // GST rate
+    0,            // Cess rate
   ])
 
-  // Column widths (roughly matching old template)
+  // Column widths (updated for new column structure)
   sheet.columns = [
-    { width: 20 },
-    { width: 30 },
-    { width: 15 },
-    { width: 12 },
-    { width: 15 },
-    { width: 10 },
-    { width: 15 },
-    { width: 15 },
-    { width: 15 },
-    { width: 15 },
-    { width: 15 },
-    { width: 15 },
-    { width: 12 },
-    { width: 10 },
-    { width: 12 },
-    { width: 12 },
-    { width: 15 },
-    { width: 18 },
-    { width: 12 },
-    { width: 12 },
+    { width: 20 },  // Item Name
+    { width: 30 },  // Description
+    { width: 15 },  // Category
+    { width: 12 },  // HSN Code
+    { width: 15 },  // Barcode No
+    { width: 12 },  // Unit (Base)
+    { width: 15 },  // Packaging Unit
+    { width: 16 },  // Per Packaging Qty
+    { width: 15 },  // Conversion Rate
+    { width: 15 },  // Alternate Unit
+    { width: 15 },  // Purchase Price
+    { width: 15 },  // Sale Price
+    { width: 15 },  // Wholesale Price
+    { width: 15 },  // Quantity Price
+    { width: 12 },  // MRP
+    { width: 16 },  // Stock (in Packaging)
+    { width: 14 },  // Min Stock (Pkg)
+    { width: 14 },  // Max Stock (Pkg)
+    { width: 18 },  // Godown
+    { width: 12 },  // GST Rate
+    { width: 12 },  // Cess Rate
   ]
 
   // Make header row bold
   sheet.getRow(1).font = { bold: true }
 
-  const units = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
+  // Base units for Unit column
+  const baseUnits = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
+  // Packaging units for Packaging Unit column  
+  const packagingUnits = ["CTN", "GONI", "BAG", "BUNDLE", "PKT", "BOX", "CASE", "ROLL", "DRUM"]
   const gstRates = [0, 3, 5, 12, 18, 28]
 
   // Populate lists sheet
-  lists.getCell("A1").value = "Units"
-  units.forEach((u, idx) => {
+  lists.getCell("A1").value = "BaseUnits"
+  baseUnits.forEach((u, idx) => {
     lists.getCell(`A${idx + 2}`).value = u
   })
 
@@ -347,27 +369,45 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
     lists.getCell(`C${idx + 2}`).value = name
   })
 
+  lists.getCell("D1").value = "PackagingUnits"
+  packagingUnits.forEach((u, idx) => {
+    lists.getCell(`D${idx + 2}`).value = u
+  })
+
   // Apply dropdown validations to a reasonable range
   const startRow = 2
   const endRow = 1000
 
-  // unit column = D
+  // Base Unit column = F (column 6)
   for (let r = startRow; r <= endRow; r++) {
-    sheet.getCell(`D${r}`).dataValidation = {
+    sheet.getCell(`F${r}`).dataValidation = {
       type: "list",
       allowBlank: false,
       showErrorMessage: true,
       errorStyle: "error",
       errorTitle: "Invalid Unit",
-      error: "Please select a unit from the dropdown.",
-      formulae: ["Lists!$A$2:$A$9"],
+      error: "Please select a base unit from the dropdown (PCS, KG, LTR, etc.).",
+      formulae: [`Lists!$A$2:$A$${baseUnits.length + 1}`],
     }
   }
 
-  // godown column = P
+  // Packaging Unit column = G (column 7)
+  for (let r = startRow; r <= endRow; r++) {
+    sheet.getCell(`G${r}`).dataValidation = {
+      type: "list",
+      allowBlank: false,
+      showErrorMessage: true,
+      errorStyle: "error",
+      errorTitle: "Invalid Packaging Unit",
+      error: "Please select a packaging unit from the dropdown (CTN, GONI, BAG, etc.).",
+      formulae: [`Lists!$D$2:$D$${packagingUnits.length + 1}`],
+    }
+  }
+
+  // Godown column = S (column 19)
   if (uniqueGodowns.length > 0) {
     for (let r = startRow; r <= endRow; r++) {
-      sheet.getCell(`P${r}`).dataValidation = {
+      sheet.getCell(`S${r}`).dataValidation = {
         type: "list",
         allowBlank: true,
         showErrorMessage: true,
@@ -379,16 +419,16 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
     }
   }
 
-  // gstRate column = Q
+  // GST Rate column = T (column 20)
   for (let r = startRow; r <= endRow; r++) {
-    sheet.getCell(`Q${r}`).dataValidation = {
+    sheet.getCell(`T${r}`).dataValidation = {
       type: "list",
       allowBlank: true,
       showErrorMessage: true,
       errorStyle: "error",
       errorTitle: "Invalid GST Rate",
       error: "Please select a GST rate from the dropdown.",
-      formulae: ["Lists!$B$2:$B$7"],
+      formulae: [`Lists!$B$2:$B$${gstRates.length + 1}`],
     }
   }
 

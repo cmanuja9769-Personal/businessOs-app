@@ -193,7 +193,7 @@ export default async function DashboardPage() {
         {/* Recent Invoices */}
         <Card className="md:col-span-2">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <CardTitle>Recent Invoices</CardTitle>
               <Link href="/invoices">
                 <Button variant="ghost" size="sm" className="gap-1">
@@ -213,8 +213,8 @@ export default async function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Invoice No.</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead className="hidden sm:table-cell">Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Date</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
@@ -223,8 +223,8 @@ export default async function DashboardPage() {
                   {recentInvoices.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-mono text-sm">{invoice.invoiceNo}</TableCell>
-                      <TableCell className="font-medium">{invoice.customerName}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="hidden sm:table-cell font-medium">{invoice.customerName}</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                         {format(new Date(invoice.invoiceDate), "dd MMM yyyy")}
                       </TableCell>
                       <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>

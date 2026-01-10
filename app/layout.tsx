@@ -58,21 +58,21 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased h-screen overflow-hidden`} suppressHydrationWarning>
+      <body className={`font-sans antialiased min-h-dvh overflow-x-hidden`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
             <NumberInputScrollProvider>
               {user ? (
                 // Authenticated layout
-                <div className="flex h-screen overflow-hidden">
+                <div className="flex min-h-dvh">
                   <div className="print:hidden">
                     <Sidebar />
                   </div>
-                  <div className="flex-1 flex flex-col overflow-hidden pt-16 md:pt-0 md:ml-64 print:ml-0 print:pt-0">
+                  <div className="flex-1 min-w-0 flex flex-col pt-16 md:pt-0 md:ml-64 print:ml-0 print:pt-0">
                     <div className="print:hidden hidden md:block">
                       <Header />
                     </div>
-                    <main className="flex-1 overflow-y-auto bg-muted/30 print:bg-white print:overflow-visible">
+                    <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-muted/30 print:bg-white print:overflow-visible">
                       {children}
                     </main>
                   </div>

@@ -266,19 +266,19 @@ export function ItemDetailsClient({
                   </div>
                   <div>
                     <p className="text-muted-foreground">Location</p>
-                    <p className="font-medium">{item.itemLocation || "-"}</p>
+                    <p className="font-medium">{item.itemLocation && item.itemLocation !== "null" ? item.itemLocation : "-"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Warehouses</p>
                     <p className="font-medium">
                       {stockDistribution.length > 0 
                         ? `${stockDistribution.length} location${stockDistribution.length > 1 ? 's' : ''}`
-                        : "No distribution"
+                        : (item.godownName && item.godownName !== "null" ? item.godownName : "Not assigned")
                       }
                     </p>
                   </div>
                 </div>
-                {item.description && (
+                {item.description && item.description !== "null" && (
                   <div className="pt-2 border-t">
                     <p className="text-muted-foreground text-sm">Description</p>
                     <p className="text-sm">{item.description}</p>
@@ -431,7 +431,7 @@ export function ItemDetailsClient({
                       return (
                         <TableRow key={stock.id}>
                           <TableCell className="font-medium">{stock.warehouseName}</TableCell>
-                          <TableCell>{stock.location || "-"}</TableCell>
+                          <TableCell>{stock.location && stock.location !== "null" ? stock.location : "-"}</TableCell>
                           <TableCell className="text-right font-mono">{stock.quantity.toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{inPackaging.toLocaleString()}</TableCell>
                           <TableCell className="text-right">{stock.minQuantity}</TableCell>

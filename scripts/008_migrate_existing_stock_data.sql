@@ -11,39 +11,41 @@ DO $$
 DECLARE
   v_migrated_count INTEGER := 0;
   v_item RECORD;
+  v_default_warehouse_id UUID;
 BEGIN
   RAISE NOTICE 'Starting stock data migration...';
   
+  -- Get the first warehouse as default fallback
+  SELECT id INTO v_default_warehouse_id
+  FROM public.warehouses
+  LIMIT 1;
+  
+  IF v_default_warehouse_id IS NULL THEN
+    RAISE NOTICE 'No warehouses found! Please create at least one warehouse first.';
+    RETURN;
+  END IF;
+  
+  RAISE NOTICE 'Default warehouse ID: %', v_default_warehouse_id;
+  
   -- Loop through all items that have stock but no warehouse stock records
+  -- Support both 'stock' and 'current_stock' columns
   FOR v_item IN 
     SELECT 
       i.id,
-      i.warehouse_id,
+      COALESCE(i.warehouse_id, v_default_warehouse_id) as warehouse_id,
       i.organization_id,
-      COALESCE(i.current_stock, 0) as current_stock,
+      COALESCE(i.current_stock, i.stock, 0) as current_stock,
       i.item_location,
       i.name
     FROM public.items i
     WHERE i.organization_id IS NOT NULL
-      AND COALESCE(i.current_stock, 0) > 0
+      AND (COALESCE(i.current_stock, 0) > 0 OR COALESCE(i.stock, 0) > 0)
       AND NOT EXISTS (
         SELECT 1 FROM public.item_warehouse_stock iws 
         WHERE iws.item_id = i.id
       )
   LOOP
-    -- Determine warehouse_id (use item's warehouse or first available warehouse)
-    IF v_item.warehouse_id IS NULL THEN
-      -- Get the first warehouse for this organization
-      SELECT id INTO v_item.warehouse_id
-      FROM public.warehouses
-      WHERE organization_id = v_item.organization_id
-      LIMIT 1;
-      
-      IF v_item.warehouse_id IS NULL THEN
-        RAISE NOTICE 'Skipping item % (%) - no warehouse found for organization', v_item.name, v_item.id;
-        CONTINUE;
-      END IF;
-    END IF;
+    RAISE NOTICE 'Migrating item: % (stock: %)', v_item.name, v_item.current_stock;
     
     -- Insert into item_warehouse_stock
     INSERT INTO public.item_warehouse_stock (
@@ -63,7 +65,9 @@ BEGIN
       NOW(),
       NOW()
     )
-    ON CONFLICT (item_id, warehouse_id) DO NOTHING;
+    ON CONFLICT (item_id, warehouse_id) DO UPDATE 
+    SET quantity = EXCLUDED.quantity,
+        updated_at = NOW();
     
     v_migrated_count := v_migrated_count + 1;
   END LOOP;
@@ -142,7 +146,7 @@ BEGIN
       COALESCE(v_item.packaging_unit, v_item.unit),
       v_stock.quantity,
       'opening',
-      'OPENING-' || v_stock.item_id::TEXT,
+      'Opening Stock',
       'Opening stock - migrated from existing data',
       NOW()
     );

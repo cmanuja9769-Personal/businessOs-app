@@ -3,36 +3,45 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function Loading() {
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-2">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-4 w-64" />
+          <Skeleton className="h-7 sm:h-8 w-28 sm:w-32" />
+          <Skeleton className="h-4 w-48 sm:w-64" />
         </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-10 w-32" />
-          <Skeleton className="h-10 w-32" />
+        <div className="flex flex-col xs:flex-row gap-2 w-full sm:w-auto">
+          <Skeleton className="h-9 sm:h-10 w-full xs:w-28 sm:w-32" />
+          <Skeleton className="h-9 sm:h-10 w-full xs:w-28 sm:w-32" />
         </div>
       </div>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <Skeleton className="h-6 w-24" />
-            <div className="flex flex-1 gap-2">
-              <Skeleton className="h-10 flex-1 max-w-sm" />
-              <Skeleton className="h-10 w-32" />
-            </div>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <Skeleton className="h-5 sm:h-6 w-24 sm:w-32" />
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {Array.from({ length: 8 }).map((_, i) => (
+          {/* Mobile card view */}
+          <div className="space-y-3 sm:hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="p-3 border rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-6 w-6 rounded" />
+                </div>
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            ))}
+          </div>
+          {/* Desktop table view */}
+          <div className="hidden sm:block space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4 py-3 border-b last:border-0">
-                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 flex-1 max-w-xs" />
                 <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-40" />
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-8 w-20" />
               </div>

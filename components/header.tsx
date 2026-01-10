@@ -63,14 +63,14 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 bg-background border-b border-border">
-      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-3 gap-2 sm:gap-4">
+      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2 sm:py-3 gap-2 sm:gap-4">
         {/* Organization Switcher */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 hidden sm:block">
           <OrganizationSwitcher />
         </div>
 
-        {/* Search - Responsive search: w-full on mobile, max-w-md on desktop */}
-        <div className="flex-1 relative" ref={searchRef}>
+        {/* Search - Responsive search */}
+        <div className="flex-1 relative max-w-lg" ref={searchRef}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground flex-shrink-0" />
             <Input

@@ -30,14 +30,14 @@ export default function InventoryPage() {
   }, [])
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <p className="text-muted-foreground">Track stock, batches, serials, and adjustments</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Inventory Management</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Track stock, batches, serials, and adjustments</p>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Items</CardTitle>

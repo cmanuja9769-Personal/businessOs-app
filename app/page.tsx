@@ -78,15 +78,15 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back! Here's what's happening with your business today.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Welcome back! Here's what's happening with your business today.</p>
         </div>
         <Link href="/invoices/new">
-          <Button size="lg" className="gap-2">
+          <Button size="default" className="gap-2 w-full sm:w-auto">
             <FileText className="w-4 h-4" />
             New Invoice
           </Button>
@@ -94,7 +94,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title} className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-2">

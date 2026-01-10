@@ -50,18 +50,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         : ClassicTemplate
 
   return (
-    <div className="container p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Action Bar */}
-      <div className="flex items-center justify-between print:hidden gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between print:hidden gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <Link href="/invoices">
-            <Button variant="outline" size="icon">
+            <Button variant="outline" size="icon" className="h-9 w-9 sm:h-10 sm:w-10">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold">{invoice.invoiceNo}</h1>
-            <p className="text-muted-foreground">{invoice.customerName}</p>
+          <div className="space-y-0.5 sm:space-y-1">
+            <h1 className="text-lg sm:text-2xl font-bold">{invoice.invoiceNo}</h1>
+            <p className="text-xs sm:text-base text-muted-foreground">{invoice.customerName}</p>
           </div>
         </div>
 

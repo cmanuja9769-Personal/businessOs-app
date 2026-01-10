@@ -18,15 +18,15 @@ export default function EWayBillManagementPage() {
   }
 
   return (
-    <div className="container p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Truck className="w-8 h-8" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Truck className="w-6 sm:w-8 h-6 sm:h-8" />
             E-Way Bill Management
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             Manage E-Way Bills for goods transportation
           </p>
         </div>

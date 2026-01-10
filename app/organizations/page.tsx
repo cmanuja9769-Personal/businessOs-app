@@ -59,15 +59,15 @@ export default async function OrganizationsPage() {
     })) || []
 
   return (
-    <div className="container p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Organizations</h1>
-          <p className="text-muted-foreground mt-1">Manage your organizations and memberships</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Organizations</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage your organizations and memberships</p>
         </div>
         <Link href="/organizations/new">
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             New Organization
           </Button>
@@ -76,7 +76,7 @@ export default async function OrganizationsPage() {
 
       {/* Organizations Grid */}
       {organizations && organizations.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {organizations.map((org: any) => (
             <Card key={org.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>

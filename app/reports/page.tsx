@@ -74,14 +74,14 @@ export default async function ReportsPage() {
     .slice(0, 10)
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-        <p className="text-muted-foreground mt-1">Track business performance and insights</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reports & Analytics</h1>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">Track business performance and insights</p>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>

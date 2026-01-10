@@ -48,7 +48,7 @@ export function OrganizationSwitcher() {
           }
         }}
       >
-        <SelectTrigger className="h-8 w-[160px] border-0 bg-transparent px-2 text-sm focus:ring-0">
+        <SelectTrigger className="h-8 w-[120px] sm:w-[160px] border-0 bg-transparent px-1 sm:px-2 text-xs sm:text-sm focus:ring-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

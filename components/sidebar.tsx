@@ -40,16 +40,17 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile menu button */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-sidebar border-b border-sidebar-border px-4 py-3 flex items-center justify-between h-16">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Package className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-lg text-sidebar-foreground truncate">BusinessOS</span>
-        </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-sidebar-foreground">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-sidebar border-b border-sidebar-border px-3 py-2 flex items-center justify-between h-16 gap-2">
+        <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-sidebar-foreground flex-shrink-0">
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+            <Package className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <span className="font-semibold text-base text-sidebar-foreground">BusinessOS</span>
+        </div>
+        <div className="flex-1" />
       </div>
 
       {/* Overlay */}

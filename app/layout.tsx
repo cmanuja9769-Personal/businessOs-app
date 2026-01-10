@@ -68,8 +68,8 @@ export default async function RootLayout({
                   <div className="print:hidden">
                     <Sidebar />
                   </div>
-                  <div className="flex-1 flex flex-col overflow-hidden md:ml-64 lg:ml-64 print:ml-0">
-                    <div className="print:hidden">
+                  <div className="flex-1 flex flex-col overflow-hidden pt-16 md:pt-0 md:ml-64 print:ml-0 print:pt-0">
+                    <div className="print:hidden hidden md:block">
                       <Header />
                     </div>
                     <main className="flex-1 overflow-y-auto bg-muted/30 print:bg-white print:overflow-visible">

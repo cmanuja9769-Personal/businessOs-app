@@ -63,19 +63,21 @@ export default async function UsersPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-muted-foreground mt-1">Manage user access and permissions</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Users</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage user access and permissions</p>
         </div>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Users className="w-5 h-5" />
-            User Accounts ({users?.length || 0})
+            <span className="hidden sm:inline">User Accounts</span>
+            <span className="sm:hidden">Users</span>
+            <span className="text-muted-foreground">({users?.length || 0})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>

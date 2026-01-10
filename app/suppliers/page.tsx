@@ -11,11 +11,11 @@ export default async function SuppliersPage() {
   const suppliers = await getSuppliers()
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
-          <p className="text-muted-foreground">Manage your suppliers and vendor information</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Suppliers</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Manage your suppliers and vendor information</p>
         </div>
         <SupplierForm>
           <Button className="w-full sm:w-auto">

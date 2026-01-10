@@ -32,3 +32,4 @@ yarn-error.log*
 *.AppImage
 *.deb
 *.snap
+.env*.local

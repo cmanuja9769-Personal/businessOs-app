@@ -269,8 +269,13 @@ export function ItemDetailsClient({
                     <p className="font-medium">{item.itemLocation || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Godown</p>
-                    <p className="font-medium">{item.godownName || "-"}</p>
+                    <p className="text-muted-foreground">Warehouses</p>
+                    <p className="font-medium">
+                      {stockDistribution.length > 0 
+                        ? `${stockDistribution.length} location${stockDistribution.length > 1 ? 's' : ''}`
+                        : "No distribution"
+                      }
+                    </p>
                   </div>
                 </div>
                 {item.description && (

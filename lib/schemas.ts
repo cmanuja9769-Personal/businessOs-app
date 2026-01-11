@@ -36,7 +36,7 @@ export const itemSchema = z
         { message: "Please select a valid unit" }
       ),
     conversionRate: z.coerce.number().min(1, "Conversion rate must be at least 1"),
-    alternateUnit: z.string().optional().or(z.literal("")),
+    alternateUnit: z.preprocess((val) => val === null ? "" : val, z.string().optional().or(z.literal(""))),
     // Packaging unit for master cartons (CTN, GONI, BAG, etc.)
     packagingUnit: z.string().optional().or(z.literal("")),
     purchasePrice: z.coerce.number().min(0, "Purchase price cannot be negative"),

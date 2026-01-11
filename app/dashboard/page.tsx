@@ -315,34 +315,34 @@ export default function DashboardPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium">Quick Actions</CardTitle>
         </CardHeader>
-        <CardContent className="-mx-2 px-2">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide sm:flex-wrap sm:overflow-visible">
-            <Link href="/invoices/new" className="flex-shrink-0">
-              <Button size="sm" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+        <CardContent>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link href="/invoices/new">
+              <Button size="sm" className="gap-2 text-xs sm:text-sm">
                 <Plus className="h-4 w-4" />
-                <span className="hidden xs:inline">New</span> Invoice
+                Invoice
               </Button>
             </Link>
-            <Link href="/purchases/new" className="flex-shrink-0">
-              <Button size="sm" variant="outline" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+            <Link href="/purchases/new">
+              <Button size="sm" variant="outline" className="gap-2 text-xs sm:text-sm">
                 <Plus className="h-4 w-4" />
-                <span className="hidden xs:inline">New</span> Purchase
+                Purchase
               </Button>
             </Link>
-            <Link href="/customers/new" className="flex-shrink-0">
-              <Button size="sm" variant="outline" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+            <Link href="/customers/new">
+              <Button size="sm" variant="outline" className="gap-2 text-xs sm:text-sm">
                 <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Add</span> Customer
+                Add Customer
               </Button>
             </Link>
-            <Link href="/items/new" className="flex-shrink-0">
-              <Button size="sm" variant="outline" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+            <Link href="/items/new">
+              <Button size="sm" variant="outline" className="gap-2 text-xs sm:text-sm">
                 <Package className="h-4 w-4" />
-                <span className="hidden sm:inline">Add</span> Item
+                Add Item
               </Button>
             </Link>
-            <Link href="/reports" className="flex-shrink-0">
-              <Button size="sm" variant="outline" className="gap-1.5 sm:gap-2 text-xs sm:text-sm">
+            <Link href="/reports">
+              <Button size="sm" variant="outline" className="gap-2 text-xs sm:text-sm">
                 <BarChart3 className="h-4 w-4" />
                 Reports
               </Button>

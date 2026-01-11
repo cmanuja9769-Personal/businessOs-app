@@ -63,8 +63,6 @@ export async function getUserRole(userId: string) {
       })
     } else {
       // User doesn't have a role yet - try to create one
-      console.log("[v0] User has no role, attempting to create default role for user:", userId)
-
       try {
         // Check if this is the first user (make them admin)
         const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
@@ -82,13 +80,10 @@ export async function getUserRole(userId: string) {
           .single()
 
         if (!insertError && newRole) {
-          console.log("[v0] Created user role:", defaultRole, "for user:", userId)
           return newRole
-        } else if (insertError) {
-          console.error("[v0] Failed to create user role:", insertError.message)
         }
-      } catch (createError) {
-        console.error("[v0] Exception creating user role:", createError)
+      } catch {
+        // Silently fail - will return default role
       }
     }
 

@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Loader2, Package, Info } from "lucide-react"
-import { addStockWithLedger } from "@/app/items/actions"
+import { Plus, Minus, Loader2, Package, Info, TrendingUp, TrendingDown } from "lucide-react"
+import { modifyStockWithLedger } from "@/app/items/actions"
 import { toast } from "sonner"
 import {
   Tooltip,
@@ -31,18 +31,34 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 
-interface AddStockDialogProps {
+// Transaction type for stock operations
+type StockOperationType = "ADD" | "REDUCE"
+
+interface StockManagementDialogProps {
   item: IItem
   godowns: Array<{ id: string; name: string }>
   trigger?: React.ReactNode
+  defaultOperation?: StockOperationType
 }
 
-export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) {
+export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD" }: StockManagementDialogProps) {
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [quantity, setQuantity] = useState("")
-  const [warehouseId, setWarehouseId] = useState<string>(item.godownId || "")
+  const [operationType, setOperationType] = useState<StockOperationType>(defaultOperation)
+  const [reason, setReason] = useState("")
+  
+  // Safely handle godownId - filter out "null" strings and invalid values
+  const getInitialWarehouseId = () => {
+    if (!item.godownId || item.godownId === "null" || item.godownId === "undefined") {
+      return ""
+    }
+    return item.godownId
+  }
+  
+  const [warehouseId, setWarehouseId] = useState<string>(getInitialWarehouseId())
   const [notes, setNotes] = useState("")
 
   // Stock is always in packaging units (CTN, BAG, GONI, etc.)
@@ -52,7 +68,23 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
 
   // Calculate base units for display
   const enteredQty = parseFloat(quantity) || 0
-  const baseUnitsToAdd = enteredQty * perPackaging
+  const baseUnitsToModify = enteredQty * perPackaging
+  
+  // Calculate new stock after operation
+  const newStock = operationType === "ADD" 
+    ? item.stock + enteredQty 
+    : Math.max(0, item.stock - enteredQty)
+
+  // Reduction reasons
+  const reductionReasons = [
+    { value: "damaged", label: "Damaged Goods" },
+    { value: "expired", label: "Expired Stock" },
+    { value: "theft", label: "Theft/Lost" },
+    { value: "correction", label: "Stock Correction" },
+    { value: "return_to_supplier", label: "Return to Supplier" },
+    { value: "sample", label: "Sample/Free" },
+    { value: "other", label: "Other" },
+  ]
 
   const handleSubmit = async () => {
     if (!quantity || parseFloat(quantity) <= 0) {
@@ -60,43 +92,70 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
       return
     }
 
-    if (!warehouseId) {
+    // Validate for reduction - cannot reduce more than available
+    if (operationType === "REDUCE" && enteredQty > item.stock) {
+      toast.error(`Cannot reduce more than available stock (${item.stock} ${packagingUnit})`)
+      return
+    }
+
+    const normalizedWarehouseId = (warehouseId || "").trim()
+    if (!normalizedWarehouseId || normalizedWarehouseId === "null" || normalizedWarehouseId === "undefined") {
       toast.error("Please select a godown")
+      return
+    }
+
+    // For reductions, reason is required
+    if (operationType === "REDUCE" && !reason) {
+      toast.error("Please select a reason for stock reduction")
       return
     }
 
     setIsSubmitting(true)
     try {
-      const result = await addStockWithLedger(
+      const result = await modifyStockWithLedger(
         item.id,
-        warehouseId,
+        normalizedWarehouseId,
         parseFloat(quantity),
-        packagingUnit, // Always in packaging units
+        packagingUnit,
+        operationType,
+        operationType === "REDUCE" ? reason : "stock_in",
         notes || undefined
       )
 
       if (result.success) {
-        toast.success(`Stock added: +${quantity} ${packagingUnit}`)
+        const action = operationType === "ADD" ? "added" : "reduced"
+        const symbol = operationType === "ADD" ? "+" : "-"
+        toast.success(`Stock ${action}: ${symbol}${quantity} ${packagingUnit}`)
         setOpen(false)
-        setQuantity("")
-        setNotes("")
+        resetForm()
       } else {
-        toast.error(result.error || "Failed to add stock")
+        toast.error(result.error || `Failed to ${operationType === "ADD" ? "add" : "reduce"} stock`)
       }
     } catch (error) {
-      toast.error("An error occurred while adding stock")
+      toast.error("An error occurred while updating stock")
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const resetForm = () => {
+    setQuantity("")
+    setNotes("")
+    setReason("")
+    setOperationType(defaultOperation)
+    setWarehouseId(getInitialWarehouseId())
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen)
+      if (!isOpen) resetForm()
+    }}>
       <DialogTrigger asChild>
         {trigger || (
           <Button>
             <Plus className="w-4 h-4 mr-2" />
-            Add Stock
+            Manage Stock
           </Button>
         )}
       </DialogTrigger>
@@ -104,14 +163,45 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
-            Add Stock
+            Stock Management
           </DialogTitle>
           <DialogDescription>
-            Add stock for <span className="font-medium">{item.name}</span>
+            Add or reduce stock for <span className="font-medium">{item.name}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Operation Type Toggle */}
+          <div className="space-y-2">
+            <Label>Operation Type</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={operationType === "ADD" ? "default" : "outline"}
+                className={cn(
+                  "flex-1 gap-2",
+                  operationType === "ADD" && "bg-green-600 hover:bg-green-700"
+                )}
+                onClick={() => setOperationType("ADD")}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Add Stock
+              </Button>
+              <Button
+                type="button"
+                variant={operationType === "REDUCE" ? "default" : "outline"}
+                className={cn(
+                  "flex-1 gap-2",
+                  operationType === "REDUCE" && "bg-red-600 hover:bg-red-700"
+                )}
+                onClick={() => setOperationType("REDUCE")}
+              >
+                <TrendingDown className="w-4 h-4" />
+                Reduce Stock
+              </Button>
+            </div>
+          </div>
+
           {/* Current Stock Info */}
           <div className="bg-muted/50 p-3 rounded-md text-sm">
             <p className="text-muted-foreground">Current Stock</p>
@@ -135,7 +225,7 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
           {/* Quantity Input - Always in Packaging Units */}
           <div className="space-y-2">
             <Label htmlFor="quantity" className="flex items-center gap-1">
-              Quantity to Add ({packagingUnit})
+              Quantity to {operationType === "ADD" ? "Add" : "Reduce"} ({packagingUnit})
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -152,6 +242,7 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
                 id="quantity"
                 type="number"
                 min="0"
+                max={operationType === "REDUCE" ? item.stock : undefined}
                 step="any"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
@@ -165,10 +256,35 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
             {/* Conversion to base units */}
             {perPackaging > 1 && enteredQty > 0 && (
               <p className="text-xs text-muted-foreground">
-                = <span className="font-medium text-primary">{baseUnitsToAdd.toLocaleString()}</span> {baseUnit} ({quantity} × {perPackaging})
+                = <span className="font-medium text-primary">{baseUnitsToModify.toLocaleString()}</span> {baseUnit} ({quantity} × {perPackaging})
+              </p>
+            )}
+            {/* Warning if reducing more than available */}
+            {operationType === "REDUCE" && enteredQty > item.stock && (
+              <p className="text-xs text-red-500 font-medium">
+                Cannot reduce more than available stock ({item.stock} {packagingUnit})
               </p>
             )}
           </div>
+
+          {/* Reason Selection (for reductions only) */}
+          {operationType === "REDUCE" && (
+            <div className="space-y-2">
+              <Label htmlFor="reason">Reason for Reduction *</Label>
+              <Select value={reason} onValueChange={setReason}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {reductionReasons.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Warehouse Selection */}
           <div className="space-y-2">
@@ -194,22 +310,39 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g., Purchase order #123, Supplier name..."
+              placeholder={operationType === "ADD" 
+                ? "e.g., Purchase order #123, Supplier name..." 
+                : "Additional details about the stock reduction..."
+              }
               rows={2}
             />
           </div>
 
           {/* Summary */}
-          {enteredQty > 0 && (
-            <div className="bg-green-50 border border-green-200 p-3 rounded-md">
-              <p className="text-sm text-green-800">
-                <span className="font-medium">After adding:</span>{" "}
-                {(item.stock + enteredQty).toLocaleString()} {packagingUnit}
+          {enteredQty > 0 && enteredQty <= (operationType === "REDUCE" ? item.stock : Infinity) && (
+            <div className={cn(
+              "border p-3 rounded-md",
+              operationType === "ADD" 
+                ? "bg-green-50 border-green-200" 
+                : "bg-red-50 border-red-200"
+            )}>
+              <p className={cn(
+                "text-sm",
+                operationType === "ADD" ? "text-green-800" : "text-red-800"
+              )}>
+                <span className="font-medium">After {operationType === "ADD" ? "adding" : "reducing"}:</span>{" "}
+                {newStock.toLocaleString()} {packagingUnit}
                 {perPackaging > 1 && (
-                  <span className="text-green-600 ml-1">
-                    (= {((item.stock + enteredQty) * perPackaging).toLocaleString()} {baseUnit})
+                  <span className={operationType === "ADD" ? "text-green-600" : "text-red-600"}>
+                    {" "}(= {(newStock * perPackaging).toLocaleString()} {baseUnit})
                   </span>
                 )}
+              </p>
+              <p className={cn(
+                "text-xs mt-1",
+                operationType === "ADD" ? "text-green-600" : "text-red-600"
+              )}>
+                {operationType === "ADD" ? "+" : "-"}{enteredQty} {packagingUnit} from current {item.stock} {packagingUnit}
               </p>
             </div>
           )}
@@ -219,9 +352,32 @@ export function AddStockDialog({ item, godowns, trigger }: AddStockDialogProps) 
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !quantity || !warehouseId}>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={
+              isSubmitting || 
+              !quantity || 
+              !warehouseId || 
+              (operationType === "REDUCE" && (!reason || enteredQty > item.stock))
+            }
+            className={cn(
+              operationType === "ADD" 
+                ? "bg-green-600 hover:bg-green-700" 
+                : "bg-red-600 hover:bg-red-700"
+            )}
+          >
             {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Add Stock
+            {operationType === "ADD" ? (
+              <>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Stock
+              </>
+            ) : (
+              <>
+                <Minus className="w-4 h-4 mr-2" />
+                Reduce Stock
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

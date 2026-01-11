@@ -401,7 +401,7 @@ export function BarcodePDFDocument({
                               </View>
                               <View style={{ flexDirection: "row" }}>
                                 {showCarton && (
-                                  <Text style={styles.carton}>{item.perCartonQuantity}pcs/ctn</Text>
+                                  <Text style={styles.carton}>{item.perCartonQuantity}{item.unit || 'PCS'}/{item.packagingUnit || 'CTN'}</Text>
                                 )}
                               </View>
                             </View>

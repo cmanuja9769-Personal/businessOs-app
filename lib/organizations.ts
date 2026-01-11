@@ -41,17 +41,13 @@ export async function getCurrentOrganization(userId: string) {
     return null
   }
 
-  console.log("[organizations] getCurrentOrganization data:", JSON.stringify(data, null, 2))
-
   // Try multiple ways to extract the organization
   if ((data as any)?.app_organizations) {
-    console.log("[organizations] Found via nested app_organizations")
     return (data as any).app_organizations
   }
   
   // Fallback: if the nested select failed, use organization_id directly
   if ((data as any)?.organization_id) {
-    console.log("[organizations] Found via organization_id, fetching details...")
     const { data: orgData } = await supabase
       .from("app_organizations")
       .select("id, name, email, phone, gst_number, pan_number, address")

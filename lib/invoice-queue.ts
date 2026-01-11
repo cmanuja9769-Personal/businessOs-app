@@ -45,8 +45,6 @@ export async function enqueueJob(type: QueueJob["type"], data: Record<string, an
   // const redis = new Redis({ url: UPSTASH_REDIS_URL })
   // await redis.lpush('invoice-queue', JSON.stringify(job))
 
-  console.log(`[v0] Job enqueued: ${jobId} (${type})`)
-
   return jobId
 }
 
@@ -80,7 +78,6 @@ export async function processQueueJobs() {
 
         job.status = "completed"
         job.completedAt = new Date()
-        console.log(`[v0] Job completed: ${jobId}`)
       } catch (error) {
         job.retries++
         if (job.retries < 3) {
@@ -89,7 +86,6 @@ export async function processQueueJobs() {
           job.status = "failed"
           job.error = String(error)
         }
-        console.error(`[v0] Job failed: ${jobId}`, error)
       }
     }
   }

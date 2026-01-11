@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { itemSchema, type ItemFormData } from "@/lib/schemas";
@@ -23,8 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Loader2, Package, Info } from "lucide-react";
-import { createItem, updateItem } from "@/app/items/actions";
+import { Plus, Loader2, Package, Info, Check, ChevronsUpDown, Search } from "lucide-react";
+import { createItem, updateItem, getItemCategories } from "@/app/items/actions";
 import { toast } from "sonner";
 import type { IItem } from "@/types";
 import { PACKAGING_UNITS, BASE_UNITS } from "@/types";
@@ -34,6 +34,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { searchHSNCodes, type HSNCode } from "@/lib/hsn-codes";
 
 type GodownOption = {
   id: string;
@@ -107,6 +122,16 @@ interface ItemFormProps {
 export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Category combobox state
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [categorySearch, setCategorySearch] = useState("");
+  
+  // HSN code combobox state
+  const [hsnOpen, setHsnOpen] = useState(false);
+  const [hsnSearch, setHsnSearch] = useState("");
+  const [hsnSuggestions, setHsnSuggestions] = useState<HSNCode[]>([]);
 
   const {
     register,
@@ -178,6 +203,28 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const packagingUnit = watch("packagingUnit");
   const perCartonQuantity = watch("perCartonQuantity");
   const enteredStock = watch("stock");
+  const selectedCategory = watch("category");
+  const selectedHsnCode = watch("hsnCode");
+
+  // Load categories from database when dialog opens
+  useEffect(() => {
+    if (open) {
+      getItemCategories().then(setCategories).catch(() => setCategories([]));
+    }
+  }, [open]);
+
+  // Update HSN suggestions when search changes
+  useEffect(() => {
+    const results = searchHSNCodes(hsnSearch, 15);
+    setHsnSuggestions(results);
+  }, [hsnSearch]);
+
+  // Filter categories based on search
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch) return categories;
+    const search = categorySearch.toLowerCase();
+    return categories.filter(cat => cat.toLowerCase().includes(search));
+  }, [categories, categorySearch]);
 
   // Auto-generate item code when name changes (only for new items)
   useEffect(() => {
@@ -297,12 +344,84 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                 <Label htmlFor="category" className="text-sm font-medium">
                   Category
                 </Label>
-                <Input
-                  id="category"
-                  {...register("category")}
-                  placeholder="e.g., Electronics, Grocery"
-                  className="h-9"
-                />
+                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={categoryOpen}
+                      className="w-full h-9 justify-between font-normal"
+                    >
+                      {selectedCategory || "Select or type category..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[250px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Search or add category..." 
+                        value={categorySearch}
+                        onValueChange={setCategorySearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {categorySearch ? (
+                            <div className="py-2 px-2">
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-sm"
+                                onClick={() => {
+                                  setValue("category", categorySearch);
+                                  setCategoryOpen(false);
+                                  setCategorySearch("");
+                                }}
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add "{categorySearch}"
+                              </Button>
+                            </div>
+                          ) : (
+                            "No categories found."
+                          )}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {filteredCategories.map((cat) => (
+                            <CommandItem
+                              key={cat}
+                              value={cat}
+                              onSelect={() => {
+                                setValue("category", cat);
+                                setCategoryOpen(false);
+                                setCategorySearch("");
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedCategory === cat ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {cat}
+                            </CommandItem>
+                          ))}
+                          {categorySearch && !filteredCategories.includes(categorySearch) && (
+                            <CommandItem
+                              value={categorySearch}
+                              onSelect={() => {
+                                setValue("category", categorySearch);
+                                setCategoryOpen(false);
+                                setCategorySearch("");
+                              }}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add "{categorySearch}"
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.category && (
                   <p className="text-xs text-destructive">
                     {errors.category.message}
@@ -314,12 +433,87 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                 <Label htmlFor="hsnCode" className="text-sm font-medium">
                   HSN Code
                 </Label>
-                <Input
-                  id="hsnCode"
-                  {...register("hsnCode")}
-                  placeholder="4-8 digits"
-                  className="h-9"
-                />
+                <Popover open={hsnOpen} onOpenChange={setHsnOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={hsnOpen}
+                      className="w-full h-9 justify-between font-normal"
+                    >
+                      {selectedHsnCode || "Search HSN codes..."}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[350px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Search by code or description..." 
+                        value={hsnSearch}
+                        onValueChange={setHsnSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {hsnSearch ? (
+                            <div className="py-2 px-2">
+                              <Button
+                                variant="ghost"
+                                className="w-full justify-start text-sm"
+                                onClick={() => {
+                                  setValue("hsnCode", hsnSearch);
+                                  setHsnOpen(false);
+                                  setHsnSearch("");
+                                }}
+                              >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Use "{hsnSearch}"
+                              </Button>
+                            </div>
+                          ) : (
+                            "Type to search HSN codes..."
+                          )}
+                        </CommandEmpty>
+                        <CommandGroup heading="Suggested HSN Codes">
+                          {hsnSuggestions.map((hsn) => (
+                            <CommandItem
+                              key={hsn.code}
+                              value={hsn.code}
+                              onSelect={() => {
+                                setValue("hsnCode", hsn.code);
+                                // Auto-fill GST rate if available
+                                if (hsn.gstRate !== undefined) {
+                                  setValue("gstRate", hsn.gstRate);
+                                  setValue("taxRate", hsn.gstRate);
+                                }
+                                setHsnOpen(false);
+                                setHsnSearch("");
+                              }}
+                              className="flex flex-col items-start py-2"
+                            >
+                              <div className="flex items-center w-full">
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4 shrink-0",
+                                    selectedHsnCode === hsn.code ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <span className="font-mono font-medium">{hsn.code}</span>
+                                {hsn.gstRate !== undefined && (
+                                  <span className="ml-auto text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    {hsn.gstRate}% GST
+                                  </span>
+                                )}
+                              </div>
+                              <span className="ml-6 text-xs text-muted-foreground line-clamp-1">
+                                {hsn.description}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.hsnCode && (
                   <p className="text-xs text-destructive">
                     {errors.hsnCode.message}

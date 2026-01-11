@@ -69,21 +69,33 @@ export async function approveAdjustment(adjustmentId: string, userId: string) {
     return { success: false, error: updateError.message }
   }
 
-  // Log stock movement
-  const quantityChange = adjustment.adjustment_type === "increase" ? adjustment.quantity : -adjustment.quantity
+  // Get current stock for item
+  const { data: item } = await supabase
+    .from("items")
+    .select("current_stock, unit")
+    .eq("id", adjustment.item_id)
+    .single()
 
-  await supabase.from("stock_movements").insert({
+  const quantityBefore = item?.current_stock || 0
+  const quantityChange = adjustment.adjustment_type === "increase" ? adjustment.quantity : -adjustment.quantity
+  const quantityAfter = quantityBefore + quantityChange
+
+  // Log to stock_ledger (the correct table)
+  await supabase.from("stock_ledger").insert({
     organization_id: adjustment.organization_id,
     item_id: adjustment.item_id,
-    batch_id: adjustment.batch_id || null,
-    movement_type: "adjustment",
+    warehouse_id: null,
+    transaction_type: "ADJUSTMENT",
+    quantity_before: quantityBefore,
+    quantity_change: quantityChange,
+    quantity_after: quantityAfter,
+    entry_quantity: adjustment.quantity,
+    entry_unit: item?.unit || "PCS",
+    base_quantity: adjustment.quantity,
     reference_type: "adjustment",
     reference_id: adjustmentId,
     reference_no: adjustment.adjustment_no,
-    quantity_before: 0, // Will be calculated by trigger
-    quantity_change: quantityChange,
-    quantity_after: 0,
-    notes: adjustment.notes,
+    notes: `${adjustment.adjustment_type === "increase" ? "Stock Increase" : "Stock Decrease"} - ${adjustment.reason}${adjustment.notes ? ": " + adjustment.notes : ""}`,
     created_by: userId,
   })
 

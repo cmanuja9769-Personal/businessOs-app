@@ -79,7 +79,7 @@ export async function generateQRCode(invoiceData: EInvoiceData, irn: string): Pr
  */
 export async function cancelIRN(irn: string, reason: string): Promise<boolean> {
   // TODO: Integrate with e-invoice cancellation API
-  console.log(`Cancelling IRN: ${irn}, Reason: ${reason}`)
+  // Implementation pending for IRN cancellation
   return true
 }
 

@@ -48,7 +48,16 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
     const { q, unit, category, godown, stock, sort, dir } = filters
     return items
       .filter((item) => {
-        if (q && !item.name.toLowerCase().includes(q.toLowerCase())) return false
+        if (q) {
+          // Split search query into keywords and check if ALL keywords are present
+          const keywords = q.toLowerCase().split(/\s+/).filter(Boolean)
+          const itemNameLower = item.name.toLowerCase()
+          const hsnCodeLower = (item.hsnCode || "").toLowerCase()
+          // Check if every keyword is found in either item name or HSN code
+          if (!keywords.every(keyword => itemNameLower.includes(keyword) || hsnCodeLower.includes(keyword))) {
+            return false
+          }
+        }
         if (unit && unit !== "all" && item.unit !== unit) return false
         if (category && category !== "all" && item.category !== category) return false
         return true
@@ -148,6 +157,7 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                     <TableHead className="min-w-[90px] text-right">Purchase Price</TableHead>
                     <TableHead className="min-w-[80px] text-right">Sale Price</TableHead>
                     <TableHead className="min-w-[60px] text-right">Stock</TableHead>
+                    <TableHead className="min-w-[80px]">Godown</TableHead>
                     <TableHead className="min-w-[70px] text-right">GST Rate</TableHead>
                     <TableHead className="min-w-[80px]">Status</TableHead>
                     <TableHead className="min-w-[120px] text-right">Actions</TableHead>
@@ -209,6 +219,9 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-xs" title={item.godownName || "No Godown"}>
+                          {item.godownName || "-"}
                         </TableCell>
                         <TableCell className="text-right text-xs sm:text-sm" title={`${item.gstRate}%`}>
                           {item.gstRate}%

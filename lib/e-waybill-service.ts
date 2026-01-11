@@ -115,11 +115,7 @@ export class EWayBillService {
    */
   async generateEWayBill(invoiceId: string): Promise<EWayBillResponse> {
     try {
-      console.log('📡 [EWayBillService] Generating E-Way Bill for invoice:', invoiceId)
-      
       const url = `${this.baseUrl}/generate`
-      console.log('🌐 [EWayBillService] POST request to:', url)
-      console.log('📦 [EWayBillService] Request body:', { invoiceId })
       
       const response = await fetch(url, {
         method: "POST",
@@ -128,19 +124,14 @@ export class EWayBillService {
         credentials: 'include', // Include cookies for backend auth
       })
 
-      console.log('📥 [EWayBillService] Response status:', response.status)
-      
       if (!response.ok) {
         const error = await response.json()
-        console.error('❌ [EWayBillService] API error:', error)
         throw new Error(error.message || "Failed to generate E-Way Bill")
       }
 
       const data = await response.json()
-      console.log('✅ [EWayBillService] Success response:', data)
       return data
     } catch (error) {
-      console.error("[EWayBillService] Failed to generate E-Way Bill:", error)
       throw error
     }
   }

@@ -1,133 +1,27 @@
+/**
+ * Hindi Translation/Transliteration Module
+ * 
+ * Uses the sophisticated transliteration engine for phonetically accurate
+ * English to Hindi (Devanagari) conversion.
+ * 
+ * @see lib/transliteration-engine.ts for the core transliteration logic
+ */
+
+import { 
+  transliterateToHindi, 
+  transliterateToHindiAsync,
+  useTransliterate,
+  applyHindiTransliteration 
+} from './transliteration-engine'
+
 const TRANSLATE_CACHE_NAMESPACE = "translate:hi"
-const TRANSLATE_CACHE_VERSION = 4 // Bumped version to clear old cache
+const TRANSLATE_CACHE_VERSION = 5 // Bumped version to clear old cache after engine upgrade
 const TRANSLATE_CACHE_VERSION_KEY = `${TRANSLATE_CACHE_NAMESPACE}:__version`
 
 let hasInitializedTranslateCache = false
 
-// Transliteration map for English to Hindi script
-const TRANSLITERATION_MAP: Record<string, string> = {
-  // Consonants
-  "k": "क", "kh": "ख", "g": "ग", "gh": "घ", "ng": "ङ",
-  "ch": "च", "chh": "छ", "j": "ज", "jh": "झ", "ny": "ञ",
-  "t": "ट", "th": "ठ", "d": "ड", "dh": "ढ", "n": "ण",
-  "p": "प", "ph": "फ", "b": "ब", "bh": "भ", "m": "म",
-  "y": "य", "r": "र", "l": "ल", "w": "व", "sh": "श", "s": "स", "h": "ह",
-  
-  // Vowels (standalone)
-  "a": "आ", "e": "ए", "i": "इ", "o": "ओ", "u": "उ",
-  "ai": "ऐ", "au": "औ",
-  
-  // With vowel modifiers
-  "ka": "का", "ke": "के", "ki": "की", "ko": "को", "ku": "कु",
-  "kha": "खा", "khe": "खे", "khi": "खी", "kho": "खो", "khu": "खु",
-  "ga": "गा", "ge": "गे", "gi": "गी", "go": "गो", "gu": "गु",
-  "pa": "पा", "pe": "पे", "pi": "पी", "po": "पो", "pu": "पु",
-  "ra": "रा", "re": "रे", "ri": "री", "ro": "रो", "ru": "रु",
-  "ta": "टा", "te": "टे", "ti": "टी", "to": "टो", "tu": "टु",
-  "la": "ला", "le": "ले", "li": "ली", "lo": "लो", "lu": "लु",
-  "sa": "सा", "se": "से", "si": "सी", "so": "सो", "su": "सु",
-  "ha": "हा", "he": "हे", "hi": "ही", "ho": "हो", "hu": "हु",
-  "ba": "बा", "be": "बे", "bi": "बी", "bo": "बो", "bu": "बु",
-  "da": "डा", "de": "डे", "di": "डी", "do": "डो", "du": "डु",
-  "ma": "मा", "me": "मे", "mi": "मी", "mo": "मो", "mu": "मु",
-  "va": "वा", "ve": "वे", "vi": "वी", "vo": "वो", "vu": "वु",
-  "fa": "फा", "fe": "फे", "fi": "फी", "fo": "फो", "fu": "फु",
-  
-  // Common word patterns
-  "flower": "फ्लावर",
-  "pot": "पॉट",
-  "pots": "पॉट्स",
-  "small": "स्मॉल",
-  "large": "लार्ज",
-  "regular": "रेगुलर",
-  "pcs": "पीस",
-  "pc": "पीस",
-  "piece": "पीस",
-  "pieces": "पीस",
-  "qty": "क्यूटी",
-  "quantity": "क्वांटिटी",
-}
-
-// Simple transliteration function
-function transliterateWord(word: string): string {
-  const lowerWord = word.toLowerCase()
-  
-  // Check if exact match exists in transliteration map
-  if (TRANSLITERATION_MAP[lowerWord]) {
-    return TRANSLITERATION_MAP[lowerWord]
-  }
-  
-  // For longer words, try to build from syllables
-  let result = ""
-  let i = 0
-  
-  while (i < lowerWord.length) {
-    let matched = false
-    
-    // Try 3-character combinations first
-    if (i + 3 <= lowerWord.length) {
-      const chunk3 = lowerWord.slice(i, i + 3)
-      if (TRANSLITERATION_MAP[chunk3]) {
-        result += TRANSLITERATION_MAP[chunk3]
-        i += 3
-        matched = true
-      }
-    }
-    
-    // Try 2-character combinations
-    if (!matched && i + 2 <= lowerWord.length) {
-      const chunk2 = lowerWord.slice(i, i + 2)
-      if (TRANSLITERATION_MAP[chunk2]) {
-        result += TRANSLITERATION_MAP[chunk2]
-        i += 2
-        matched = true
-      }
-    }
-    
-    // Try single character
-    if (!matched && i + 1 <= lowerWord.length) {
-      const chunk1 = lowerWord.slice(i, i + 1)
-      if (TRANSLITERATION_MAP[chunk1]) {
-        result += TRANSLITERATION_MAP[chunk1]
-        i += 1
-        matched = true
-      } else {
-        // Keep character as-is if not in map
-        result += chunk1
-        i += 1
-      }
-    }
-  }
-  
-  return result
-}
-
-function applyHindiTransliteration(source: string): string {
-  const trimmedSource = (source || "").trim()
-  if (!trimmedSource) return ""
-  
-  // Split by spaces and numbers/special chars to preserve format
-  const parts: string[] = []
-  let currentWord = ""
-  
-  for (const char of trimmedSource) {
-    if (/[a-zA-Z]/.test(char)) {
-      currentWord += char
-    } else {
-      if (currentWord) {
-        parts.push(transliterateWord(currentWord))
-        currentWord = ""
-      }
-      parts.push(char)
-    }
-  }
-  
-  if (currentWord) {
-    parts.push(transliterateWord(currentWord))
-  }
-  
-  return parts.join("")
-}
+// Re-export the hook for convenience
+export { useTransliterate }
 
 function initTranslateCache() {
   if (hasInitializedTranslateCache) return
@@ -153,12 +47,25 @@ function initTranslateCache() {
   }
 }
 
+/**
+ * Translate/Transliterate text to Hindi with caching
+ * 
+ * @param text - English text to convert
+ * @returns Promise resolving to Hindi transliteration
+ * 
+ * @example
+ * const hindi = await translateToHindi("Grand Horse")
+ * // Returns "ग्रैंड हॉर्स"
+ */
 export async function translateToHindi(text: string): Promise<string | undefined> {
   const trimmed = (text || "").trim()
   if (!trimmed) return undefined
 
   // Only run in the browser
-  if (typeof window === "undefined") return undefined
+  if (typeof window === "undefined") {
+    // Server-side: use direct transliteration without caching
+    return transliterateToHindi(trimmed)
+  }
 
   initTranslateCache()
 
@@ -173,9 +80,8 @@ export async function translateToHindi(text: string): Promise<string | undefined
     // ignore cache failures
   }
 
-  // Use transliteration instead of machine translation
-  // This preserves English words in Hindi script format
-  const transliterated = applyHindiTransliteration(trimmed)
+  // Use the new sophisticated transliteration engine
+  const transliterated = transliterateToHindi(trimmed)
   
   if (!transliterated) return undefined
 
@@ -187,3 +93,6 @@ export async function translateToHindi(text: string): Promise<string | undefined
 
   return transliterated
 }
+
+// Export synchronous version for non-async contexts
+export { transliterateToHindi, applyHindiTransliteration }

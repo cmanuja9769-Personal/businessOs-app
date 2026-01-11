@@ -1,531 +1,375 @@
-import { getInvoices } from "@/app/invoices/actions"
-import { getPurchases } from "@/app/purchases/actions"
-import { getItems } from "@/app/items/actions"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+"use client"
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, DollarSign, ShoppingCart, Package, FileText, AlertTriangle } from "lucide-react"
-import { format, startOfMonth, endOfMonth, startOfYear } from "date-fns"
+import Link from "next/link"
+import {
+  BarChart3,
+  Receipt,
+  UserCheck,
+  BoxesIcon,
+  FileBarChart,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  ArrowRight,
+  FileText,
+  ShoppingCart,
+  RotateCcw,
+  CreditCard,
+  Users,
+  AlertTriangle,
+  IndianRupee,
+  Package,
+  ClipboardList,
+  Calculator,
+  BookOpen,
+  PiggyBank,
+  Scale,
+} from "lucide-react"
 
-export default async function ReportsPage() {
-  const invoices = await getInvoices()
-  const purchases = await getPurchases()
-  const items = await getItems()
+// Report Groups Configuration
+const reportGroups = [
+  {
+    id: "transactions",
+    title: "Transaction Reports",
+    description: "Sales, purchases, returns and expenses",
+    icon: Receipt,
+    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    borderColor: "border-blue-500/20 hover:border-blue-500/40",
+    reports: [
+      {
+        name: "Sales Report",
+        href: "/reports/sales",
+        description: "Date-wise sales with payment status filters",
+        icon: TrendingUp,
+        badge: "Popular",
+      },
+      {
+        name: "Purchase Report",
+        href: "/reports/purchases",
+        description: "Vendor bills and purchase orders",
+        icon: ShoppingCart,
+      },
+      {
+        name: "Returns Report",
+        href: "/reports/returns",
+        description: "Credit notes & debit notes summary",
+        icon: RotateCcw,
+      },
+      {
+        name: "Expense Report",
+        href: "/reports/expenses",
+        description: "Categorized business expenses",
+        icon: CreditCard,
+      },
+    ],
+  },
+  {
+    id: "party",
+    title: "Party/Customer Reports",
+    description: "Customer & supplier relationship insights",
+    icon: UserCheck,
+    color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    borderColor: "border-purple-500/20 hover:border-purple-500/40",
+    reports: [
+      {
+        name: "Party Ledger",
+        href: "/reports/party-ledger",
+        description: "Detailed debit/credit history per party",
+        icon: BookOpen,
+        badge: "Essential",
+      },
+      {
+        name: "Outstanding Report",
+        href: "/reports/outstanding",
+        description: "Receivables & payables with aging analysis",
+        icon: AlertTriangle,
+        badge: "Popular",
+      },
+      {
+        name: "Party-wise Profit",
+        href: "/reports/party-profit",
+        description: "Profit analysis by customer/supplier",
+        icon: IndianRupee,
+      },
+    ],
+  },
+  {
+    id: "inventory",
+    title: "Inventory/Stock Reports",
+    description: "Stock levels, movement and valuation",
+    icon: BoxesIcon,
+    color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    borderColor: "border-orange-500/20 hover:border-orange-500/40",
+    reports: [
+      {
+        name: "Stock Summary",
+        href: "/reports/stock-summary",
+        description: "Current stock quantity and value overview",
+        icon: Package,
+        badge: "Essential",
+      },
+      {
+        name: "Stock Detail Report",
+        href: "/reports/stock-detail",
+        description: "Opening + Inward - Outward = Closing",
+        icon: ClipboardList,
+      },
+      {
+        name: "Low Stock Alert",
+        href: "/reports/low-stock",
+        description: "Items below reorder level",
+        icon: TrendingDown,
+        badge: "Alert",
+      },
+      {
+        name: "Item-wise P&L",
+        href: "/reports/item-profit",
+        description: "Margin analysis per product",
+        icon: Calculator,
+      },
+    ],
+  },
+  {
+    id: "gst",
+    title: "GST/Statutory Reports",
+    description: "Tax compliance and filing reports",
+    icon: FileBarChart,
+    color: "bg-green-500/10 text-green-600 dark:text-green-400",
+    borderColor: "border-green-500/20 hover:border-green-500/40",
+    reports: [
+      {
+        name: "GSTR-1 (Sales)",
+        href: "/reports/gstr1",
+        description: "Sales register for GST filing",
+        icon: FileText,
+        badge: "GST",
+      },
+      {
+        name: "GSTR-2 (Purchase)",
+        href: "/reports/gstr2",
+        description: "Purchase register format",
+        icon: FileText,
+      },
+      {
+        name: "GSTR-3B Summary",
+        href: "/reports/gstr3b",
+        description: "Monthly tax summary report",
+        icon: FileBarChart,
+        badge: "GST",
+      },
+    ],
+  },
+  {
+    id: "financial",
+    title: "Financial Health",
+    description: "Cash flow and profitability analysis",
+    icon: Wallet,
+    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    borderColor: "border-emerald-500/20 hover:border-emerald-500/40",
+    reports: [
+      {
+        name: "Day Book",
+        href: "/reports/day-book",
+        description: "Daily cash/bank movement",
+        icon: BookOpen,
+      },
+      {
+        name: "Cash Flow",
+        href: "/reports/cash-flow",
+        description: "Inflow vs outflow analysis",
+        icon: PiggyBank,
+      },
+      {
+        name: "Profit & Loss",
+        href: "/reports/profit-loss",
+        description: "Net income calculation",
+        icon: Scale,
+        badge: "Key",
+      },
+    ],
+  },
+]
 
-  // Date filters
-  const now = new Date()
-  const monthStart = startOfMonth(now)
-  const monthEnd = endOfMonth(now)
-  const yearStart = startOfYear(now)
+function getBadgeVariant(badge: string): "default" | "secondary" | "destructive" | "outline" {
+  switch (badge) {
+    case "Popular":
+      return "default"
+    case "Essential":
+      return "secondary"
+    case "Alert":
+      return "destructive"
+    case "GST":
+    case "Key":
+      return "outline"
+    default:
+      return "secondary"
+  }
+}
 
-  // Sales Analytics
-  const thisMonthInvoices = invoices.filter((inv) => {
-    const invDate = new Date(inv.invoiceDate)
-    return invDate >= monthStart && invDate <= monthEnd
-  })
-
-  const thisYearInvoices = invoices.filter((inv) => {
-    const invDate = new Date(inv.invoiceDate)
-    return invDate >= yearStart
-  })
-
-  const totalSales = invoices.reduce((sum, inv) => sum + inv.total, 0)
-  const monthSales = thisMonthInvoices.reduce((sum, inv) => sum + inv.total, 0)
-  const yearSales = thisYearInvoices.reduce((sum, inv) => sum + inv.total, 0)
-
-  const totalCollected = invoices.reduce((sum, inv) => sum + inv.paidAmount, 0)
-  const totalOutstanding = invoices.reduce((sum, inv) => sum + inv.balance, 0)
-
-  // Purchase Analytics
-  const totalPurchases = purchases.reduce((sum, pur) => sum + pur.total, 0)
-  const totalPurchasePaid = purchases.reduce((sum, pur) => sum + pur.paidAmount, 0)
-  const totalPurchaseOutstanding = purchases.reduce((sum, pur) => sum + pur.balance, 0)
-
-  // GST Analytics
-  const totalCGST = invoices.reduce((sum, inv) => sum + inv.cgst, 0)
-  const totalSGST = invoices.reduce((sum, inv) => sum + inv.sgst, 0)
-  const totalIGST = invoices.reduce((sum, inv) => sum + inv.igst, 0)
-  const totalGST = totalCGST + totalSGST + totalIGST
-
-  // Stock Analytics
-  const lowStockItems = items.filter((item) => item.stock <= item.minStock)
-  const outOfStockItems = items.filter((item) => item.stock === 0)
-  const totalStockValue = items.reduce((sum, item) => sum + item.stock * item.purchasePrice, 0)
-
-  // Top performing items by sales quantity
-  const itemSalesMap = new Map<string, { item: any; quantity: number; revenue: number }>()
-
-  invoices.forEach((invoice) => {
-    invoice.items.forEach((invItem) => {
-      const existing = itemSalesMap.get(invItem.itemId) || {
-        item: items.find((i) => i.id === invItem.itemId),
-        quantity: 0,
-        revenue: 0,
-      }
-      existing.quantity += invItem.quantity
-      existing.revenue += invItem.amount
-      itemSalesMap.set(invItem.itemId, existing)
-    })
-  })
-
-  const topItems = Array.from(itemSalesMap.values())
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 10)
-
+export default function ReportsDashboard() {
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">Track business performance and insights</p>
+    <div className="p-4 sm:p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-7 w-7 text-primary" />
+            Reports Dashboard
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+            Access all business reports and analytics in one place
+          </p>
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-            <TrendingUp className="w-4 h-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{totalSales.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{invoices.length} invoices</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Purchases</CardTitle>
-            <ShoppingCart className="w-4 h-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{totalPurchases.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{purchases.length} purchase orders</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Gross Profit</CardTitle>
-            <DollarSign className="w-4 h-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{(totalSales - totalPurchases).toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {(((totalSales - totalPurchases) / totalSales) * 100).toFixed(1)}% margin
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Stock Value</CardTitle>
-            <Package className="w-4 h-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{totalStockValue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{items.length} items</p>
-          </CardContent>
-        </Card>
+      {/* Quick Stats Row */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+        <QuickStatCard
+          title="Total Reports"
+          value={reportGroups.reduce((acc, g) => acc + g.reports.length, 0).toString()}
+          description="Available reports"
+          icon={FileText}
+        />
+        <QuickStatCard
+          title="Transaction"
+          value={reportGroups.find(g => g.id === "transactions")?.reports.length.toString() || "0"}
+          description="Sales & purchase"
+          icon={Receipt}
+        />
+        <QuickStatCard
+          title="Party/CRM"
+          value={reportGroups.find(g => g.id === "party")?.reports.length.toString() || "0"}
+          description="Customer insights"
+          icon={Users}
+        />
+        <QuickStatCard
+          title="Inventory"
+          value={reportGroups.find(g => g.id === "inventory")?.reports.length.toString() || "0"}
+          description="Stock reports"
+          icon={Package}
+        />
+        <QuickStatCard
+          title="Financial"
+          value={(
+            (reportGroups.find(g => g.id === "gst")?.reports.length || 0) +
+            (reportGroups.find(g => g.id === "financial")?.reports.length || 0)
+          ).toString()}
+          description="GST & finance"
+          icon={Wallet}
+        />
       </div>
 
-      {/* Tabs for Different Reports */}
-      <Tabs defaultValue="sales" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="sales">Sales Report</TabsTrigger>
-          <TabsTrigger value="purchases">Purchase Report</TabsTrigger>
-          <TabsTrigger value="gst">GST Report</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory Report</TabsTrigger>
-        </TabsList>
-
-        {/* Sales Report */}
-        <TabsContent value="sales" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">This Month</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{monthSales.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">{thisMonthInvoices.length} invoices</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">This Year</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{yearSales.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">{thisYearInvoices.length} invoices</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Outstanding</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">₹{totalOutstanding.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {invoices.filter((i) => i.status !== "paid").length} unpaid
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Top Performing Items
-              </CardTitle>
+      {/* Report Groups */}
+      <div className="space-y-6">
+        {reportGroups.map((group) => (
+          <Card key={group.id} className={`border-2 ${group.borderColor} transition-colors`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${group.color}`}>
+                  <group.icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">{group.title}</CardTitle>
+                  <CardDescription>{group.description}</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>Quantity Sold</TableHead>
-                    <TableHead className="text-right">Total Revenue</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        No sales data available
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    topItems.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{item.item?.name || "Unknown Item"}</TableCell>
-                        <TableCell>{item.quantity} units</TableCell>
-                        <TableCell className="text-right font-semibold">₹{item.revenue.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Invoices</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice No</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.slice(0, 10).map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell className="font-mono">{invoice.invoiceNo}</TableCell>
-                      <TableCell>{invoice.customerName}</TableCell>
-                      <TableCell>{format(new Date(invoice.invoiceDate), "dd MMM yyyy")}</TableCell>
-                      <TableCell className="font-semibold">₹{invoice.total.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            invoice.status === "paid"
-                              ? "bg-green-500/10 text-green-700"
-                              : invoice.status === "partial"
-                                ? "bg-yellow-500/10 text-yellow-700"
-                                : "bg-red-500/10 text-red-700"
-                          }
-                        >
-                          {invoice.status}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {group.reports.map((report) => (
+                  <Link
+                    key={report.href}
+                    href={report.href}
+                    className="group flex flex-col p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className={`p-1.5 rounded-md ${group.color}`}>
+                        <report.icon className="h-4 w-4" />
+                      </div>
+                      {report.badge && (
+                        <Badge variant={getBadgeVariant(report.badge)} className="text-[10px] px-1.5 py-0">
+                          {report.badge}
                         </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      )}
+                    </div>
+                    <h3 className="font-medium text-sm group-hover:text-primary transition-colors">
+                      {report.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {report.description}
+                    </p>
+                    <div className="mt-auto pt-3 flex items-center text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span>View Report</span>
+                      <ArrowRight className="h-3 w-3 ml-1" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        ))}
+      </div>
 
-        {/* Purchase Report */}
-        <TabsContent value="purchases" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Total Purchases</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{totalPurchases.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">{purchases.length} orders</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Amount Paid</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">₹{totalPurchasePaid.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {((totalPurchasePaid / totalPurchases) * 100).toFixed(1)}% paid
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Outstanding</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">₹{totalPurchaseOutstanding.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {purchases.filter((p) => p.status !== "paid").length} pending
-                </p>
-              </CardContent>
-            </Card>
+      {/* Quick Access Footer */}
+      <Card className="bg-muted/50">
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="font-semibold">Need a custom report?</h3>
+              <p className="text-sm text-muted-foreground">
+                Contact support for specialized reporting requirements
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link
+                href="/reports/stock-summary"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <Package className="h-4 w-4" />
+                Stock Summary
+              </Link>
+              <Link
+                href="/reports/outstanding"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border bg-background text-sm font-medium hover:bg-accent transition-colors"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Outstanding
+              </Link>
+            </div>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Purchase Orders</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>PO Number</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {purchases.slice(0, 10).map((purchase) => (
-                    <TableRow key={purchase.id}>
-                      <TableCell className="font-mono">{purchase.purchaseNo}</TableCell>
-                      <TableCell>{purchase.supplierName}</TableCell>
-                      <TableCell>{format(new Date(purchase.date), "dd MMM yyyy")}</TableCell>
-                      <TableCell className="font-semibold">₹{purchase.total.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            purchase.status === "paid"
-                              ? "bg-green-500/10 text-green-700"
-                              : purchase.status === "partial"
-                                ? "bg-yellow-500/10 text-yellow-700"
-                                : "bg-red-500/10 text-red-700"
-                          }
-                        >
-                          {purchase.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* GST Report */}
-        <TabsContent value="gst" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">CGST Collected</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{totalCGST.toFixed(2)}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">SGST Collected</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{totalSGST.toFixed(2)}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">IGST Collected</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{totalIGST.toFixed(2)}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Total GST</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-primary">₹{totalGST.toFixed(2)}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>GST Summary by Invoice</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice No</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Taxable Value</TableHead>
-                    <TableHead>CGST</TableHead>
-                    <TableHead>SGST</TableHead>
-                    <TableHead>IGST</TableHead>
-                    <TableHead>Total GST</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices
-                    .filter((inv) => inv.gstEnabled)
-                    .slice(0, 10)
-                    .map((invoice) => (
-                      <TableRow key={invoice.id}>
-                        <TableCell className="font-mono">{invoice.invoiceNo}</TableCell>
-                        <TableCell>{invoice.customerName}</TableCell>
-                        <TableCell>₹{invoice.subtotal.toFixed(2)}</TableCell>
-                        <TableCell>₹{invoice.cgst.toFixed(2)}</TableCell>
-                        <TableCell>₹{invoice.sgst.toFixed(2)}</TableCell>
-                        <TableCell>₹{invoice.igst.toFixed(2)}</TableCell>
-                        <TableCell className="font-semibold">
-                          ₹{(invoice.cgst + invoice.sgst + invoice.igst).toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Inventory Report */}
-        <TabsContent value="inventory" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Total Items</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{items.length}</div>
-                <p className="text-xs text-muted-foreground">Active inventory items</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Low Stock Items</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{lowStockItems.length}</div>
-                <p className="text-xs text-muted-foreground">Below minimum stock</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Out of Stock</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{outOfStockItems.length}</div>
-                <p className="text-xs text-muted-foreground">Need restocking</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {lowStockItems.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  Low Stock Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Item Name</TableHead>
-                      <TableHead>Current Stock</TableHead>
-                      <TableHead>Min Stock</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {lowStockItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.stock}</TableCell>
-                        <TableCell>{item.minStock}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              item.stock === 0 ? "bg-red-500/10 text-red-700" : "bg-yellow-500/10 text-yellow-700"
-                            }
-                          >
-                            {item.stock === 0 ? "Out of Stock" : "Low Stock"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Stock Value by Category</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Purchase Price</TableHead>
-                    <TableHead className="text-right">Stock Value</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.slice(0, 15).map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>{item.category || "-"}</TableCell>
-                      <TableCell>{item.stock}</TableCell>
-                      <TableCell>₹{item.purchasePrice.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        ₹{(item.stock * item.purchasePrice).toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </div>
+  )
+}
+
+function QuickStatCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+}: {
+  title: string
+  value: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold">{value}</p>
+            <p className="text-[10px] text-muted-foreground">{description}</p>
+          </div>
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Icon className="h-5 w-5 text-primary" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

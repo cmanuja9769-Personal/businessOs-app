@@ -55,7 +55,13 @@ export const itemSchema = z
     taxRate: z.coerce.number().min(0).max(100, "Tax rate must be between 0-100").optional(), // Added tax rate
     cessRate: z.coerce.number().min(0).max(100, "Cess rate must be between 0-100").default(0),
     inclusiveOfTax: z.coerce.boolean().optional().default(false), // Added inclusive of tax flag
-    godownId: z.string().uuid().optional().nullable(),
+    godownId: z.preprocess(
+      (val) => {
+        if (!val || val === "" || val === "null" || val === "undefined") return null
+        return val
+      },
+      z.string().uuid().optional().nullable()
+    ),
   })
   .refine((data) => data.salePrice >= data.purchasePrice, {
     message: "Sale price should be greater than or equal to purchase price",

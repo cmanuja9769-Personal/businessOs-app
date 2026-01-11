@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GodownsManager } from "@/components/inventory/godowns-manager"
+import { StockAdjustmentForm } from "@/components/inventory/stock-adjustment-form"
 import { AlertCircle, Package, TrendingDown, Warehouse } from "lucide-react"
 
 export default function InventoryPage() {
@@ -15,18 +16,36 @@ export default function InventoryPage() {
     expiringBatches: 0,
     totalStockValue: 0,
   })
+  const [items, setItems] = useState<Array<{ id: string; name: string; current_stock: number }>>([])
+  const [adjustments, setAdjustments] = useState<any[]>([])
+
+  const fetchItems = async () => {
+    try {
+      const response = await fetch('/api/items?limit=1000')
+      if (response.ok) {
+        const data = await response.json()
+        setItems(data.items || [])
+      }
+    } catch (error) {
+      console.error('Error fetching items:', error)
+    }
+  }
+
+  const fetchAdjustments = async () => {
+    try {
+      const response = await fetch('/api/inventory/adjustments')
+      if (response.ok) {
+        const data = await response.json()
+        setAdjustments(data.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching adjustments:', error)
+    }
+  }
 
   useEffect(() => {
-    const initStats = async () => {
-      // Fetch from API
-      setStats({
-        totalItems: 0,
-        lowStockItems: 0,
-        expiringBatches: 0,
-        totalStockValue: 0,
-      })
-    }
-    initStats()
+    fetchItems()
+    fetchAdjustments()
   }, [])
 
   return (
@@ -119,12 +138,34 @@ export default function InventoryPage() {
 
         <TabsContent value="adjustments">
           <Card>
-            <CardHeader>
-              <CardTitle>Stock Adjustments</CardTitle>
-              <CardDescription>Create and approve stock adjustments</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Stock Adjustments</CardTitle>
+                <CardDescription>Increase or decrease stock with reasons</CardDescription>
+              </div>
+              <StockAdjustmentForm items={items} onSuccess={fetchAdjustments} />
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">Adjustment components will be added here</p>
+              {adjustments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No adjustments yet. Create your first adjustment above.</p>
+              ) : (
+                <div className="space-y-2">
+                  {adjustments.map((adj: any) => (
+                    <div key={adj.id} className="flex justify-between items-center p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{adj.items?.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {adj.adjustment_type === 'increase' ? '+' : '-'}{adj.quantity} - {adj.reason}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{new Date(adj.created_at).toLocaleString()}</p>
+                      </div>
+                      <span className={`text-sm font-medium ${adj.status === 'approved' ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {adj.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

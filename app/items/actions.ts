@@ -153,6 +153,7 @@ export async function getItems(): Promise<IItem[]> {
         .from("items")
         .select("*", { count: "exact" })
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })  // Secondary sort for deterministic pagination
         .range(offset, offset + pageSize - 1)
 
       if (itemsRes.error) {
@@ -238,7 +239,31 @@ export async function getItems(): Promise<IItem[]> {
       })) || []
     )
 
-    return mappedItems
+    // Deduplicate items by ID (in case of any data issues)
+    const seenIds = new Set<string>()
+    const duplicates: Array<{id: string, name: string}> = []
+    const uniqueItems = mappedItems.filter(item => {
+      if (seenIds.has(item.id)) {
+        duplicates.push({id: item.id, name: item.name})
+        return false
+      }
+      seenIds.add(item.id)
+      return true
+    })
+
+    // Log summary instead of each duplicate to reduce noise
+    if (duplicates.length > 0) {
+      console.warn(`[Items] Found ${duplicates.length} duplicate items in query results (filtered out)`)
+      // Only log first 3 examples to avoid spam
+      duplicates.slice(0, 3).forEach(dup => {
+        console.warn(`  - ${dup.id} (${dup.name})`)
+      })
+      if (duplicates.length > 3) {
+        console.warn(`  ... and ${duplicates.length - 3} more`)
+      }
+    }
+
+    return uniqueItems
   } catch (error) {
     return []
   }
@@ -331,6 +356,33 @@ export async function createItem(formData: FormData) {
 
   const organizationId = orgData.organization_id
   
+  // Get default warehouse - prefer "E" warehouse, fallback to first available
+  let defaultWarehouseId = validated.godownId
+  if (!defaultWarehouseId) {
+    // Try to find warehouse named "E" first
+    const { data: eWarehouse } = await supabase
+      .from("warehouses")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("name", "E")
+      .maybeSingle()
+    
+    if (eWarehouse?.id) {
+      defaultWarehouseId = eWarehouse.id
+    } else {
+      // Fallback to first available warehouse for this organization
+      const { data: firstWarehouse } = await supabase
+        .from("warehouses")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      
+      defaultWarehouseId = firstWarehouse?.id || null
+    }
+  }
+  
   // Generate a sequential numeric barcode if not provided
   let barcodeNo = validated.barcodeNo
   if (!barcodeNo) {
@@ -360,7 +412,7 @@ export async function createItem(formData: FormData) {
       min_stock: validated.minStock || 0,
       item_location: validated.itemLocation || null,
       per_carton_quantity: validated.perCartonQuantity || 1,
-      warehouse_id: validated.godownId || null,
+      warehouse_id: defaultWarehouseId,  // Use resolved default warehouse
       tax_rate: validated.taxRate || 0,
       inclusive_of_tax: validated.inclusiveOfTax || false,
     })
@@ -370,6 +422,25 @@ export async function createItem(formData: FormData) {
   if (error) {
     console.error("[v0] Error creating item:", error)
     return { success: false, error: error.message }
+  }
+
+  // CRITICAL FIX: Create warehouse stock record if initial stock > 0
+  // This ensures items.current_stock and item_warehouse_stock are in sync from creation
+  // Always create if we have stock and a valid warehouse (either user-selected or default)
+  if (newItem && validated.stock > 0 && defaultWarehouseId) {
+    const { error: warehouseStockError } = await supabase
+      .from("item_warehouse_stock")
+      .insert({
+        organization_id: organizationId,
+        item_id: newItem.id,
+        warehouse_id: defaultWarehouseId,
+        quantity: validated.stock,
+      })
+    
+    if (warehouseStockError) {
+      console.error("[Items] Warning: Failed to create warehouse stock record:", warehouseStockError)
+      // Don't fail the item creation, but log the error
+    }
   }
 
   revalidatePath("/items")
@@ -1433,18 +1504,11 @@ export async function modifyStockWithLedger(
     }
   }
 
-  // Recompute total stock from ALL warehouses (ensures consistency)
-  const { data: allWs, error: sumError } = await supabase
-    .from("item_warehouse_stock")
-    .select("quantity")
-    .eq("organization_id", item.organization_id)
-    .eq("item_id", itemId)
-
-  if (sumError) {
-    return { success: false, error: `Failed to calculate total stock: ${sumError.message}` }
-  }
-
-  const newTotalStock = (allWs || []).reduce((sum, row) => sum + (row.quantity || 0), 0)
+  // Calculate new total stock by adding the delta to current_stock
+  // DO NOT sum warehouse records - current_stock is the source of truth
+  // Warehouse records track per-warehouse distribution, not total
+  const currentStock = Number(item.current_stock) || 0
+  const newTotalStock = Math.max(0, currentStock + qtyChange)
   
   // Update item's current_stock (this is the source of truth for total)
   const { error: itemUpdateError } = await supabase
@@ -1484,9 +1548,9 @@ export async function modifyStockWithLedger(
     .insert(ledgerEntry)
     
   if (ledgerError) {
-    // Log error but don't fail the operation
-    // The stock update is more important than the audit trail
-    // In a production system, you might want to queue this for retry
+    console.error("[Stock Management] Failed to insert ledger entry:", ledgerError)
+    // Continue - stock update succeeded, but log the audit trail failure
+    // In production, you should queue this for retry or alert administrators
   }
 
   revalidatePath("/items")
@@ -1494,6 +1558,8 @@ export async function modifyStockWithLedger(
   
   return { 
     success: true, 
-    newStock: newTotalStock 
+    newStock: newTotalStock,
+    quantityBefore: warehouseQuantityBefore,
+    quantityAfter: warehouseQuantityAfter
   }
 }

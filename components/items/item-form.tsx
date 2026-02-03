@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogBody,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -133,6 +134,13 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const [hsnSearch, setHsnSearch] = useState("");
   const [hsnSuggestions, setHsnSuggestions] = useState<HSNCode[]>([]);
 
+  // Find default warehouse "E" or first available
+  const defaultGodownId = useMemo(() => {
+    if (!godowns || godowns.length === 0) return null;
+    const eWarehouse = godowns.find(g => g.name === "E");
+    return eWarehouse?.id || godowns[0]?.id || null;
+  }, [godowns]);
+
   const {
     register,
     handleSubmit,
@@ -191,7 +199,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           cessRate: 0,
           inclusiveOfTax: true,
           perCartonQuantity: 1,
-          godownId: null,
+          godownId: defaultGodownId,  // Default to "E" warehouse or first available
         },
   });
 
@@ -277,16 +285,17 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-7xl max-w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-4xl lg:max-w-6xl xl:max-w-7xl p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">
             {item ? "Edit Item" : "Add New Item"}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mt-6">
+        <DialogBody>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6 mt-4 sm:mt-6">
           {/* Basic Information */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="itemCode" className="text-sm font-medium">
                   Item Code / SKU
@@ -339,7 +348,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="category" className="text-sm font-medium">
                   Category
@@ -560,7 +569,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             </h3>
             
             {/* Base Unit Row */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="unit" className="text-sm font-medium">
                   Base Unit <span className="text-destructive">*</span>
@@ -667,7 +676,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             )}
 
             {/* Location Row */}
-            <div className="grid grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-2">
               <div className="space-y-1.5">
                 <Label htmlFor="alternateUnit" className="text-sm font-medium">
                   Alternate Unit
@@ -747,7 +756,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
               </span>
               Pricing
             </h3>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="space-y-2">
                 <Label htmlFor="purchasePrice">
                   Purchase Price <span className="text-destructive">*</span>
@@ -817,7 +826,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="space-y-2">
                 <Label htmlFor="mrp">MRP</Label>
                 <Input
@@ -883,7 +892,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             </h3>
             
             {/* Opening Stock - Always in Packaging Units */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="stock" className="text-sm font-medium">
                   Opening/Current Stock
@@ -959,7 +968,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
               </span>
               Tax Configuration
             </h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="gstRate" className="text-sm font-medium">
                   GST Rate (%) <span className="text-destructive">*</span>
@@ -1053,6 +1062,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             </Button>
           </div>
         </form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

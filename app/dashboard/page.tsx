@@ -286,7 +286,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6" suppressHydrationWarning>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -300,6 +300,7 @@ export default function DashboardPage() {
           size="sm" 
           onClick={handleRefresh}
           disabled={refreshing}
+          suppressHydrationWarning
         >
           {refreshing ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />

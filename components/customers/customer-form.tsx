@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogBody } from "@/components/ui/dialog"
 import { Plus, Loader2, Search } from "lucide-react"
 import { createCustomer, updateCustomer, lookupGSTDetails } from "@/app/customers/actions"
 import { toast } from "sonner"
@@ -119,12 +119,13 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{customer ? "Edit Customer" : "Add New Customer"}</DialogTitle>
         </DialogHeader>
+        <DialogBody>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">
                 Name <span className="text-destructive">*</span>
@@ -154,7 +155,7 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
             {errors.address && <p className="text-sm text-destructive">{errors.address.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="openingBalance">Opening Balance</Label>
               <Input id="openingBalance" type="number" step="0.01" {...register("openingBalance")} placeholder="0.00" />
@@ -212,6 +213,7 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
             </Button>
           </div>
         </form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   )

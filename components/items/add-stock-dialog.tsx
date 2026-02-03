@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import type { IItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogBody,
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -41,9 +43,11 @@ interface StockManagementDialogProps {
   godowns: Array<{ id: string; name: string }>
   trigger?: React.ReactNode
   defaultOperation?: StockOperationType
+  onSuccess?: () => void
 }
 
-export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD" }: StockManagementDialogProps) {
+export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD", onSuccess }: StockManagementDialogProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [quantity, setQuantity] = useState("")
@@ -125,9 +129,17 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
       if (result.success) {
         const action = operationType === "ADD" ? "added" : "reduced"
         const symbol = operationType === "ADD" ? "+" : "-"
-        toast.success(`Stock ${action}: ${symbol}${quantity} ${packagingUnit}`)
+        toast.success(`Stock ${action}: ${symbol}${quantity} ${packagingUnit}. New stock: ${result.newStock || 0} ${packagingUnit}`)
         setOpen(false)
         resetForm()
+        
+        // Refresh the page data to show updated stock
+        router.refresh()
+        
+        // Call the onSuccess callback if provided
+        if (onSuccess) {
+          onSuccess()
+        }
       } else {
         toast.error(result.error || `Failed to ${operationType === "ADD" ? "add" : "reduce"} stock`)
       }
@@ -159,7 +171,7 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md sm:w-full">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
@@ -170,6 +182,7 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
           </DialogDescription>
         </DialogHeader>
 
+        <DialogBody>
         <div className="space-y-4 py-4">
           {/* Operation Type Toggle */}
           <div className="space-y-2">
@@ -347,6 +360,7 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
             </div>
           )}
         </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>

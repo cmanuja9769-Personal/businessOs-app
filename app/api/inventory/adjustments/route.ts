@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { itemId, quantity, adjustmentType, reason, notes } = body
+    const { itemId, quantity, adjustmentType, reason, notes, warehouseId } = body
 
     if (!itemId || !quantity || !adjustmentType || !reason) {
       return NextResponse.json(
@@ -63,8 +63,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create adjustment
-    const result = await createAdjustment(
+    // Get item details to determine warehouse if not provided
+    let targetWarehouseId = warehouseId
+    if (!targetWarehouseId) {
+      const { data: item } = await supabase
+        .from('items')
+        .select('warehouse_id, packaging_unit')
+        .eq('id', itemId)
+        .single()
+      
+      if (!item?.warehouse_id) {
+        return NextResponse.json(
+          { error: 'No warehouse specified and item has no default warehouse' },
+          { status: 400 }
+        )
+      }
+      
+      targetWarehouseId = item.warehouse_id
+    }
+
+    // Use the new modifyStockWithLedger function for atomic operations
+    const { modifyStockWithLedger } = await import('@/app/items/actions')
+    
+    const result = await modifyStockWithLedger(
+      itemId,
+      targetWarehouseId,
+      Number(quantity),
+      'CTN', // Default to CTN, can be enhanced to accept from request
+      adjustmentType === 'increase' ? 'ADD' : 'REDUCE',
+      reason,
+      notes
+    )
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    // Also create adjustment record for backward compatibility (optional)
+    const adjustmentResult = await createAdjustment(
       orgData.organization_id,
       {
         itemId,
@@ -76,43 +112,13 @@ export async function POST(request: NextRequest) {
       user.id
     )
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
-    }
-
-    // Auto-approve and update stock immediately
-    if (result.adjustment) {
-      const approveResult = await approveAdjustment(result.adjustment.id, user.id)
-      
-      if (!approveResult.success) {
-        return NextResponse.json({ error: approveResult.error }, { status: 400 })
-      }
-
-      // Update item stock
-      const stockChange = adjustmentType === 'increase' ? quantity : -quantity
-      const { error: updateError } = await supabase.rpc('update_item_stock', {
-        p_item_id: itemId,
-        p_quantity_change: stockChange
-      })
-
-      if (updateError) {
-        // Try direct update as fallback
-        const { data: item } = await supabase
-          .from('items')
-          .select('current_stock')
-          .eq('id', itemId)
-          .single()
-
-        if (item) {
-          await supabase
-            .from('items')
-            .update({ current_stock: item.current_stock + stockChange })
-            .eq('id', itemId)
-        }
-      }
-    }
-
-    return NextResponse.json({ success: true, adjustment: result.adjustment })
+    return NextResponse.json({ 
+      success: true, 
+      adjustment: adjustmentResult.adjustment,
+      newStock: result.newStock,
+      quantityBefore: result.quantityBefore,
+      quantityAfter: result.quantityAfter
+    })
   } catch (error) {
     console.error('Create adjustment error:', error)
     return NextResponse.json(

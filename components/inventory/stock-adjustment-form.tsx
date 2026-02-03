@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -29,6 +30,7 @@ interface StockAdjustmentFormProps {
 }
 
 export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormProps) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -53,12 +55,24 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
         body: JSON.stringify(data),
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to create adjustment")
+      ifconst errorData = await response.json()
+        throw new Error(errorData.error || "Failed to create adjustment")
       }
 
-      toast.success(`Stock ${data.adjustmentType === "increase" ? "increased" : "decreased"} successfully`)
+      const result = await response.json()
+      const action = data.adjustmentType === "increase" ? "increased" : "decreased"
+      
+      toast.success(
+        `Stock ${action} successfully. New stock: ${result.newStock || 'updated'}`
+      )
+      
       setOpen(false)
+      form.reset()
+      
+      // Refresh the page data to show updated stock
+      router.refresh()
+      
+      // Call the onSuccess callback if providede)
       form.reset()
       onSuccess?.()
     } catch (error) {

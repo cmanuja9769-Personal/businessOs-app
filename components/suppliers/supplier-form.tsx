@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogBody,
 } from "@/components/ui/dialog"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
@@ -64,7 +65,7 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{supplier ? "Edit Supplier" : "Add New Supplier"}</DialogTitle>
           <DialogDescription>
@@ -72,6 +73,7 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
           </DialogDescription>
         </DialogHeader>
 
+        <DialogBody>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -88,7 +90,7 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="contactNo"
@@ -156,6 +158,7 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
             </div>
           </form>
         </Form>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   )

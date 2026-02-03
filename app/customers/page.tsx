@@ -51,8 +51,8 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
     })
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Customers</h1>
           <p className="text-sm sm:text-base text-muted-foreground mt-1">
@@ -65,8 +65,8 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <CardHeader className="pb-3 shrink-0">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Users className="w-5 h-5" />
             <span className="hidden sm:inline">All Customers</span>
@@ -74,7 +74,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
             <span className="text-muted-foreground">({filteredCustomers.length})</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
           {filteredCustomers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="w-12 h-12 text-muted-foreground mb-4" />
@@ -83,16 +83,16 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
               <CustomerForm />
             </div>
           ) : (
-            <Table>
+            <Table containerClassName="flex-1 min-h-0 max-h-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[120px]">Name</TableHead>
-                  <TableHead className="min-w-[100px]">Contact</TableHead>
-                  <TableHead className="min-w-[120px]">Email</TableHead>
-                  <TableHead className="min-w-[150px]">Address</TableHead>
-                  <TableHead className="min-w-[100px]">GSTIN</TableHead>
-                  <TableHead className="min-w-[110px] text-right">Opening Balance</TableHead>
-                  <TableHead className="min-w-[80px] text-right">Actions</TableHead>
+                  <TableHead resizable className="w-[200px] min-w-[150px]">Name</TableHead>
+                  <TableHead resizable className="w-[100px] min-w-[80px]">Contact</TableHead>
+                  <TableHead resizable className="w-[150px] min-w-[100px]">Email</TableHead>
+                  <TableHead resizable className="w-[180px] min-w-[120px]">Address</TableHead>
+                  <TableHead resizable className="w-[100px] min-w-[80px]">GSTIN</TableHead>
+                  <TableHead resizable className="w-[100px] min-w-[80px] text-right">Opening Balance</TableHead>
+                  <TableHead className="w-[80px] min-w-[70px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

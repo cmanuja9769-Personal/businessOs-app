@@ -187,7 +187,7 @@ export function Sidebar() {
             })}
 
             {/* Reports Section - Collapsible */}
-            <Collapsible open={reportsOpen} onOpenChange={setReportsOpen}>
+            <Collapsible open={reportsOpen} onOpenChange={setReportsOpen} suppressHydrationWarning>
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
@@ -196,6 +196,7 @@ export function Sidebar() {
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                   )}
+                  suppressHydrationWarning
                 >
                   <div className="flex items-center gap-3">
                     <BarChart3 className="w-5 h-5 flex-shrink-0" />
@@ -208,7 +209,7 @@ export function Sidebar() {
                   )}
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="pl-4 space-y-1 mt-1">
+              <CollapsibleContent className="pl-4 space-y-1 mt-1" suppressHydrationWarning>
                 {/* All Reports Link */}
                 <Link
                   href="/reports"
@@ -230,9 +231,11 @@ export function Sidebar() {
                     key={group.group} 
                     open={expandedGroups.includes(group.group)}
                     onOpenChange={() => toggleGroup(group.group)}
+                    suppressHydrationWarning
                   >
                     <CollapsibleTrigger asChild>
                       <button
+                        suppressHydrationWarning
                         className={cn(
                           "w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
                           group.items.some(i => pathname === i.href)
@@ -251,7 +254,7 @@ export function Sidebar() {
                         )}
                       </button>
                     </CollapsibleTrigger>
-                    <CollapsibleContent className="pl-3 space-y-0.5 mt-0.5">
+                    <CollapsibleContent className="pl-3 space-y-0.5 mt-0.5" suppressHydrationWarning>
                       {group.items.map((item) => (
                         <Link
                           key={item.href}

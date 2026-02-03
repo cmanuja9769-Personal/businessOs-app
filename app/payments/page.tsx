@@ -35,14 +35,14 @@ export default async function PaymentsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-      <div>
+    <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      <div className="shrink-0">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Payment Management</h1>
         <p className="text-sm sm:text-base text-muted-foreground mt-1">Track receivables, payables, and record payments</p>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 shrink-0">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Total Receivables</CardTitle>
@@ -84,15 +84,15 @@ export default async function PaymentsPage() {
       </div>
 
       {/* Tabs for Receivables and Payables */}
-      <Tabs defaultValue="receivables" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="receivables" className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <TabsList className="shrink-0">
           <TabsTrigger value="receivables">Receivables</TabsTrigger>
           <TabsTrigger value="payables">Payables</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="receivables" className="space-y-4">
-          <Card>
-            <CardHeader>
+        <TabsContent value="receivables" className="flex-1 min-h-0 overflow-hidden mt-4">
+          <Card className="h-full flex flex-col overflow-hidden">
+            <CardHeader className="shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
@@ -104,7 +104,7 @@ export default async function PaymentsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
               {unpaidInvoices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
@@ -112,17 +112,17 @@ export default async function PaymentsPage() {
                   <p className="text-muted-foreground">No outstanding receivables at this time</p>
                 </div>
               ) : (
-                <Table>
+                <Table containerClassName="flex-1 min-h-0 max-h-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      <TableHead resizable className="w-[100px] min-w-[80px]">Invoice</TableHead>
+                      <TableHead resizable className="w-[180px] min-w-[120px]">Customer</TableHead>
+                      <TableHead resizable className="w-[100px] min-w-[80px]">Date</TableHead>
+                      <TableHead resizable className="w-[90px] min-w-[70px]">Total</TableHead>
+                      <TableHead resizable className="w-[80px] min-w-[60px]">Paid</TableHead>
+                      <TableHead resizable className="w-[80px] min-w-[60px]">Balance</TableHead>
+                      <TableHead resizable className="w-[70px] min-w-[60px]">Status</TableHead>
+                      <TableHead className="w-[140px] min-w-[120px] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -156,9 +156,9 @@ export default async function PaymentsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="payables" className="space-y-4">
-          <Card>
-            <CardHeader>
+        <TabsContent value="payables" className="flex-1 min-h-0 overflow-hidden mt-4">
+          <Card className="h-full flex flex-col overflow-hidden">
+            <CardHeader className="shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
@@ -170,7 +170,7 @@ export default async function PaymentsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
               {unpaidPurchases.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
@@ -178,17 +178,17 @@ export default async function PaymentsPage() {
                   <p className="text-muted-foreground">No outstanding payables at this time</p>
                 </div>
               ) : (
-                <Table>
+                <Table containerClassName="flex-1 min-h-0 max-h-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>PO Number</TableHead>
-                      <TableHead>Supplier</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Paid</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      <TableHead resizable className="w-[100px] min-w-[80px]">PO Number</TableHead>
+                      <TableHead resizable className="w-[180px] min-w-[120px]">Supplier</TableHead>
+                      <TableHead resizable className="w-[100px] min-w-[80px]">Date</TableHead>
+                      <TableHead resizable className="w-[90px] min-w-[70px]">Total</TableHead>
+                      <TableHead resizable className="w-[80px] min-w-[60px]">Paid</TableHead>
+                      <TableHead resizable className="w-[80px] min-w-[60px]">Balance</TableHead>
+                      <TableHead resizable className="w-[70px] min-w-[60px]">Status</TableHead>
+                      <TableHead className="w-[140px] min-w-[120px] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

@@ -1,20 +1,37 @@
 "use client"
 
-import type * as React from "react"
-
+import * as React from "react"
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+interface TableProps extends React.ComponentProps<"table"> {
+  containerClassName?: string
+}
+
+function Table({ className, containerClassName, ...props }: TableProps) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto rounded-lg border">
-      <table data-slot="table" className={cn("w-full caption-bottom text-xs sm:text-sm", className)} {...props} />
+    <div 
+      data-slot="table-container" 
+      className={cn(
+        "relative w-full overflow-auto rounded-lg border scrollbar-hide",
+        containerClassName
+      )}
+    >
+      <table 
+        data-slot="table" 
+        className={cn("w-full caption-bottom text-xs sm:text-sm", className)} 
+        {...props} 
+      />
     </div>
   )
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
-    <thead data-slot="table-header" className={cn("[&_tr]:border-b bg-muted/50 sticky top-0", className)} {...props} />
+    <thead 
+      data-slot="table-header" 
+      className={cn("[&_tr]:border-b bg-muted sticky top-0 z-10", className)} 
+      {...props} 
+    />
   )
 }
 
@@ -42,16 +59,59 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+interface TableHeadProps extends React.ComponentProps<"th"> {
+  resizable?: boolean
+}
+
+function TableHead({ className, resizable, style, ...props }: TableHeadProps) {
+  const [isResizing, setIsResizing] = React.useState(false)
+  const [width, setWidth] = React.useState<number | undefined>(undefined)
+  const thRef = React.useRef<HTMLTableCellElement>(null)
+
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    if (!resizable) return
+    e.preventDefault()
+    setIsResizing(true)
+    
+    const startX = e.clientX
+    const startWidth = thRef.current?.offsetWidth || 100
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.max(50, startWidth + (e.clientX - startX))
+      setWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", handleMouseUp)
+  }, [resizable])
+
   return (
     <th
+      ref={thRef}
       data-slot="table-head"
       className={cn(
-        "text-foreground h-10 px-2 sm:px-4 text-left align-middle font-semibold whitespace-nowrap [&:has([role=checkbox])]:pr-0 *:[[role=checkbox]]:translate-y-0.5",
+        "text-foreground h-10 px-2 sm:px-3 text-left align-middle font-semibold whitespace-nowrap [&:has([role=checkbox])]:pr-0 *:[[role=checkbox]]:translate-y-0.5 relative select-none",
+        resizable && "pr-4",
+        isResizing && "cursor-col-resize",
         className,
       )}
+      style={{ ...style, width: width ? `${width}px` : style?.width }}
       {...props}
-    />
+    >
+      {props.children}
+      {resizable && (
+        <div
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50 active:bg-primary"
+          onMouseDown={handleMouseDown}
+        />
+      )}
+    </th>
   )
 }
 
@@ -60,7 +120,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 sm:p-4 align-middle text-xs sm:text-sm [&:has([role=checkbox])]:pr-0 *:[[role=checkbox]]:translate-y-0.5",
+        "p-2 sm:p-3 align-middle text-xs sm:text-sm [&:has([role=checkbox])]:pr-0 *:[[role=checkbox]]:translate-y-0.5 truncate",
         className,
       )}
       {...props}

@@ -55,7 +55,8 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
         body: JSON.stringify(data),
       })
 
-      ifconst errorData = await response.json()
+      if (!response.ok) {
+        const errorData = await response.json()
         throw new Error(errorData.error || "Failed to create adjustment")
       }
 

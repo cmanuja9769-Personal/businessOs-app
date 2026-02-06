@@ -32,7 +32,7 @@ export default async function PurchasesPage() {
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <CardHeader className="py-3 px-4 shrink-0">
           <CardTitleWithCount
-            icon={ShoppingCart}
+            icon={<ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />}
             title="All Purchases"
             mobileTitle="Purchases"
             count={purchases.length}
@@ -41,7 +41,7 @@ export default async function PurchasesPage() {
         <CardContent className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-0">
           {purchases.length === 0 ? (
             <DataEmptyState
-              icon={ShoppingCart}
+              icon={<ShoppingCart className="w-12 h-12" />}
               title="No purchases yet"
               description="Create your first purchase order to get started"
               action={

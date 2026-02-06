@@ -1,11 +1,8 @@
-"use client"
-
-import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 interface DataEmptyStateProps {
-  icon: LucideIcon
+  icon: ReactNode
   title: string
   description: string
   action?: ReactNode
@@ -13,7 +10,7 @@ interface DataEmptyStateProps {
 }
 
 export function DataEmptyState({ 
-  icon: Icon, 
+  icon, 
   title, 
   description, 
   action,
@@ -24,7 +21,9 @@ export function DataEmptyState({
       "flex flex-col items-center justify-center py-12 text-center",
       className
     )}>
-      <Icon className="w-12 h-12 text-muted-foreground mb-4" />
+      <div className="w-12 h-12 text-muted-foreground mb-4 flex items-center justify-center">
+        {icon}
+      </div>
       <h3 className="text-lg font-semibold">{title}</h3>
       <p className="text-muted-foreground mb-4">{description}</p>
       {action}

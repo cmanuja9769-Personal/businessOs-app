@@ -142,10 +142,11 @@ export default function SuppliersScreen() {
 
     return (
       <TouchableOpacity
-        onPress={() => navigation.navigate('AddSupplier', { supplierId: item.id })}
+        onPress={() => navigation.navigate('SupplierDetail', { supplierId: item.id })}
         onLongPress={() =>
           Alert.alert('Supplier', item.name, [
             { text: 'Cancel', style: 'cancel' },
+            { text: 'View', onPress: () => navigation.navigate('SupplierDetail', { supplierId: item.id }) },
             { text: 'Edit', onPress: () => navigation.navigate('AddSupplier', { supplierId: item.id }) },
             { text: 'Delete', style: 'destructive', onPress: () => confirmDelete(item) },
           ])

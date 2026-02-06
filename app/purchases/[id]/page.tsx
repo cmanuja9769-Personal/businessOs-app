@@ -2,7 +2,7 @@ import { getPurchase } from "@/app/purchases/actions"
 import { getPaymentsByPurchase } from "@/app/payments/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type DocumentStatus } from "@/components/ui/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Download, Edit, DollarSign } from "lucide-react"
 import Link from "next/link"
@@ -25,19 +25,6 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
         </Card>
       </div>
     )
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "paid":
-        return "bg-green-500/10 text-green-700 dark:text-green-400"
-      case "partial":
-        return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-      case "unpaid":
-        return "bg-red-500/10 text-red-700 dark:text-red-400"
-      default:
-        return "bg-muted text-muted-foreground"
-    }
   }
 
   return (
@@ -84,9 +71,7 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
                 <p className="text-sm">
                   <span className="text-muted-foreground">Date:</span> {format(new Date(purchase.date), "dd MMM yyyy")}
                 </p>
-                <Badge variant="secondary" className={getStatusColor(purchase.status)}>
-                  {purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1)}
-                </Badge>
+                <StatusBadge status={purchase.status as DocumentStatus} />
               </div>
             </div>
 

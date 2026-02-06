@@ -72,25 +72,27 @@ export default function GodownsScreen() {
   };
 
   const renderItem = ({ item }: { item: Godown }) => (
-    <Card style={styles.godownCard}>
-      <View style={styles.godownHeader}>
-        <View style={styles.godownInfo}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.godownName, { color: colors.text }]}>
-              {item.name}
+    <TouchableOpacity onPress={() => navigation.navigate('GodownDetail', { godownId: item.id })}>
+      <Card style={styles.godownCard}>
+        <View style={styles.godownHeader}>
+          <View style={styles.godownInfo}>
+            <View style={styles.nameRow}>
+              <Text style={[styles.godownName, { color: colors.text }]}>
+                {item.name}
+              </Text>
+              {item.is_default && (
+                <View style={[styles.defaultBadge, { backgroundColor: colors.primary + '20' }]}>
+                  <Text style={[styles.defaultText, { color: colors.primary }]}>Default</Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.godownLocation, { color: colors.textSecondary }]}>
+              <Ionicons name="barcode" size={14} /> {item.code || '—'}
             </Text>
-            {item.is_default && (
-              <View style={[styles.defaultBadge, { backgroundColor: colors.primary + '20' }]}>
-                <Text style={[styles.defaultText, { color: colors.primary }]}>Default</Text>
-              </View>
-            )}
           </View>
-          <Text style={[styles.godownLocation, { color: colors.textSecondary }]}>
-            <Ionicons name="barcode" size={14} /> {item.code || '—'}
-          </Text>
         </View>
-      </View>
-    </Card>
+      </Card>
+    </TouchableOpacity>
   );
 
   if (loading) {

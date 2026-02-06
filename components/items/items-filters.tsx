@@ -38,21 +38,6 @@ export function ItemsFilters({ q, unit, category, godown, stock, sort, dir, unit
   const [searchValue, setSearchValue] = useState(q)
   const [showFilters, setShowFilters] = useState(false)
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchValue !== q) {
-        if (onFiltersChange) {
-          onFiltersChange({ q: searchValue })
-        } else {
-          updateFilters({ q: searchValue })
-        }
-      }
-    }, 300)
-
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchValue, q, onFiltersChange])
-
   const updateFilters = useCallback(
     (updates: Record<string, string>) => {
       if (onFiltersChange) {
@@ -87,12 +72,26 @@ export function ItemsFilters({ q, unit, category, godown, stock, sort, dir, unit
     [router, searchParams, onFiltersChange],
   )
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchValue !== q) {
+        if (onFiltersChange) {
+          onFiltersChange({ q: searchValue })
+        } else {
+          updateFilters({ q: searchValue })
+        }
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchValue, q, onFiltersChange, updateFilters])
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchValue(e.target.value)
   }
 
   return (
-    <div className="w-full space-y-3">
+    <div className="w-full space-y-1.5">
       {/* Search bar always visible */}
       <div className="relative w-full">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -101,26 +100,26 @@ export function ItemsFilters({ q, unit, category, godown, stock, sort, dir, unit
           placeholder="Search items..."
           value={searchValue}
           onChange={handleSearchChange}
-          className="pl-9 w-full text-sm"
+          className="pl-9 w-full text-sm h-8"
           title="Search by name, code, HSN, category, barcode"
         />
       </div>
 
       {/* Mobile filter toggle */}
       <div className="flex sm:hidden">
-        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="w-full text-xs">
+        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="w-full text-xs h-7">
           {showFilters ? "Hide Filters" : "Show Filters"}
         </Button>
       </div>
 
       {/* Filters - hidden on mobile by default, visible on sm+ */}
       <div
-        className={`grid grid-cols-2 sm:grid-cols-7 gap-2 overflow-hidden transition-all ${
-          showFilters ? "max-h-40" : "max-h-0 sm:max-h-10"
+        className={`grid grid-cols-2 sm:grid-cols-7 gap-1.5 overflow-hidden transition-all ${
+          showFilters ? "max-h-40" : "max-h-0 sm:max-h-8"
         } sm:max-h-none`}
       >
         <Select value={unit || "all"} onValueChange={(v) => updateFilters({ unit: v })} disabled={isPending}>
-          <SelectTrigger className="w-full text-xs sm:text-sm" title="Filter by unit">
+          <SelectTrigger className="w-full text-xs h-8" title="Filter by unit">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -3,7 +3,9 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { PageHeader } from "@/components/ui/page-header"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { RoleBadge, type UserRole } from "@/components/ui/role-badge"
 import { Users } from "lucide-react"
 import { EditUserRoleDialog } from "@/components/users/edit-user-role-dialog"
 
@@ -15,12 +17,10 @@ export const metadata = {
 export default async function UsersPage() {
   const user = await getCurrentUser()
 
-  // Redirect if not authenticated
   if (!user) {
     redirect("/auth/login")
   }
 
-  // Check if user is admin
   const userRole = await getUserRole(user.id)
   if (!userRole || userRole.role !== "admin") {
     redirect("/unauthorized")
@@ -28,7 +28,6 @@ export default async function UsersPage() {
 
   const supabase = await createClient()
 
-  // Fetch all users with their roles
   const { data: users, error } = await supabase
     .from("user_roles")
     .select("user_id, role, created_at")
@@ -47,29 +46,12 @@ export default async function UsersPage() {
     )
   }
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "bg-red-500/10 text-red-700 dark:text-red-400"
-      case "salesperson":
-        return "bg-blue-500/10 text-blue-700 dark:text-blue-400"
-      case "accountant":
-        return "bg-green-500/10 text-green-700 dark:text-green-400"
-      case "viewer":
-        return "bg-gray-500/10 text-gray-700 dark:text-gray-400"
-      default:
-        return "bg-muted"
-    }
-  }
-
   return (
     <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage user access and permissions</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Users"
+        description="Manage user access and permissions"
+      />
 
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <CardHeader className="pb-3 shrink-0">
@@ -82,11 +64,11 @@ export default async function UsersPage() {
         </CardHeader>
         <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
           {!users || users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Users className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold">No users yet</h3>
-              <p className="text-muted-foreground">Users will appear here once they sign up</p>
-            </div>
+            <DataEmptyState
+              icon={Users}
+              title="No users yet"
+              description="Users will appear here once they sign up"
+            />
           ) : (
             <Table containerClassName="flex-1 min-h-0 max-h-full">
               <TableHeader>
@@ -102,9 +84,7 @@ export default async function UsersPage() {
                   <TableRow key={u.user_id}>
                     <TableCell className="font-mono text-sm">{u.user_id.slice(0, 8)}...</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={getRoleColor(u.role)}>
-                        {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
-                      </Badge>
+                      <RoleBadge role={u.role as UserRole} />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(u.created_at).toLocaleDateString()}

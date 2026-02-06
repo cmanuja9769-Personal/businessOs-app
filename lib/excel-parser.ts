@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx"
 import ExcelJS from "exceljs"
 
 export interface ParsedRow {
@@ -129,83 +128,90 @@ function remapRowKeys(row: ParsedRow): ParsedRow {
   return mapped
 }
 
-export function parseExcelFile(file: File): Promise<ParsedRow[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
+export async function parseExcelFile(file: File): Promise<ParsedRow[]> {
+  const arrayBuffer = await file.arrayBuffer()
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(arrayBuffer)
 
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result
-        const workbook = XLSX.read(data, { type: "binary" })
-        const firstSheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[firstSheetName]
-        const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet)
-        resolve(jsonData.map(remapRowKeys))
-      } catch (error) {
-        reject(error)
+  const worksheet = workbook.worksheets[0]
+  if (!worksheet) {
+    throw new Error("No worksheet found in file")
+  }
+
+  const rows: ParsedRow[] = []
+  const headers: string[] = []
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) {
+      row.eachCell((cell, colNumber) => {
+        headers[colNumber - 1] = normalizeHeader(String(cell.value || ""))
+      })
+    } else {
+      const rowData: ParsedRow = {}
+      row.eachCell((cell, colNumber) => {
+        const header = headers[colNumber - 1]
+        if (header) {
+          rowData[header] = cell.value as string | number | Date | null
+        }
+      })
+      if (Object.keys(rowData).length > 0) {
+        rows.push(rowData)
       }
     }
-
-    reader.onerror = () => {
-      reject(new Error("Failed to read file"))
-    }
-
-    reader.readAsBinaryString(file)
   })
+
+  return rows.map(remapRowKeys)
 }
 
-export function downloadExcelTemplate(headers: string[], filename: string) {
-  // Create main data sheet with headers
-  const mainData: (string | number)[][] = [
-    headers,
-    // Add example row with instructions
-    [
-      "Example Item",
-      "8471",
-      "1234567890123",
-      "PCS",
-      1,
-      "",
-      100,
-      150,
-      140,
-      130,
-      160,
-      50,
-      10,
-      100,
-      12,
-      18,
-      0,
-    ],
+export async function downloadExcelTemplate(headers: string[], filename: string) {
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = "businessOs-app"
+  workbook.created = new Date()
+
+  const itemsSheet = workbook.addWorksheet("Items")
+  itemsSheet.addRow(headers)
+  itemsSheet.addRow([
+    "Example Item",
+    "8471",
+    "1234567890123",
+    "PCS",
+    1,
+    "",
+    100,
+    150,
+    140,
+    130,
+    160,
+    50,
+    10,
+    100,
+    12,
+    18,
+    0,
+  ])
+
+  itemsSheet.columns = [
+    { width: 20 },
+    { width: 12 },
+    { width: 15 },
+    { width: 10 },
+    { width: 15 },
+    { width: 15 },
+    { width: 15 },
+    { width: 15 },
+    { width: 15 },
+    { width: 15 },
+    { width: 12 },
+    { width: 10 },
+    { width: 12 },
+    { width: 12 },
+    { width: 15 },
+    { width: 12 },
+    { width: 12 },
   ]
 
-  const worksheet = XLSX.utils.aoa_to_sheet(mainData)
-
-  // Set column widths for better readability
-  const colWidths = [
-    { wch: 20 }, // name
-    { wch: 12 }, // hsnCode
-    { wch: 15 }, // barcodeNo
-    { wch: 10 }, // unit
-    { wch: 15 }, // conversionRate
-    { wch: 15 }, // alternateUnit
-    { wch: 15 }, // purchasePrice
-    { wch: 15 }, // salePrice
-    { wch: 15 }, // wholesalePrice
-    { wch: 15 }, // quantityPrice
-    { wch: 12 }, // mrp
-    { wch: 10 }, // stock
-    { wch: 12 }, // minStock
-    { wch: 12 }, // maxStock
-    { wch: 15 }, // perCartonQuantity
-    { wch: 12 }, // gstRate
-    { wch: 12 }, // cessRate
-  ]
-  worksheet["!cols"] = colWidths
-
-  // Create helper sheet with valid units
-  const unitsSheet = XLSX.utils.aoa_to_sheet([
+  const unitsSheet = workbook.addWorksheet("Valid Units")
+  unitsSheet.addRows([
     ["Valid Units"],
     ["PCS - Pieces"],
     ["KG - Kilogram"],
@@ -217,8 +223,8 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["BAG - Bag"],
   ])
 
-  // Create instructions sheet
-  const instructionsSheet = XLSX.utils.aoa_to_sheet([
+  const instructionsSheet = workbook.addWorksheet("Instructions")
+  instructionsSheet.addRows([
     ["Instructions for Bulk Upload"],
     [""],
     ["1. Fill in all required fields (marked with *)"],
@@ -247,11 +253,14 @@ export function downloadExcelTemplate(headers: string[], filename: string) {
     ["- cessRate: Cess rate percentage (0-100)"],
   ])
 
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Items")
-  XLSX.utils.book_append_sheet(workbook, unitsSheet, "Valid Units")
-  XLSX.utils.book_append_sheet(workbook, instructionsSheet, "Instructions")
-  XLSX.writeFile(workbook, filename)
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export async function downloadItemExcelTemplate(filename = "item_template.xlsx", godownNames: string[] = []) {

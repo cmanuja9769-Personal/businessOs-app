@@ -15,7 +15,10 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to use Face ID for secure login."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -30,8 +33,10 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
-        "android.permission.VIBRATE"
-      ]
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.inventorybillingmobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -57,6 +62,10 @@
       ],
       "expo-font"
     ],
-    "extra": {}
+    "extra": {
+      "eas": {
+        "projectId": "3bc0c03d-cdb0-4fb1-954a-032af0b8685d"
+      }
+    }
   }
 }

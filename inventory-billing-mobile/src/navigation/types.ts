@@ -62,14 +62,16 @@ export type MoreStackParamList = {
   EwaybillDetail: { ewaybillId: string };
   CreateEwaybill: { ewaybillId?: string };
   Payments: undefined;
-  RecordPayment: { invoiceId?: string };
+  RecordPayment: { invoiceId?: string; purchaseId?: string };
   Reports: undefined;
+  ReportDetail: { reportKey: string };
   Settings: undefined;
   Profile: undefined;
   Organization: undefined;
   Users: undefined;
   Accounting: undefined;
   Godowns: undefined;
+  GodownDetail: { godownId: string };
   AddGodown: { godownId?: string };
 };
 

@@ -62,8 +62,8 @@ export function Header() {
   const totalResults = results.customers.length + results.items.length + results.invoices.length
 
   return (
-    <header className="sticky top-0 z-30 bg-background border-b border-border">
-      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2 sm:py-3 gap-2 sm:gap-4">
+    <header className="bg-background border-b border-border">
+      <div className="flex items-center justify-between px-4 lg:px-6 py-2 gap-3 sm:gap-4">
         {/* Organization Switcher */}
         <div className="flex-shrink-0 hidden sm:block">
           <OrganizationSwitcher />
@@ -103,7 +103,7 @@ export function Header() {
                   {results.customers.map((customer) => (
                     <Link
                       key={customer.id}
-                      href={`/customers?q=${customer.contactNo}`}
+                      href={`/customers/${customer.id}`}
                       onClick={handleResultClick}
                       className="block px-3 py-2 rounded-md hover:bg-accent transition-colors"
                     >
@@ -123,7 +123,7 @@ export function Header() {
                   {results.items.map((item) => (
                     <Link
                       key={item.id}
-                      href={`/items?q=${item.itemCode || item.name}`}
+                      href={`/items/${item.id}`}
                       onClick={handleResultClick}
                       className="block px-3 py-2 rounded-md hover:bg-accent transition-colors"
                     >

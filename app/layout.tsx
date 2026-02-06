@@ -64,15 +64,15 @@ export default async function RootLayout({
             <NumberInputScrollProvider>
               {user ? (
                 // Authenticated layout
-                <div className="flex min-h-dvh">
+                <div className="flex h-dvh overflow-hidden">
                   <div className="print:hidden">
                     <Sidebar />
                   </div>
-                  <div className="flex-1 min-w-0 flex flex-col pt-16 md:pt-0 md:ml-64 print:ml-0 print:pt-0">
-                    <div className="print:hidden hidden md:block">
+                  <div className="flex-1 min-w-0 flex flex-col pt-16 md:pt-0 md:ml-64 print:ml-0 print:pt-0 h-dvh overflow-hidden">
+                    <div className="print:hidden hidden md:block shrink-0 sticky top-0 z-40">
                       <Header />
                     </div>
-                    <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-muted/30 print:bg-white print:overflow-visible">
+                    <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden bg-muted/30 print:bg-white print:overflow-visible">
                       {children}
                     </main>
                   </div>

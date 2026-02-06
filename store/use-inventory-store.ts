@@ -1,6 +1,5 @@
 import { create } from "zustand"
 import type { ICustomer, IItem, IInvoice, IInvoiceItem } from "@/types"
-import { dummyCustomers, dummyItems } from "@/lib/dummy-data" // Import dummy data
 
 interface InventoryStore {
   // Customers
@@ -32,8 +31,7 @@ interface InventoryStore {
 }
 
 export const useInventoryStore = create<InventoryStore>((set) => ({
-  // Customers - Initialize with dummy data
-  customers: dummyCustomers,
+  customers: [],
   setCustomers: (customers) => set({ customers }),
   addCustomer: (customer) => set((state) => ({ customers: [...state.customers, customer] })),
   updateCustomer: (id, customer) =>
@@ -42,8 +40,7 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
     })),
   deleteCustomer: (id) => set((state) => ({ customers: state.customers.filter((c) => c.id !== id) })),
 
-  // Items - Initialize with dummy data
-  items: dummyItems,
+  items: [],
   setItems: (items) => set({ items }),
   addItem: (item) => set((state) => ({ items: [...state.items, item] })),
   updateItem: (id, item) =>
@@ -52,7 +49,6 @@ export const useInventoryStore = create<InventoryStore>((set) => ({
     })),
   deleteItem: (id) => set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
 
-  // Invoice (Current)
   currentInvoice: null,
   setCurrentInvoice: (invoice) => set({ currentInvoice: invoice }),
   addInvoiceItem: (item) =>

@@ -1,0 +1,156 @@
+"use client"
+
+import type { IItem } from "@/types"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { TableCell, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Edit, Plus, Barcode, AlertTriangle } from "lucide-react"
+import Link from "next/link"
+import { ItemForm } from "@/components/items/item-form"
+import { AddStockDialog } from "@/components/items/add-stock-dialog"
+import { DeleteItemButton } from "@/components/items/delete-item-button"
+import { StockBadge } from "@/components/items/stock-badge"
+import { getStockStatus } from "@/lib/stock-utils"
+
+interface ItemDesktopRowProps {
+  item: IItem
+  godowns: Array<{ id: string; name: string }>
+}
+
+export function ItemDesktopRow({ item, godowns }: ItemDesktopRowProps) {
+  const stockStatus = getStockStatus(item)
+
+  return (
+    <TableRow>
+      {/* Item Name */}
+      <TableCell className="max-w-[11.25rem]">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="truncate">
+              <Link
+                href={`/items/${item.id}`}
+                className="hover:text-primary hover:underline transition-colors font-medium"
+              >
+                {item.name}
+              </Link>
+              {item.packagingUnit && item.perCartonQuantity && item.perCartonQuantity > 1 && (
+                <span className="text-xs text-muted-foreground block truncate">
+                  1 {item.packagingUnit} = {item.perCartonQuantity} {item.unit}
+                </span>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <p className="font-medium">{item.name}</p>
+            {item.itemCode && <p className="text-xs text-muted-foreground">Code: {item.itemCode}</p>}
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
+
+      {/* HSN Code */}
+      <TableCell className="max-w-[5.625rem]">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="font-mono text-xs truncate block">{item.hsnCode || "-"}</span>
+          </TooltipTrigger>
+          {item.hsnCode && (
+            <TooltipContent side="top">
+              <p>HSN: {item.hsnCode}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TableCell>
+
+      {/* Unit */}
+      <TableCell className="max-w-[3.75rem]">
+        <Badge variant="outline" className="text-xs">
+          {item.unit}
+        </Badge>
+      </TableCell>
+
+      {/* Purchase Price */}
+      <TableCell className="text-right text-xs sm:text-sm max-w-[6.25rem]">
+        ₹{item.purchasePrice.toFixed(2)}
+      </TableCell>
+
+      {/* Sale Price */}
+      <TableCell className="font-semibold text-right text-xs sm:text-sm max-w-[5.625rem]">
+        ₹{item.salePrice.toFixed(2)}
+      </TableCell>
+
+      {/* Stock */}
+      <TableCell className="text-right max-w-[5rem]">
+        <div className="flex flex-col items-end">
+          <div className="flex items-center justify-end gap-1">
+            <span className="font-medium text-xs sm:text-sm truncate">
+              {item.stock} {item.packagingUnit || "CTN"}
+            </span>
+            {stockStatus === "low" && (
+              <AlertTriangle className="w-3 h-3 text-orange-500 flex-shrink-0" />
+            )}
+          </div>
+          {item.perCartonQuantity && item.perCartonQuantity > 1 && (
+            <span className="text-[0.625rem] text-muted-foreground truncate">
+              = {(item.stock * item.perCartonQuantity).toLocaleString()} {item.unit}
+            </span>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Godown */}
+      <TableCell className="max-w-[5rem]">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs truncate block">{item.godownName || "-"}</span>
+          </TooltipTrigger>
+          {item.godownName && (
+            <TooltipContent side="top">
+              <p>Godown: {item.godownName}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TableCell>
+
+      {/* GST */}
+      <TableCell className="text-right text-xs sm:text-sm max-w-[3.75rem]">
+        {item.gstRate}%
+      </TableCell>
+
+      {/* Status */}
+      <TableCell className="max-w-[5rem]">
+        <StockBadge status={stockStatus} className="py-0.5" />
+      </TableCell>
+
+      {/* Actions */}
+      <TableCell className="text-right max-w-[8.125rem]">
+        <div className="flex items-center justify-end gap-0.5">
+          <AddStockDialog
+            item={item}
+            godowns={godowns}
+            trigger={
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50" title="Add Stock">
+                <Plus className="w-3.5 h-3.5" />
+              </Button>
+            }
+          />
+          <Link href={`/items/barcode/${item.id}`}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Print Barcode">
+              <Barcode className="w-3.5 h-3.5" />
+            </Button>
+          </Link>
+          <ItemForm
+            item={item}
+            godowns={godowns}
+            trigger={
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit Item">
+                <Edit className="w-3.5 h-3.5" />
+              </Button>
+            }
+          />
+          <DeleteItemButton itemId={item.id} />
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}

@@ -35,6 +35,15 @@
   --border: oklch(0.88 0.01 250);
   --input: oklch(0.92 0.01 250);
   --ring: oklch(0.35 0.02 250);
+  
+  /* Semantic color tokens for status states */
+  --success: oklch(0.55 0.2 145);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.75 0.18 85);
+  --warning-foreground: oklch(0.2 0.02 85);
+  --info: oklch(0.6 0.18 240);
+  --info-foreground: oklch(0.99 0 0);
+  
   --chart-1: oklch(0.52 0.22 265);
   --chart-2: oklch(0.6 0.18 280);
   --chart-3: oklch(0.65 0.2 200);
@@ -71,6 +80,15 @@
   --border: oklch(0.25 0.02 250);
   --input: oklch(0.25 0.02 250);
   --ring: oklch(0.50 0.02 250);
+  
+  /* Semantic color tokens for status states (dark mode) */
+  --success: oklch(0.65 0.2 145);
+  --success-foreground: oklch(0.12 0.01 250);
+  --warning: oklch(0.8 0.18 85);
+  --warning-foreground: oklch(0.12 0.01 250);
+  --info: oklch(0.7 0.18 240);
+  --info-foreground: oklch(0.12 0.01 250);
+  
   --chart-1: oklch(0.65 0.25 265);
   --chart-2: oklch(0.68 0.2 280);
   --chart-3: oklch(0.7 0.22 200);
@@ -105,6 +123,15 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  
+  /* Semantic status colors */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

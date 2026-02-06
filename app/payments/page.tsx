@@ -2,7 +2,8 @@ import { getInvoices } from "@/app/invoices/actions"
 import { getPurchases } from "@/app/purchases/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type DocumentStatus } from "@/components/ui/status-badge"
+import { PageHeader } from "@/components/ui/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -21,25 +22,12 @@ export default async function PaymentsPage() {
   const totalReceivables = unpaidInvoices.reduce((sum, inv) => sum + inv.balance, 0)
   const totalPayables = unpaidPurchases.reduce((sum, pur) => sum + pur.balance, 0)
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "paid":
-        return "bg-green-500/10 text-green-700 dark:text-green-400"
-      case "partial":
-        return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-      case "unpaid":
-        return "bg-red-500/10 text-red-700 dark:text-red-400"
-      default:
-        return "bg-muted text-muted-foreground"
-    }
-  }
-
   return (
     <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      <div className="shrink-0">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Payment Management</h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">Track receivables, payables, and record payments</p>
-      </div>
+      <PageHeader
+        title="Payment Management"
+        description="Track receivables, payables, and record payments"
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 shrink-0">
@@ -135,9 +123,7 @@ export default async function PaymentsPage() {
                         <TableCell className="text-green-600">₹{invoice.paidAmount.toFixed(2)}</TableCell>
                         <TableCell className="text-red-600 font-semibold">₹{invoice.balance.toFixed(2)}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={getStatusColor(invoice.status)}>
-                            {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                          </Badge>
+                          <StatusBadge status={invoice.status as DocumentStatus} />
                         </TableCell>
                         <TableCell className="text-right">
                           <PaymentForm invoiceId={invoice.id} maxAmount={invoice.balance}>
@@ -201,9 +187,7 @@ export default async function PaymentsPage() {
                         <TableCell className="text-green-600">₹{purchase.paidAmount.toFixed(2)}</TableCell>
                         <TableCell className="text-red-600 font-semibold">₹{purchase.balance.toFixed(2)}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={getStatusColor(purchase.status)}>
-                            {purchase.status.charAt(0).toUpperCase() + purchase.status.slice(1)}
-                          </Badge>
+                          <StatusBadge status={purchase.status as DocumentStatus} />
                         </TableCell>
                         <TableCell className="text-right">
                           <PaymentForm purchaseId={purchase.id} maxAmount={purchase.balance}>

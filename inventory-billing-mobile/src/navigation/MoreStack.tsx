@@ -9,15 +9,21 @@ import AddCustomerScreen from '@screens/customers/AddCustomerScreen';
 import SettingsScreen from '@screens/settings/SettingsScreen';
 import ProfileScreen from '@screens/profile/ProfileScreen';
 import SuppliersScreen from '@screens/suppliers/SuppliersScreen';
+import SupplierDetailScreen from '@screens/suppliers/SupplierDetailScreen';
 import AddSupplierScreen from '@screens/suppliers/AddSupplierScreen';
 import PurchasesScreen from '@screens/purchases/PurchasesScreen';
+import CreatePurchaseScreen from '@screens/purchases/CreatePurchaseScreen';
+import PurchaseDetailScreen from '@screens/purchases/PurchaseDetailScreen';
 import EwaybillsScreen from '@screens/ewaybills/EwaybillsScreen';
 import PaymentsScreen from '@screens/payments/PaymentsScreen';
+import RecordPaymentScreen from '@screens/payments/RecordPaymentScreen';
 import ReportsScreen from '@screens/reports/ReportsScreen';
+import ReportDetailScreen from '@screens/reports/ReportDetailScreen';
 import OrganizationScreen from '@screens/organization/OrganizationScreen';
 import UsersScreen from '@screens/users/UsersScreen';
 import AccountingScreen from '@screens/accounting/AccountingScreen';
 import GodownsScreen from '@screens/godowns/GodownsScreen';
+import GodownDetailScreen from '@screens/godowns/GodownDetailScreen';
 import AddGodownScreen from '@screens/godowns/AddGodownScreen';
 
 const Stack = createStackNavigator<MoreStackParamList>();
@@ -85,14 +91,29 @@ export default function MoreStack() {
         options={{ title: 'Add Supplier' }}
       />
       <Stack.Screen 
+        name="SupplierDetail" 
+        component={SupplierDetailScreen}
+        options={{ title: 'Supplier Details', headerShown: false }}
+      />
+      <Stack.Screen 
         name="Purchases" 
         component={PurchasesScreen}
-        options={{ title: 'Purchases' }}
+        options={{ title: 'Purchases', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="CreatePurchase" 
+        component={CreatePurchaseScreen}
+        options={{ title: 'New Purchase', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="PurchaseDetail" 
+        component={PurchaseDetailScreen}
+        options={{ title: 'Purchase Details', headerShown: false }}
       />
       <Stack.Screen 
         name="Ewaybills" 
         component={EwaybillsScreen}
-        options={{ title: 'E-waybills' }}
+        options={{ title: 'E-waybills', headerShown: false }}
       />
       <Stack.Screen 
         name="Payments" 
@@ -100,9 +121,19 @@ export default function MoreStack() {
         options={{ title: 'Payments' }}
       />
       <Stack.Screen 
+        name="RecordPayment" 
+        component={RecordPaymentScreen}
+        options={{ title: 'Record Payment', headerShown: false }}
+      />
+      <Stack.Screen 
         name="Reports" 
         component={ReportsScreen}
-        options={{ title: 'Reports' }}
+        options={{ title: 'Reports', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ReportDetail" 
+        component={ReportDetailScreen}
+        options={{ title: 'Report', headerShown: false }}
       />
       <Stack.Screen 
         name="Organization" 
@@ -112,17 +143,22 @@ export default function MoreStack() {
       <Stack.Screen 
         name="Users" 
         component={UsersScreen}
-        options={{ title: 'Users' }}
+        options={{ title: 'Users', headerShown: false }}
       />
       <Stack.Screen 
         name="Accounting" 
         component={AccountingScreen}
-        options={{ title: 'Accounting' }}
+        options={{ title: 'Accounting', headerShown: false }}
       />
       <Stack.Screen 
         name="Godowns" 
         component={GodownsScreen}
         options={{ title: 'Godowns' }}
+      />
+      <Stack.Screen 
+        name="GodownDetail" 
+        component={GodownDetailScreen}
+        options={{ title: 'Godown Details', headerShown: false }}
       />
       <Stack.Screen 
         name="AddGodown" 

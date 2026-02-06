@@ -1,8 +1,11 @@
 import { getSuppliers } from "./actions"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { PageHeader } from "@/components/ui/page-header"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { CardTitleWithCount } from "@/components/ui/card-title-with-count"
 import { Plus, Mail, Phone, MapPin, Truck } from "lucide-react"
 import { SupplierForm } from "@/components/suppliers/supplier-form"
 import { DeleteSupplierButton } from "@/components/suppliers/delete-supplier-button"
@@ -11,42 +14,44 @@ export default async function SuppliersPage() {
   const suppliers = await getSuppliers()
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Suppliers</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Manage your suppliers and vendor information</p>
-        </div>
-        <SupplierForm>
-          <Button className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Supplier
-          </Button>
-        </SupplierForm>
-      </div>
+    <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 h-full flex flex-col overflow-hidden">
+      <PageHeader
+        title="Suppliers"
+        description="Manage your suppliers and vendor information"
+        actions={
+          <SupplierForm>
+            <Button className="w-full sm:w-auto h-9 text-sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Supplier
+            </Button>
+          </SupplierForm>
+        }
+      />
 
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <CardHeader className="shrink-0">
-          <CardTitle className="flex items-center gap-2">
-            <Truck className="w-5 h-5" />
-            <span className="hidden sm:inline">All Suppliers</span>
-            <span className="sm:hidden">Suppliers</span>
-          </CardTitle>
-          <CardDescription>A list of all your suppliers with their contact details</CardDescription>
+        <CardHeader className="py-3 px-4 shrink-0">
+          <CardTitleWithCount
+            icon={Truck}
+            title="All Suppliers"
+            mobileTitle="Suppliers"
+            count={suppliers.length}
+          />
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
+        <CardContent className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-0">
           {suppliers.length === 0 ? (
-            <div className="text-center py-12">
-              <Truck className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <h3 className="mt-4 text-lg font-semibold">No suppliers yet</h3>
-              <p className="text-muted-foreground mt-2">Get started by adding your first supplier</p>
-              <SupplierForm>
-                <Button className="mt-4">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Supplier
-                </Button>
-              </SupplierForm>
-            </div>
+            <DataEmptyState
+              icon={Truck}
+              title="No suppliers yet"
+              description="Get started by adding your first supplier"
+              action={
+                <SupplierForm>
+                  <Button className="mt-4">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Supplier
+                  </Button>
+                </SupplierForm>
+              }
+            />
           ) : (
             <Table containerClassName="flex-1 min-h-0 max-h-full">
               <TableHeader>

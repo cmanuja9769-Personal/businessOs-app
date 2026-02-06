@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge, type DocumentStatus } from "@/components/ui/status-badge"
 import { Eye, Download, Mail, Truck, CheckCircle2, AlertCircle, Clock } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -35,19 +36,6 @@ export function InvoicePreviewCard({
   ewaybillStatus,
   ewaybillValidUpto,
 }: InvoicePreviewCardProps) {
-  const getStatusColor = (stat: string) => {
-    switch (stat) {
-      case "paid":
-        return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-      case "sent":
-        return "bg-blue-500/10 text-blue-700 dark:text-blue-400"
-      case "overdue":
-        return "bg-red-500/10 text-red-700 dark:text-red-400"
-      default:
-        return "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-    }
-  }
-
   const isOverdue = new Date() > dueDate && status !== "paid"
 
   // E-Way Bill status helpers
@@ -141,12 +129,10 @@ export function InvoicePreviewCard({
           </div>
 
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <Badge
-              variant="secondary"
-              className={`${getStatusColor(status)} text-xs sm:text-sm px-3`}
-            >
-              {isOverdue ? "Overdue" : status.charAt(0).toUpperCase() + status.slice(1)}
-            </Badge>
+            <StatusBadge 
+              status={isOverdue ? "overdue" : status as DocumentStatus} 
+              className="text-xs sm:text-sm px-3"
+            />
 
             <div className="flex items-center gap-1">
               <Button 

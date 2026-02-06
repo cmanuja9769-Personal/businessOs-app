@@ -178,7 +178,7 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
         <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden px-4 pb-4 pt-0">
           {filteredItems.length === 0 ? (
             <DataEmptyState
-              icon={Package}
+              icon={<Package className="w-12 h-12" />}
               title="No items found"
               description="Try adjusting filters or add a new item"
               action={<ItemForm godowns={godowns} />}

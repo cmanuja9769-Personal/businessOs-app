@@ -128,7 +128,7 @@ export default async function OrganizationsPage() {
         <Card>
           <CardContent className="py-12">
             <DataEmptyState
-              icon={Building2}
+              icon={<Building2 className="w-12 h-12" />}
               title="No organizations yet"
               description="Create your first organization to get started"
               action={

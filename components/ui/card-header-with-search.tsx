@@ -1,10 +1,10 @@
 import { ReactNode } from "react"
-import { LucideIcon, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import { CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
 interface CardHeaderWithSearchProps {
-  icon: LucideIcon
+  icon: ReactNode
   title: string
   mobileTitle?: string
   count: number
@@ -15,7 +15,7 @@ interface CardHeaderWithSearchProps {
 }
 
 export function CardHeaderWithSearch({
-  icon: Icon,
+  icon,
   title,
   mobileTitle,
   count,
@@ -27,7 +27,7 @@ export function CardHeaderWithSearch({
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center">{icon}</span>
         <span className="hidden sm:inline">{title}</span>
         <span className="sm:hidden">{mobileTitle || title}</span>
         <span className="text-muted-foreground font-normal">({count})</span>

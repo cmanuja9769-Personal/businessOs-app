@@ -31,7 +31,7 @@ export default async function SuppliersPage() {
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <CardHeader className="py-3 px-4 shrink-0">
           <CardTitleWithCount
-            icon={Truck}
+            icon={<Truck className="w-4 h-4 sm:w-5 sm:h-5" />}
             title="All Suppliers"
             mobileTitle="Suppliers"
             count={suppliers.length}
@@ -40,7 +40,7 @@ export default async function SuppliersPage() {
         <CardContent className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-0">
           {suppliers.length === 0 ? (
             <DataEmptyState
-              icon={Truck}
+              icon={<Truck className="w-12 h-12" />}
               title="No suppliers yet"
               description="Get started by adding your first supplier"
               action={

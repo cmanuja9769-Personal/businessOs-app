@@ -65,7 +65,7 @@ export default async function UsersPage() {
         <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
           {!users || users.length === 0 ? (
             <DataEmptyState
-              icon={Users}
+              icon={<Users className="w-12 h-12" />}
               title="No users yet"
               description="Users will appear here once they sign up"
             />

@@ -29,7 +29,7 @@ export default async function InvoicesPage() {
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <CardHeader className="py-3 px-4 shrink-0">
           <CardHeaderWithSearch
-            icon={FileText}
+            icon={<FileText className="w-4 h-4 sm:w-5 sm:h-5" />}
             title="All Invoices"
             mobileTitle="Invoices"
             count={invoices.length}
@@ -39,7 +39,7 @@ export default async function InvoicesPage() {
         <CardContent className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-0">
           {invoices.length === 0 ? (
             <DataEmptyState
-              icon={FileText}
+              icon={<FileText className="w-12 h-12" />}
               title="No invoices yet"
               description="Create your first invoice to get started"
               action={

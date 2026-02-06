@@ -68,7 +68,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <CardHeader className="py-3 px-4 shrink-0">
           <CardTitleWithCount
-            icon={Users}
+            icon={<Users className="w-4 h-4 sm:w-5 sm:h-5" />}
             title="All Customers"
             mobileTitle="Customers"
             count={filteredCustomers.length}
@@ -77,7 +77,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
         <CardContent className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-0">
           {filteredCustomers.length === 0 ? (
             <DataEmptyState
-              icon={Users}
+              icon={<Users className="w-12 h-12" />}
               title="No customers found"
               description="Try adjusting filters or add a new customer"
               action={<CustomerForm />}

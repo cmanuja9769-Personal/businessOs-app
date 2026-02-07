@@ -40,7 +40,7 @@ export function ItemMobileCard({ item, godowns }: ItemMobileCardProps) {
       </div>
 
       {/* Metrics row */}
-      <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+      <div className="grid grid-cols-4 gap-2 text-xs mb-2">
         <div>
           <span className="text-muted-foreground block">Stock</span>
           <span className="font-medium flex items-center gap-1">
@@ -55,6 +55,12 @@ export function ItemMobileCard({ item, godowns }: ItemMobileCardProps) {
         <div>
           <span className="text-muted-foreground block">GST</span>
           <span>{item.gstRate}%</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground block">Godown</span>
+          <span className="truncate block" title={item.godownName || undefined}>
+            {item.godownName || "-"}
+          </span>
         </div>
       </div>
 

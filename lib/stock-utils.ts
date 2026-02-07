@@ -13,5 +13,5 @@ export function getStockStatus(
 export const STOCK_STATUS_LABELS: Readonly<Record<StockStatus, string>> = {
   low: "Low",
   high: "Over",
-  normal: "OK",
+  normal: "In Stock",
 } as const

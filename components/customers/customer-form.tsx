@@ -2,8 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 import { useForm } from "react-hook-form"
 import { customerSchema, type CustomerFormData } from "@/lib/schemas"
 import { Button } from "@/components/ui/button"
@@ -29,7 +31,7 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset,
     setValue,
     watch,
@@ -52,6 +54,22 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
   })
 
   const gstinValue = watch("gstinNo")
+
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    reset()
+  }, [reset])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
+  })
 
   // Auto-fetch GST details when valid GSTIN is entered
   const handleGSTLookup = async () => {
@@ -110,7 +128,8 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
           <Button className="gap-2">
@@ -204,7 +223,7 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
@@ -216,5 +235,11 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
         </DialogBody>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

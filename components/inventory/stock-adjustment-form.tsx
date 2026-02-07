@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Minus } from "lucide-react"
 import { toast } from "sonner"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
 const adjustmentSchema = z.object({
   itemId: z.string().min(1, "Item is required"),
@@ -40,6 +42,22 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
       adjustmentType: "increase",
       reason: "correction",
     },
+  })
+
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    form.reset()
+  }, [form])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty: form.formState.isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
   })
 
   const adjustmentType = form.watch("adjustmentType")
@@ -84,7 +102,8 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
@@ -237,7 +256,7 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
             />
 
             <div className="flex gap-2 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
@@ -248,5 +267,11 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
         </Form>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

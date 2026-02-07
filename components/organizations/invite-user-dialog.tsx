@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { UserPlus, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
 interface InviteUserDialogProps {
   organizationId: string
@@ -27,6 +29,25 @@ export function InviteUserDialog({ organizationId, organizationName }: InviteUse
   const [role, setRole] = useState("member")
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+
+  const isDirty = useMemo(() => email.trim() !== "" || role !== "member", [email, role])
+
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    setEmail("")
+    setRole("member")
+  }, [])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
+  })
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,7 +93,8 @@ export function InviteUserDialog({ organizationId, organizationName }: InviteUse
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <UserPlus className="w-4 h-4 mr-2" />
@@ -117,7 +139,7 @@ export function InviteUserDialog({ organizationId, organizationName }: InviteUse
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
@@ -134,5 +156,11 @@ export function InviteUserDialog({ organizationId, organizationName }: InviteUse
         </form>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

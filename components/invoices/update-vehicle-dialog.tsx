@@ -5,7 +5,7 @@
 
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,6 +29,8 @@ import { Truck, Loader2 } from "lucide-react"
 import { eWayBillService, EWayBillUtils } from "@/lib/e-waybill-service"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
 interface UpdateVehicleDialogProps {
   ewbNo: number
@@ -39,7 +41,7 @@ interface UpdateVehicleDialogProps {
 export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: UpdateVehicleDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     vehicleNo: "",
     fromPlace: "",
     fromState: "",
@@ -48,6 +50,32 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
     transMode: "1" as "1" | "2" | "3" | "4",
     transDocNo: "",
     transDocDate: "",
+  }
+  const [formData, setFormData] = useState(initialFormData)
+
+  const isDirty = useMemo(() => {
+    return formData.vehicleNo !== "" ||
+      formData.fromPlace !== "" ||
+      formData.fromState !== "" ||
+      formData.reasonRem !== "" ||
+      formData.transDocNo !== "" ||
+      formData.transDocDate !== ""
+  }, [formData])
+
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    setFormData(initialFormData)
+  }, [])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,7 +119,8 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Truck className="w-3 h-3 mr-1" />
@@ -250,7 +279,7 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
@@ -267,5 +296,11 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
         </form>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

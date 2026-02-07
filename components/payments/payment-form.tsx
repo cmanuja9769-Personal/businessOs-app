@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { paymentSchema, type PaymentFormData } from "@/lib/schemas"
@@ -21,6 +21,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { DollarSign } from "lucide-react"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
 interface PaymentFormProps {
   children: React.ReactNode
@@ -46,6 +48,22 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
     },
   })
 
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    form.reset()
+  }, [form])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty: form.formState.isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
+  })
+
   function onSubmit(data: PaymentFormData) {
     startTransition(async () => {
       const result = await createPayment(data)
@@ -61,7 +79,8 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -162,7 +181,7 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
             />
 
             <div className="flex gap-3 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending}>
@@ -173,5 +192,11 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
         </Form>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

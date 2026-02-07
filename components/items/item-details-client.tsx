@@ -439,7 +439,7 @@ export function ItemDetailsClient({
                             {isLow ? (
                               <Badge variant="destructive" className="bg-orange-500">Low</Badge>
                             ) : (
-                              <Badge variant="outline" className="text-green-600">OK</Badge>
+                              <Badge variant="outline" className="text-green-600">In Stock</Badge>
                             )}
                           </TableCell>
                         </TableRow>

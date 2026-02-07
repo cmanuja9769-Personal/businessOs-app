@@ -189,54 +189,129 @@ export async function getItems(): Promise<IItem[]> {
       )
     )
 
+    // Fetch all warehouses (not just those referenced by items) so we can show names
     const godownNameById = new Map<string, string>()
-    if (godownIds.length > 0) {
-      const godownsRes = await supabase.from("warehouses").select("id, name").in("id", godownIds)
-      if (!godownsRes.error && godownsRes.data) {
-        for (const godown of godownsRes.data as Record<string, unknown>[]) {
-          if (godown?.id && typeof godown?.name === "string") {
-            godownNameById.set(godown.id as string, godown.name)
+    const allWarehousesRes = await supabase.from("warehouses").select("id, name")
+    if (!allWarehousesRes.error && allWarehousesRes.data) {
+      for (const godown of allWarehousesRes.data as Record<string, unknown>[]) {
+        if (godown?.id && typeof godown?.name === "string") {
+          godownNameById.set(godown.id as string, godown.name)
+        }
+      }
+    }
+
+    // Fetch all item_warehouse_stock records where quantity > 0
+    // to show all godowns where item has actual stock
+    const itemIds = allData.map((item) => item.id).filter((id): id is string => typeof id === "string")
+    const warehouseStocksByItemId = new Map<string, Array<{ warehouseId: string; warehouseName: string; quantity: number }>>()
+    
+    // Get organization ID from the first item (all items belong to same org due to RLS)
+    const organizationId = allData[0]?.organization_id as string | undefined
+    
+    if (itemIds.length > 0 && organizationId) {
+      // Batch fetch in smaller chunks to avoid query limits and header overflow
+      const stockPageSize = 50
+      
+      for (let i = 0; i < itemIds.length; i += stockPageSize) {
+        const batchIds = itemIds.slice(i, i + stockPageSize)
+        
+        try {
+          const stockRes = await supabase
+            .from("item_warehouse_stock")
+            .select("item_id, warehouse_id, quantity")
+            .in("item_id", batchIds)
+            .eq("organization_id", organizationId)
+            .gt("quantity", 0)
+          
+          if (stockRes.error) {
+            // Table might not exist or RLS policy blocks access - this is non-fatal
+            // Just skip warehouse stock aggregation and use default godown from items table
+            continue
           }
+          
+          const stockData = (stockRes.data as Array<{ item_id: string; warehouse_id: string; quantity: number }>) || []
+          
+          for (const stock of stockData) {
+            if (!stock.item_id || !stock.warehouse_id) continue
+            
+            const itemStocks = warehouseStocksByItemId.get(stock.item_id) || []
+            const warehouseName = godownNameById.get(stock.warehouse_id) || ""
+            itemStocks.push({
+              warehouseId: stock.warehouse_id,
+              warehouseName,
+              quantity: Number(stock.quantity) || 0,
+            })
+            warehouseStocksByItemId.set(stock.item_id, itemStocks)
+          }
+        } catch {
+          // Query failed - continue with next batch
+          continue
         }
       }
     }
 
     const mappedItems = (
-      allData?.map((item) => ({
-        id: item.id ? String(item.id) : "",
-        itemCode: item.item_code ? String(item.item_code) : "",
-        name: item.name ? String(item.name) : "",
-        description: item.description ? String(item.description) : "",
-        category: item.category ? String(item.category) : "",
-        hsnCode: item.hsn ? String(item.hsn) : "",
-        salePrice: Number(item.sale_price) || 0,
-        wholesalePrice: Number(item.wholesale_price) || 0,
-        quantityPrice: Number(item.quantity_price) || 0,
-        purchasePrice: Number(item.purchase_price) || 0,
-        discountType: (item.discount_type as "percentage" | "flat") || "percentage",
-        saleDiscount: Number(item.sale_discount) || 0,
-        // IMPORTANT: do not fall back to item_code.
-        // If barcode_no is null, show empty so we don't accidentally save item_code as barcode.
-        barcodeNo: item.barcode_no ? String(item.barcode_no) : "",
-        unit: item.unit ? String(item.unit) : "PCS",
-        packagingUnit: item.packaging_unit ? String(item.packaging_unit) : "CTN",
-        conversionRate: 1,
-        alternateUnit: undefined,
-        mrp: Number(item.sale_price) || 0,
-        stock: Number(item.current_stock) || 0,
-        minStock: Number(item.min_stock) || 0,
-        maxStock: (Number(item.current_stock) || 0) + 100,
-        itemLocation: item.item_location ? String(item.item_location) : "",
-        perCartonQuantity: Number(item.per_carton_quantity) || 1,
-        godownId: item.warehouse_id && typeof item.warehouse_id === "string" ? item.warehouse_id : null,
-        godownName: item.warehouse_id && typeof item.warehouse_id === "string" ? godownNameById.get(item.warehouse_id) || null : null,
-        taxRate: Number(item.tax_rate) || 0,
-        inclusiveOfTax: Boolean(item.inclusive_of_tax) || false,
-        gstRate: Number(item.tax_rate) || 0,
-        cessRate: 0,
-        createdAt: new Date(item.created_at ? String(item.created_at) : Date.now()),
-        updatedAt: new Date(item.updated_at ? String(item.updated_at) : Date.now()),
-      })) || []
+      allData?.map((item) => {
+        const itemId = item.id ? String(item.id) : ""
+        const warehouseStocks = warehouseStocksByItemId.get(itemId) || []
+        
+        // Determine godowns to display:
+        // If item has stock in multiple warehouses, show those
+        // Otherwise fall back to the default warehouse_id from the item
+        let displayGodownNames: string[] = []
+        if (warehouseStocks.length > 0) {
+          displayGodownNames = warehouseStocks
+            .filter(ws => ws.warehouseName)
+            .map(ws => ws.warehouseName)
+            .sort()
+        } else if (item.warehouse_id && typeof item.warehouse_id === "string") {
+          const defaultName = godownNameById.get(item.warehouse_id)
+          if (defaultName) {
+            displayGodownNames = [defaultName]
+          }
+        }
+        
+        return {
+          id: itemId,
+          itemCode: item.item_code ? String(item.item_code) : "",
+          name: item.name ? String(item.name) : "",
+          description: item.description ? String(item.description) : "",
+          category: item.category ? String(item.category) : "",
+          hsnCode: item.hsn ? String(item.hsn) : "",
+          salePrice: Number(item.sale_price) || 0,
+          wholesalePrice: Number(item.wholesale_price) || 0,
+          quantityPrice: Number(item.quantity_price) || 0,
+          purchasePrice: Number(item.purchase_price) || 0,
+          discountType: (item.discount_type as "percentage" | "flat") || "percentage",
+          saleDiscount: Number(item.sale_discount) || 0,
+          barcodeNo: item.barcode_no ? String(item.barcode_no) : "",
+          unit: item.unit ? String(item.unit) : "PCS",
+          packagingUnit: item.packaging_unit ? String(item.packaging_unit) : "CTN",
+          conversionRate: 1,
+          alternateUnit: undefined,
+          mrp: Number(item.sale_price) || 0,
+          stock: Number(item.current_stock) || 0,
+          minStock: Number(item.min_stock) || 0,
+          maxStock: (Number(item.current_stock) || 0) + 100,
+          itemLocation: item.item_location ? String(item.item_location) : "",
+          perCartonQuantity: Number(item.per_carton_quantity) || 1,
+          godownId: item.warehouse_id && typeof item.warehouse_id === "string" ? item.warehouse_id : null,
+          godownName: displayGodownNames.length > 0 ? displayGodownNames.join(", ") : null,
+          warehouseStocks: warehouseStocks.map(ws => ({
+            id: `${itemId}-${ws.warehouseId}`,
+            itemId,
+            warehouseId: ws.warehouseId,
+            warehouseName: ws.warehouseName,
+            quantity: ws.quantity,
+          })),
+          taxRate: Number(item.tax_rate) || 0,
+          inclusiveOfTax: Boolean(item.inclusive_of_tax) || false,
+          gstRate: Number(item.tax_rate) || 0,
+          cessRate: 0,
+          createdAt: new Date(item.created_at ? String(item.created_at) : Date.now()),
+          updatedAt: new Date(item.updated_at ? String(item.updated_at) : Date.now()),
+        }
+      }) || []
     )
 
     // Deduplicate items by ID (in case of any data issues)
@@ -1561,5 +1636,412 @@ export async function modifyStockWithLedger(
     newStock: newTotalStock,
     quantityBefore: warehouseQuantityBefore,
     quantityAfter: warehouseQuantityAfter
+  }
+}
+
+/**
+ * Get warehouse-specific stock for an item across all warehouses
+ * Used for stock reduction validation in the UI
+ */
+export async function getItemWarehouseStocks(
+  itemId: string
+): Promise<{ 
+  success: boolean
+  error?: string
+  stocks?: Array<{ warehouseId: string; warehouseName: string; quantity: number }>
+  totalStock?: number
+}> {
+  const supabase = await createClient()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  // Get item with organization_id
+  const { data: item, error: itemError } = await supabase
+    .from("items")
+    .select("organization_id, current_stock")
+    .eq("id", itemId)
+    .single()
+
+  if (itemError || !item) {
+    return { success: false, error: itemError?.message || "Item not found" }
+  }
+
+  // Get all warehouse stocks for this item
+  const { data: warehouseStocks, error: wsError } = await supabase
+    .from("item_warehouse_stock")
+    .select("warehouse_id, quantity, warehouses:warehouse_id (id, name)")
+    .eq("item_id", itemId)
+    .eq("organization_id", item.organization_id)
+    .gt("quantity", 0)
+
+  if (wsError) {
+    return { success: false, error: wsError.message }
+  }
+
+  const stocks = (warehouseStocks || []).map((ws: { 
+    warehouse_id: string
+    quantity: number
+    warehouses: { id: string; name: string } | null
+  }) => ({
+    warehouseId: ws.warehouse_id,
+    warehouseName: ws.warehouses?.name || "Unknown",
+    quantity: Number(ws.quantity) || 0
+  }))
+
+  return { 
+    success: true, 
+    stocks,
+    totalStock: Number(item.current_stock) || 0
+  }
+}
+
+/**
+ * Reduce stock from multiple warehouses in a single operation
+ * Used when the user needs to reduce more stock than available in a single warehouse
+ */
+export async function reduceStockFromMultipleWarehouses(
+  itemId: string,
+  reductions: Array<{ warehouseId: string; quantity: number }>,
+  entryUnit: string,
+  reason: string,
+  notes?: string
+): Promise<{ 
+  success: boolean
+  error?: string
+  newStock?: number
+  reductionResults?: Array<{ warehouseId: string; quantity: number; success: boolean; error?: string }>
+}> {
+  const supabase = await createClient()
+  
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  // Validate item
+  const { data: item, error: itemError } = await supabase
+    .from("items")
+    .select("organization_id, current_stock, packaging_unit, unit, name")
+    .eq("id", itemId)
+    .single()
+
+  if (itemError || !item) {
+    return { success: false, error: itemError?.message || "Item not found" }
+  }
+
+  // calculate total reduction
+  const totalReduction = reductions.reduce((sum, r) => sum + Math.round(r.quantity), 0)
+  
+  // Validate total doesn't exceed available stock
+  const currentStock = Number(item.current_stock) || 0
+  if (totalReduction > currentStock) {
+    return { 
+      success: false, 
+      error: `Total reduction (${totalReduction}) exceeds available stock (${currentStock})` 
+    }
+  }
+
+  const reductionResults: Array<{ warehouseId: string; quantity: number; success: boolean; error?: string }> = []
+  
+  // Process each warehouse reduction
+  for (const reduction of reductions) {
+    if (reduction.quantity <= 0) continue
+    
+    // Get current warehouse stock
+    const { data: ws, error: wsReadError } = await supabase
+      .from("item_warehouse_stock")
+      .select("id, quantity")
+      .eq("organization_id", item.organization_id)
+      .eq("item_id", itemId)
+      .eq("warehouse_id", reduction.warehouseId)
+      .maybeSingle()
+
+    if (wsReadError) {
+      reductionResults.push({ 
+        warehouseId: reduction.warehouseId, 
+        quantity: reduction.quantity,
+        success: false, 
+        error: wsReadError.message 
+      })
+      continue
+    }
+
+    const warehouseQtyBefore = Number(ws?.quantity) || 0
+    const reductionQty = Math.round(reduction.quantity)
+    
+    if (reductionQty > warehouseQtyBefore) {
+      reductionResults.push({ 
+        warehouseId: reduction.warehouseId, 
+        quantity: reduction.quantity,
+        success: false, 
+        error: `Insufficient stock. Available: ${warehouseQtyBefore}, Requested: ${reductionQty}` 
+      })
+      continue
+    }
+
+    const warehouseQtyAfter = warehouseQtyBefore - reductionQty
+
+    // Update warehouse stock
+    if (ws?.id) {
+      const { error: wsUpdateError } = await supabase
+        .from("item_warehouse_stock")
+        .update({
+          quantity: warehouseQtyAfter,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", ws.id)
+
+      if (wsUpdateError) {
+        reductionResults.push({ 
+          warehouseId: reduction.warehouseId, 
+          quantity: reduction.quantity,
+          success: false, 
+          error: wsUpdateError.message 
+        })
+        continue
+      }
+    } else {
+      reductionResults.push({ 
+        warehouseId: reduction.warehouseId, 
+        quantity: reduction.quantity,
+        success: false, 
+        error: "No stock record exists for this warehouse" 
+      })
+      continue
+    }
+
+    // Insert ledger entry
+    const ledgerEntry = {
+      organization_id: item.organization_id,
+      item_id: itemId,
+      warehouse_id: reduction.warehouseId,
+      transaction_type: reason === "correction" ? "CORRECTION" : "ADJUSTMENT",
+      transaction_date: new Date().toISOString(),
+      quantity_before: warehouseQtyBefore,
+      quantity_change: -reductionQty,
+      quantity_after: warehouseQtyAfter,
+      entry_quantity: reductionQty,
+      entry_unit: entryUnit,
+      base_quantity: reductionQty,
+      reference_type: "manual_adjustment",
+      reference_no: `MULTI-REDUCE-${Date.now()}`,
+      notes: notes ? `${reason}: ${notes}` : reason,
+      created_by: user.id,
+    }
+
+    await supabase.from("stock_ledger").insert(ledgerEntry)
+    
+    reductionResults.push({ 
+      warehouseId: reduction.warehouseId, 
+      quantity: reduction.quantity,
+      success: true 
+    })
+  }
+
+  // Calculate successfully reduced quantity
+  const successfulReductions = reductionResults.filter(r => r.success)
+  const totalReduced = successfulReductions.reduce((sum, r) => sum + Math.round(r.quantity), 0)
+  
+  // Update item's total stock
+  const newTotalStock = Math.max(0, currentStock - totalReduced)
+  
+  if (totalReduced > 0) {
+    await supabase
+      .from("items")
+      .update({ 
+        current_stock: newTotalStock,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", itemId)
+  }
+
+  revalidatePath("/items")
+  revalidatePath(`/items/${itemId}`)
+
+  const failedReductions = reductionResults.filter(r => !r.success)
+  if (failedReductions.length > 0 && successfulReductions.length === 0) {
+    return { 
+      success: false, 
+      error: `All reductions failed: ${failedReductions.map(r => r.error).join(", ")}`,
+      reductionResults
+    }
+  }
+
+  return { 
+    success: true, 
+    newStock: newTotalStock,
+    reductionResults
+  }
+}
+
+/**
+ * Add stock to multiple warehouses in a single operation
+ * Used when the user needs to distribute incoming stock across multiple warehouses
+ */
+export async function addStockToMultipleWarehouses(
+  itemId: string,
+  additions: Array<{ warehouseId: string; quantity: number }>,
+  entryUnit: string,
+  notes?: string
+): Promise<{ 
+  success: boolean
+  error?: string
+  newStock?: number
+  additionResults?: Array<{ warehouseId: string; quantity: number; success: boolean; error?: string }>
+}> {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  const { data: item, error: itemError } = await supabase
+    .from("items")
+    .select("organization_id, current_stock, packaging_unit, unit, name")
+    .eq("id", itemId)
+    .single()
+
+  if (itemError || !item) {
+    return { success: false, error: itemError?.message || "Item not found" }
+  }
+
+  const totalAddition = additions.reduce((sum, a) => sum + Math.round(a.quantity), 0)
+  
+  if (totalAddition <= 0) {
+    return { success: false, error: "Total addition must be greater than zero" }
+  }
+
+  const additionResults: Array<{ warehouseId: string; quantity: number; success: boolean; error?: string }> = []
+  
+  for (const addition of additions) {
+    if (addition.quantity <= 0) continue
+    
+    const additionQty = Math.round(addition.quantity)
+    
+    const { data: ws, error: wsReadError } = await supabase
+      .from("item_warehouse_stock")
+      .select("id, quantity")
+      .eq("organization_id", item.organization_id)
+      .eq("item_id", itemId)
+      .eq("warehouse_id", addition.warehouseId)
+      .maybeSingle()
+
+    if (wsReadError) {
+      additionResults.push({ 
+        warehouseId: addition.warehouseId, 
+        quantity: addition.quantity,
+        success: false, 
+        error: wsReadError.message 
+      })
+      continue
+    }
+
+    const warehouseQtyBefore = Number(ws?.quantity) || 0
+    const warehouseQtyAfter = warehouseQtyBefore + additionQty
+
+    if (ws?.id) {
+      const { error: wsUpdateError } = await supabase
+        .from("item_warehouse_stock")
+        .update({
+          quantity: warehouseQtyAfter,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", ws.id)
+
+      if (wsUpdateError) {
+        additionResults.push({ 
+          warehouseId: addition.warehouseId, 
+          quantity: addition.quantity,
+          success: false, 
+          error: wsUpdateError.message 
+        })
+        continue
+      }
+    } else {
+      const { error: wsInsertError } = await supabase
+        .from("item_warehouse_stock")
+        .insert({
+          organization_id: item.organization_id,
+          item_id: itemId,
+          warehouse_id: addition.warehouseId,
+          quantity: warehouseQtyAfter,
+        })
+
+      if (wsInsertError) {
+        additionResults.push({ 
+          warehouseId: addition.warehouseId, 
+          quantity: addition.quantity,
+          success: false, 
+          error: wsInsertError.message 
+        })
+        continue
+      }
+    }
+
+    const ledgerEntry = {
+      organization_id: item.organization_id,
+      item_id: itemId,
+      warehouse_id: addition.warehouseId,
+      transaction_type: "IN",
+      transaction_date: new Date().toISOString(),
+      quantity_before: warehouseQtyBefore,
+      quantity_change: additionQty,
+      quantity_after: warehouseQtyAfter,
+      entry_quantity: additionQty,
+      entry_unit: entryUnit,
+      base_quantity: additionQty,
+      reference_type: "manual_adjustment",
+      reference_no: `MULTI-ADD-${Date.now()}`,
+      notes: notes ? `stock_in: ${notes}` : "stock_in",
+      created_by: user.id,
+    }
+
+    await supabase.from("stock_ledger").insert(ledgerEntry)
+    
+    additionResults.push({ 
+      warehouseId: addition.warehouseId, 
+      quantity: addition.quantity,
+      success: true 
+    })
+  }
+
+  const successfulAdditions = additionResults.filter(r => r.success)
+  const totalAdded = successfulAdditions.reduce((sum, r) => sum + Math.round(r.quantity), 0)
+  
+  const currentStock = Number(item.current_stock) || 0
+  const newTotalStock = currentStock + totalAdded
+  
+  if (totalAdded > 0) {
+    await supabase
+      .from("items")
+      .update({ 
+        current_stock: newTotalStock,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", itemId)
+  }
+
+  revalidatePath("/items")
+  revalidatePath(`/items/${itemId}`)
+
+  const failedAdditions = additionResults.filter(r => !r.success)
+  if (failedAdditions.length > 0 && successfulAdditions.length === 0) {
+    return { 
+      success: false, 
+      error: `All additions failed: ${failedAdditions.map(r => r.error).join(", ")}`,
+      additionResults
+    }
+  }
+
+  return { 
+    success: true, 
+    newStock: newTotalStock,
+    additionResults
   }
 }

@@ -105,8 +105,19 @@ export function ItemDesktopRow({ item, godowns }: ItemDesktopRowProps) {
             <span className="text-xs truncate block">{item.godownName || "-"}</span>
           </TooltipTrigger>
           {item.godownName && (
-            <TooltipContent side="top">
-              <p>Godown: {item.godownName}</p>
+            <TooltipContent side="top" className="max-w-xs">
+              {item.warehouseStocks && item.warehouseStocks.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="font-medium text-xs">Stock by Godown:</p>
+                  {item.warehouseStocks.map((ws) => (
+                    <p key={ws.warehouseId} className="text-xs">
+                      {ws.warehouseName}: {ws.quantity} {item.packagingUnit || "CTN"}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p>Godown: {item.godownName}</p>
+              )}
             </TooltipContent>
           )}
         </Tooltip>

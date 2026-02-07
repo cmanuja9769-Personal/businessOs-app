@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { supplierSchema, type SupplierFormData } from "@/lib/schemas"
@@ -22,6 +22,8 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
 interface SupplierFormProps {
   children: React.ReactNode
@@ -41,6 +43,22 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
       address: supplier?.address || "",
       gstinNo: supplier?.gstinNo || "",
     },
+  })
+
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false)
+    form.reset()
+  }, [form])
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty: form.formState.isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
   })
 
   function onSubmit(data: SupplierFormData) {
@@ -63,7 +81,8 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -149,7 +168,7 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
             />
 
             <div className="flex gap-3 justify-end pt-4">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending}>
@@ -161,5 +180,11 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
         </DialogBody>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   )
 }

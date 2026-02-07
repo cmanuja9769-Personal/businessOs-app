@@ -50,6 +50,8 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { searchHSNCodes, type HSNCode } from "@/lib/hsn-codes";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 
 type GodownOption = {
   id: string;
@@ -144,7 +146,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
     reset,
     setValue,
     watch,
@@ -214,6 +216,22 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   const selectedCategory = watch("category");
   const selectedHsnCode = watch("hsnCode");
 
+  const handleCloseDialog = useCallback(() => {
+    setOpen(false);
+    reset();
+  }, [reset]);
+
+  const {
+    showConfirmDialog,
+    handleOpenChange,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChanges({
+    isDirty,
+    onClose: handleCloseDialog,
+    setOpen,
+  });
+
   // Load categories from database when dialog opens
   useEffect(() => {
     if (open) {
@@ -234,9 +252,16 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
     return categories.filter(cat => cat.toLowerCase().includes(search));
   }, [categories, categorySearch]);
 
-  // Auto-generate item code when name changes (only for new items)
+  // Auto-generate item code when name changes
+  // For new items: always regenerate
+  // For existing items: regenerate when name changes from original
   useEffect(() => {
-    if (!item && itemName) {
+    if (!itemName) return;
+    
+    if (!item) {
+      const generatedCode = generateItemCode(itemName);
+      setValue("itemCode", generatedCode);
+    } else if (itemName !== item.name) {
       const generatedCode = generateItemCode(itemName);
       setValue("itemCode", generatedCode);
     }
@@ -276,7 +301,8 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
           <Button className="gap-2">
@@ -1048,7 +1074,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isSubmitting}
               className="min-w-24"
             >
@@ -1065,5 +1091,11 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
         </DialogBody>
       </DialogContent>
     </Dialog>
+    <UnsavedChangesDialog
+      open={showConfirmDialog}
+      onConfirm={confirmDiscard}
+      onCancel={cancelDiscard}
+    />
+    </>
   );
 }

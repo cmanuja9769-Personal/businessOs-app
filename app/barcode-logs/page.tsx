@@ -310,24 +310,26 @@ export default function BarcodeLogsPage() {
             </div>
           )}
 
-          {loading ? (
+          {loading && (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : logs.length === 0 ? (
+          )}
+          {!loading && logs.length === 0 && (
             <DataEmptyState
               icon={<Printer className="h-12 w-12" />}
               title="No print logs found"
               description="Barcode print history will appear here after you print labels."
             />
-          ) : (
+          )}
+          {!loading && logs.length > 0 && (
             <>
                 <Table containerClassName="flex-1 min-h-0 max-h-full">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[2.75rem] min-w-[2.75rem] pl-4">
                         <Checkbox
-                          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                          checked={allSelected || (someSelected ? "indeterminate" : false)}
                           onCheckedChange={toggleSelectAll}
                           aria-label="Select all rows"
                         />

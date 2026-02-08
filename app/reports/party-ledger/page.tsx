@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -64,10 +64,6 @@ export default function PartyLedgerPage() {
     fetchParties()
   }, [])
 
-  useEffect(() => {
-    if (selectedParty && parties.length > 0) fetchLedger()
-  }, [selectedParty, filters.dateFrom, filters.dateTo, parties])
-
   const fetchParties = async () => {
     try {
       const [customersRes, suppliersRes] = await Promise.all([
@@ -88,7 +84,7 @@ export default function PartyLedgerPage() {
     }
   }
 
-  const fetchLedger = async () => {
+  const fetchLedger = useCallback(async () => {
     setLoading(true)
     try {
       const party = parties.find((p) => p.id === selectedParty)
@@ -221,7 +217,11 @@ export default function PartyLedgerPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [parties, selectedParty, filters.dateFrom, filters.dateTo])
+
+  useEffect(() => {
+    if (selectedParty && parties.length > 0) fetchLedger()
+  }, [selectedParty, parties, fetchLedger])
 
   const filteredParties = useMemo(() => {
     return parties.filter((p) => partyType === "all" || p.type === partyType)

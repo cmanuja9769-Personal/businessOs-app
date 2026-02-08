@@ -1,7 +1,6 @@
 import { getCustomers } from "./actions"
 import { CustomerForm } from "@/components/customers/customer-form"
 import { CustomerUploadBtn } from "@/components/customers/customer-upload-btn"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/ui/page-header"

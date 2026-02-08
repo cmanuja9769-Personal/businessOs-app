@@ -59,7 +59,7 @@ export default function StockDetailPage() {
         (warehouseFilter !== "all" ? `&warehouseIds=${warehouseFilter}` : "")
       )
 
-      let ledgerMap: Record<string, { inward: number; outward: number }> = {}
+      const ledgerMap: Record<string, { inward: number; outward: number }> = {}
       if (ledgerRes.ok) {
         const report = await ledgerRes.json()
         if (Array.isArray(report.data)) {
@@ -327,17 +327,19 @@ export default function StockDetailPage() {
                             <TableCell className="text-right text-red-600">-{m.outwardQty}</TableCell>
                             <TableCell className="text-right font-bold">{m.closingQty}</TableCell>
                             <TableCell>
-                              {netChange > 0 ? (
+                              {netChange > 0 && (
                                 <Badge className="bg-green-500/10 text-green-700">
                                   <ArrowDownLeft className="h-3 w-3 mr-1" />
                                   +{netChange}
                                 </Badge>
-                              ) : netChange < 0 ? (
+                              )}
+                              {netChange < 0 && (
                                 <Badge className="bg-red-500/10 text-red-700">
                                   <ArrowUpRight className="h-3 w-3 mr-1" />
                                   {netChange}
                                 </Badge>
-                              ) : (
+                              )}
+                              {netChange === 0 && (
                                 <Badge variant="secondary">No Change</Badge>
                               )}
                             </TableCell>

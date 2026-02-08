@@ -170,7 +170,7 @@ export function getDefaultLayout(): LabelLayout {
  * @param layout - Layout to validate
  * @returns boolean - True if valid
  */
-export function isValidLayout(layout: any): layout is LabelLayout {
+export function isValidLayout(layout: Partial<LabelLayout> | null | undefined): layout is LabelLayout {
   return (
     layout &&
     typeof layout === 'object' &&

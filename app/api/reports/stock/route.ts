@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface StockReportItem {
+  id: string
+  item_code: string | null
+  name: string
+  category: string | null
+  unit: string | null
+  packaging_unit: string | null
+  per_carton_quantity: number | null
+  purchase_price: number | null
+  min_stock: number | null
+  max_stock: number | null
+  current_stock: number | null
+  opening_stock: number | null
+  warehouse_id: string | null
+}
+
+interface WarehouseStockRow {
+  item_id: string
+  quantity: number | null
+  location: string | null
+  warehouse_id: string
+  warehouses: { id: string; name: string } | null
+}
+
 /**
  * Stock Summary Report API
  * Provides comprehensive stock reporting with multiple filters
@@ -50,10 +74,9 @@ export async function GET(request: NextRequest) {
     // Fetch ALL items using pagination (Supabase has 1000 row limit)
     // NOTE: Do NOT apply filters inside pagination loop as it causes skipped items
     // NOTE: Use stable sort (name + id) to prevent items being skipped during pagination
-    const allItemsData: any[] = []
+    const allItemsData: StockReportItem[] = []
     let offset = 0
     const pageSize = 1000
-    let pageNumber = 1
 
     while (true) {
       const itemsQuery = supabase
@@ -78,7 +101,7 @@ export async function GET(request: NextRequest) {
         .order('id', { ascending: true })
         .range(offset, offset + pageSize - 1)
 
-      const { data: itemsBatch, error: itemsError, count } = await itemsQuery
+      const { data: itemsBatch, error: itemsError } = await itemsQuery
 
       if (itemsError) {
         throw itemsError
@@ -95,7 +118,6 @@ export async function GET(request: NextRequest) {
       }
 
       offset += pageSize
-      pageNumber++
     }
 
     // Apply filters AFTER fetching all items to avoid pagination issues
@@ -149,7 +171,7 @@ export async function GET(request: NextRequest) {
     const itemIds = itemsData.map(item => item.id)
     const batchSize = 50
 
-    const allWarehouseStocks: any[] = []
+    const allWarehouseStocks: WarehouseStockRow[] = []
     
     for (let i = 0; i < itemIds.length; i += batchSize) {
       const batchIds = itemIds.slice(i, i + batchSize)

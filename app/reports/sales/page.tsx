@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { pdf } from "@react-pdf/renderer"
 import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/components/reports/report-filter"
-import { CompactReportPDF, type ReportColumn, type ReportGroup } from "@/components/reports/compact-report-pdf"
+import { CompactReportPDF, type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface InvoiceItem {
   id: string
@@ -424,11 +424,12 @@ export default function SalesReportPage() {
 
       <Card>
         <CardContent className="pt-6">
-          {loading ? (
+          {loading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : viewMode === "summary" ? (
+          )}
+          {!loading && viewMode === "summary" && (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -474,7 +475,8 @@ export default function SalesReportPage() {
                 </TableBody>
               </Table>
             </div>
-          ) : (
+          )}
+          {!loading && viewMode !== "summary" && (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>

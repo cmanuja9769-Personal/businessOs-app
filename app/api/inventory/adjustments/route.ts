@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdjustment, approveAdjustment, getAdjustments } from '@/lib/adjustment-management'
+import { createAdjustment, getAdjustments } from '@/lib/adjustment-management'
 
 export async function GET(_request: NextRequest) {
   try {

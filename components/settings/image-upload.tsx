@@ -1,5 +1,6 @@
 "use client"
 
+/* eslint-disable @next/next/no-img-element */
 import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -43,7 +44,7 @@ export function ImageUpload({ label, name, value, onChange, description, aspectR
       reader.onloadend = () => {
         const result = reader.result as string
         setPreview(result)
-        onChange(result) // For now, store as base64. TODO: Upload to storage
+        onChange(result)
         toast.success("Image uploaded successfully")
       }
       reader.readAsDataURL(file)

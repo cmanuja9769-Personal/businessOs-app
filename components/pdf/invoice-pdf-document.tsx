@@ -1,5 +1,6 @@
 "use client"
 
+/* eslint-disable jsx-a11y/alt-text */
 import {
   Document,
   Page,
@@ -434,10 +435,12 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor: 
-                    invoice.status === "paid" ? "#22c55e" :
-                    invoice.status === "partial" ? "#f59e0b" :
-                    invoice.status === "overdue" ? "#ef4444" : "#e5e7eb",
+                  backgroundColor: (() => {
+                    if (invoice.status === "paid") return "#22c55e"
+                    if (invoice.status === "partial") return "#f59e0b"
+                    if (invoice.status === "overdue") return "#ef4444"
+                    return "#e5e7eb"
+                  })(),
                   color: 
                     invoice.status === "draft" ? "#333333" : "#ffffff",
                 },

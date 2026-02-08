@@ -71,11 +71,8 @@ export async function getTrialBalance(organizationId: string, asOnDate?: Date) {
   )
 }
 
-export async function getProfitLossStatement(organizationId: string, startDate: Date, endDate: Date) {
+export async function getProfitLossStatement(organizationId: string, _startDate: Date, _endDate: Date) {
   const supabase = await createClient()
-
-  const startDateStr = startDate.toISOString().split("T")[0]
-  const endDateStr = endDate.toISOString().split("T")[0]
 
   // Get income accounts
   const { data: incomeData } = await supabase
@@ -83,7 +80,7 @@ export async function getProfitLossStatement(organizationId: string, startDate: 
     .select("debit_amount, credit_amount")
     .in(
       "account_id",
-      supabase.from("accounts").select("id").eq("organization_id", organizationId).eq("account_type", "income") as any,
+      supabase.from("accounts").select("id").eq("organization_id", organizationId).eq("account_type", "income") as unknown as string[],
     )
 
   // Get expense accounts
@@ -92,7 +89,7 @@ export async function getProfitLossStatement(organizationId: string, startDate: 
     .select("debit_amount, credit_amount")
     .in(
       "account_id",
-      supabase.from("accounts").select("id").eq("organization_id", organizationId).eq("account_type", "expense") as any,
+      supabase.from("accounts").select("id").eq("organization_id", organizationId).eq("account_type", "expense") as unknown as string[],
     )
 
   const revenue = incomeData?.reduce((sum, line) => sum + (Number(line.credit_amount) || 0), 0) || 0

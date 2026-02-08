@@ -8,7 +8,7 @@ import type { User } from "@supabase/supabase-js"
 
 export interface UserRole {
   role: "admin" | "salesperson" | "accountant" | "viewer" | "user"
-  permissions: Record<string, any>
+  permissions: Record<string, boolean>
 }
 
 export interface Organization {
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         localStorage.removeItem("activeOrganizationId")
       }
-    } catch (e) {
+    } catch {
       // ignore localStorage errors
     }
   }
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Also call server endpoint to clear server-side cookies used by SSR
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
-    } catch (e) {
+    } catch {
       // ignore
     }
 

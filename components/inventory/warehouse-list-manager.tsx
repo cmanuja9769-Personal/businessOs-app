@@ -110,7 +110,7 @@ export function WarehouseListManager() {
 
   const loadWarehouses = useCallback(() => {
     startTransition(() => {
-      void getWarehouses(showInactive)
+      getWarehouses(showInactive)
         .then(setWarehouses)
         .catch(() => toast.error("Failed to load warehouses"))
     })
@@ -237,11 +237,12 @@ export function WarehouseListManager() {
           </div>
         </CardHeader>
         <CardContent>
-          {isPending ? (
+          {isPending && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : warehouses.length === 0 ? (
+          )}
+          {!isPending && warehouses.length === 0 && (
             <div className="text-center py-12">
               <Warehouse className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-muted-foreground">No warehouses found</p>
@@ -250,7 +251,8 @@ export function WarehouseListManager() {
                 Create your first warehouse
               </Button>
             </div>
-          ) : (
+          )}
+          {!isPending && warehouses.length > 0 && (
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>

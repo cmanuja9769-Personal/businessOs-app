@@ -104,7 +104,7 @@ export function StockTransferManager() {
     }
   }, [])
 
-  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { loadData().catch(() => {}) }, [loadData])
 
   useEffect(() => {
     if (!sourceId) {
@@ -114,7 +114,7 @@ export function StockTransferManager() {
     }
     let cancelled = false
     setIsLoadingStock(true)
-    void getWarehouseItemStock(sourceId)
+    getWarehouseItemStock(sourceId)
       .then(data => { if (!cancelled) setSourceStock(data) })
       .catch(() => { if (!cancelled) setSourceStock([]) })
       .finally(() => { if (!cancelled) setIsLoadingStock(false) })
@@ -246,11 +246,12 @@ export function StockTransferManager() {
           </Button>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : transfers.length === 0 ? (
+          )}
+          {!isLoading && transfers.length === 0 && (
             <div className="text-center py-12">
               <ArrowRightLeft className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-muted-foreground">No stock transfers yet</p>
@@ -264,7 +265,8 @@ export function StockTransferManager() {
                 <p className="text-xs text-muted-foreground mt-2">Need at least 2 active warehouses</p>
               )}
             </div>
-          ) : (
+          )}
+          {!isLoading && transfers.length > 0 && (
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -368,15 +370,17 @@ export function StockTransferManager() {
                 </div>
 
                 <ScrollArea className="h-[10rem] border rounded-md">
-                  {isLoadingStock ? (
+                  {isLoadingStock && (
                     <div className="flex items-center justify-center h-full p-4">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
-                  ) : filteredStock.length === 0 ? (
+                  )}
+                  {!isLoadingStock && filteredStock.length === 0 && (
                     <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
                       {sourceStock.length === 0 ? "No items with stock in this warehouse" : "No matching items"}
                     </div>
-                  ) : (
+                  )}
+                  {!isLoadingStock && filteredStock.length > 0 && (
                     <div className="p-1.5 space-y-1">
                       {filteredStock.map(stock => {
                         const added = lineItems.some(li => li.itemId === stock.itemId)
@@ -510,6 +514,10 @@ function TransferRow({
   readonly isExpanded: boolean
   readonly onToggle: () => void
 }) {
+  let statusVariant: "default" | "destructive" | "secondary" = "secondary"
+  if (transfer.status === "completed") statusVariant = "default"
+  else if (transfer.status === "cancelled") statusVariant = "destructive"
+
   return (
     <>
       <TableRow className="cursor-pointer hover:bg-muted/50" onClick={onToggle}>
@@ -529,7 +537,7 @@ function TransferRow({
         </TableCell>
         <TableCell className="text-center">
           <Badge
-            variant={transfer.status === "completed" ? "default" : transfer.status === "cancelled" ? "destructive" : "secondary"}
+            variant={statusVariant}
             className={cn(
               transfer.status === "completed" && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
             )}

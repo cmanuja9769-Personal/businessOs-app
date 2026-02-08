@@ -261,10 +261,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
   useEffect(() => {
     if (!itemName) return;
     
-    if (!item) {
-      const generatedCode = generateItemCode(itemName);
-      setValue("itemCode", generatedCode);
-    } else if (itemName !== item.name) {
+    if (!item || itemName !== item.name) {
       const generatedCode = generateItemCode(itemName);
       setValue("itemCode", generatedCode);
     }
@@ -415,7 +412,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                                 }}
                               >
                                 <Plus className="mr-2 h-4 w-4" />
-                                Add "{categorySearch}"
+                                Add &quot;{categorySearch}&quot;
                               </Button>
                             </div>
                           ) : (
@@ -452,7 +449,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                               }}
                             >
                               <Plus className="mr-2 h-4 w-4" />
-                              Add "{categorySearch}"
+                              Add &quot;{categorySearch}&quot;
                             </CommandItem>
                           )}
                         </CommandGroup>
@@ -491,29 +488,33 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                         onValueChange={setHsnSearch}
                       />
                       <CommandList className="max-h-[280px]">
-                        {hsnSuggestions.length === 0 && hsnSearch.length >= 2 ? (
-                          <CommandEmpty>
-                            <div className="py-2 px-2">
-                              <p className="text-xs text-muted-foreground mb-2">No HSN codes found</p>
-                              <Button
-                                variant="ghost"
-                                className="w-full justify-start text-sm"
-                                onClick={() => {
-                                  setValue("hsnCode", hsnSearch);
-                                  setHsnOpen(false);
-                                  setHsnSearch("");
-                                }}
-                              >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Use &quot;{hsnSearch}&quot; as custom code
-                              </Button>
-                            </div>
-                          </CommandEmpty>
-                        ) : hsnSuggestions.length === 0 ? (
-                          <CommandEmpty>
-                            Type a code or product name to search...
-                          </CommandEmpty>
-                        ) : null}
+                        {(() => {
+                          if (hsnSuggestions.length === 0 && hsnSearch.length >= 2) return (
+                            <CommandEmpty>
+                              <div className="py-2 px-2">
+                                <p className="text-xs text-muted-foreground mb-2">No HSN codes found</p>
+                                <Button
+                                  variant="ghost"
+                                  className="w-full justify-start text-sm"
+                                  onClick={() => {
+                                    setValue("hsnCode", hsnSearch);
+                                    setHsnOpen(false);
+                                    setHsnSearch("");
+                                  }}
+                                >
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Use &quot;{hsnSearch}&quot; as custom code
+                                </Button>
+                              </div>
+                            </CommandEmpty>
+                          )
+                          if (hsnSuggestions.length === 0) return (
+                            <CommandEmpty>
+                              Type a code or product name to search...
+                            </CommandEmpty>
+                          )
+                          return null
+                        })()}
                         {hsnSuggestions.length > 0 && (
                           <CommandGroup heading={`${hsnSuggestions.length} HSN Codes`}>
                             {hsnSuggestions.map((hsn) => (

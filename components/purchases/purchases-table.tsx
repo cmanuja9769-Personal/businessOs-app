@@ -66,7 +66,11 @@ export function PurchasesTable({ purchases }: PurchasesTableProps) {
           <TableRow>
             <TableHead className="w-[2.75rem] min-w-[2.75rem] pl-4">
               <Checkbox
-                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                checked={(() => {
+                  if (allSelected) return true
+                  if (someSelected) return "indeterminate"
+                  return false
+                })()}
                 onCheckedChange={toggleSelectAll}
                 aria-label="Select all rows"
               />

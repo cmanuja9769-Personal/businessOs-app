@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
+import type { ApiInvoiceResponse, ApiInvoiceItemResponse } from "@/types/api-responses"
 
 interface ItemProfit {
   id: string
@@ -36,6 +37,59 @@ interface ItemProfit {
   avgCostPrice: number
 }
 
+function processInvoiceItem(itemMap: Map<string, ItemProfit>, item: ApiInvoiceItemResponse): void {
+  const existing = itemMap.get(item.itemId) || {
+    id: item.itemId,
+    name: item.name || item.itemName,
+    sku: item.sku || '-',
+    category: item.category || 'Uncategorized',
+    unitsSold: 0,
+    totalRevenue: 0,
+    totalCost: 0,
+    grossProfit: 0,
+    profitMargin: 0,
+    avgSellingPrice: 0,
+    avgCostPrice: 0
+  }
+  
+  const qty = item.quantity || 0
+  const sellingPrice = item.price || 0
+  const costPrice = item.purchasePrice || item.costPrice || (sellingPrice * 0.7)
+  
+  existing.unitsSold += qty
+  existing.totalRevenue += qty * sellingPrice
+  existing.totalCost += qty * costPrice
+  
+  itemMap.set(item.itemId, existing)
+}
+
+function processInvoices(
+  invoices: ApiInvoiceResponse[],
+  dateFrom: string,
+  dateTo: string,
+): ItemProfit[] {
+  const itemMap = new Map<string, ItemProfit>()
+  const fromDate = new Date(dateFrom)
+  const toDate = new Date(dateTo)
+  toDate.setHours(23, 59, 59, 999)
+
+  for (const inv of invoices) {
+    const invDate = new Date(inv.invoiceDate)
+    if (invDate < fromDate || invDate > toDate) continue
+    inv.items?.forEach((item: ApiInvoiceItemResponse) => {
+      processInvoiceItem(itemMap, item)
+    })
+  }
+
+  return Array.from(itemMap.values()).map(p => ({
+    ...p,
+    grossProfit: p.totalRevenue - p.totalCost,
+    profitMargin: p.totalRevenue > 0 ? ((p.totalRevenue - p.totalCost) / p.totalRevenue) * 100 : 0,
+    avgSellingPrice: p.unitsSold > 0 ? p.totalRevenue / p.unitsSold : 0,
+    avgCostPrice: p.unitsSold > 0 ? p.totalCost / p.unitsSold : 0
+  }))
+}
+
 export default function ItemProfitPage() {
   const [itemProfits, setItemProfits] = useState<ItemProfit[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,10 +100,7 @@ export default function ItemProfitPage() {
   const [categoryFilter, setCategoryFilter] = useState("all")
 
   useEffect(() => {
-    fetchItemProfits()
-  }, [dateFrom, dateTo])
-
-  const fetchItemProfits = async () => {
+    async function fetchItemProfits() {
     setLoading(true)
     try {
       // Fetch invoices to calculate item-wise profits
@@ -58,52 +109,7 @@ export default function ItemProfitPage() {
       
       const invoices = await response.json()
       
-      // Group by item and calculate profits
-      const itemMap = new Map<string, ItemProfit>()
-      
-      invoices.forEach((inv: any) => {
-        const invDate = new Date(inv.invoiceDate)
-        const fromDate = new Date(dateFrom)
-        const toDate = new Date(dateTo)
-        toDate.setHours(23, 59, 59, 999)
-        
-        if (invDate < fromDate || invDate > toDate) return
-        
-        inv.items?.forEach((item: any) => {
-          const existing = itemMap.get(item.itemId) || {
-            id: item.itemId,
-            name: item.name || item.itemName,
-            sku: item.sku || '-',
-            category: item.category || 'Uncategorized',
-            unitsSold: 0,
-            totalRevenue: 0,
-            totalCost: 0,
-            grossProfit: 0,
-            profitMargin: 0,
-            avgSellingPrice: 0,
-            avgCostPrice: 0
-          }
-          
-          const qty = item.quantity || 0
-          const sellingPrice = item.price || 0
-          const costPrice = item.purchasePrice || item.costPrice || (sellingPrice * 0.7) // Estimate if not available
-          
-          existing.unitsSold += qty
-          existing.totalRevenue += qty * sellingPrice
-          existing.totalCost += qty * costPrice
-          
-          itemMap.set(item.itemId, existing)
-        })
-      })
-      
-      // Calculate profit and averages for each item
-      const profits = Array.from(itemMap.values()).map(p => ({
-        ...p,
-        grossProfit: p.totalRevenue - p.totalCost,
-        profitMargin: p.totalRevenue > 0 ? ((p.totalRevenue - p.totalCost) / p.totalRevenue) * 100 : 0,
-        avgSellingPrice: p.unitsSold > 0 ? p.totalRevenue / p.unitsSold : 0,
-        avgCostPrice: p.unitsSold > 0 ? p.totalCost / p.unitsSold : 0
-      }))
+      const profits = processInvoices(invoices, dateFrom, dateTo)
       
       setItemProfits(profits)
     } catch (error) {
@@ -112,6 +118,8 @@ export default function ItemProfitPage() {
       setLoading(false)
     }
   }
+    fetchItemProfits()
+  }, [dateFrom, dateTo])
 
   const categories = [...new Set(itemProfits.map(i => i.category))]
 
@@ -140,6 +148,13 @@ export default function ItemProfitPage() {
   }), { units: 0, revenue: 0, cost: 0, profit: 0 })
 
   const avgMargin = totals.revenue > 0 ? ((totals.profit / totals.revenue) * 100) : 0
+
+  function getMarginBadgeClass(margin: number) {
+    if (margin >= 30) return "bg-green-500/10 text-green-700"
+    if (margin >= 15) return "bg-yellow-500/10 text-yellow-700"
+    if (margin > 0) return "bg-orange-500/10 text-orange-700"
+    return "bg-red-500/10 text-red-700"
+  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -386,15 +401,7 @@ export default function ItemProfitPage() {
                         <TableCell className="text-right">
                           <Badge 
                             variant="secondary" 
-                            className={
-                              p.profitMargin >= 30 
-                                ? "bg-green-500/10 text-green-700"
-                                : p.profitMargin >= 15
-                                  ? "bg-yellow-500/10 text-yellow-700"
-                                  : p.profitMargin > 0
-                                    ? "bg-orange-500/10 text-orange-700"
-                                    : "bg-red-500/10 text-red-700"
-                            }
+                            className={getMarginBadgeClass(p.profitMargin)}
                           >
                             {p.profitMargin.toFixed(1)}%
                           </Badge>

@@ -91,7 +91,14 @@ export async function POST(request: NextRequest) {
     const qtyChange = operationType === "ADD" ? Math.round(quantity) : -Math.round(quantity)
     
     // Determine transaction type for ledger
-    const transactionType = operationType === "ADD" ? "IN" : (reason === "correction" ? "CORRECTION" : "ADJUSTMENT")
+    let transactionType: string
+    if (operationType === "ADD") {
+      transactionType = "IN"
+    } else if (reason === "correction") {
+      transactionType = "CORRECTION"
+    } else {
+      transactionType = "ADJUSTMENT"
+    }
 
     // Get current warehouse stock with row-level locking for atomic update
     const { data: existingWs, error: wsReadError } = await supabase

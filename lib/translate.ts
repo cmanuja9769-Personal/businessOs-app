@@ -9,7 +9,6 @@
 
 import { 
   transliterateToHindi, 
-  transliterateToHindiAsync,
   useTransliterate,
   applyHindiTransliteration 
 } from './transliteration-engine'

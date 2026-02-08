@@ -42,23 +42,23 @@ export default function PurchaseReportPage() {
   const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
+    const fetchPurchases = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch('/api/purchases')
+        if (response.ok) {
+          const data = await response.json()
+          setPurchases(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch purchases:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchPurchases()
   }, [])
-
-  const fetchPurchases = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/purchases')
-      if (response.ok) {
-        const data = await response.json()
-        setPurchases(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch purchases:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Filter purchases
   const filteredPurchases = purchases.filter(pur => {
@@ -89,6 +89,12 @@ export default function PurchaseReportPage() {
       currency: 'INR',
       minimumFractionDigits: 2
     }).format(value)
+  }
+
+  function getStatusBadgeClass(status: string) {
+    if (status === 'paid') return "bg-green-500/10 text-green-700"
+    if (status === 'partial') return "bg-yellow-500/10 text-yellow-700"
+    return "bg-red-500/10 text-red-700"
   }
 
   const exportToCSV = () => {
@@ -390,13 +396,7 @@ export default function PurchaseReportPage() {
                         <TableCell>
                           <Badge
                             variant="secondary"
-                            className={
-                              pur.status === 'paid'
-                                ? "bg-green-500/10 text-green-700"
-                                : pur.status === 'partial'
-                                  ? "bg-yellow-500/10 text-yellow-700"
-                                  : "bg-red-500/10 text-red-700"
-                            }
+                            className={getStatusBadgeClass(pur.status)}
                           >
                             {pur.status}
                           </Badge>

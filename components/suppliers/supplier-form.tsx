@@ -172,7 +172,11 @@ export function SupplierForm({ children, supplier }: SupplierFormProps) {
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending}>
-                {isPending ? "Saving..." : supplier ? "Update Supplier" : "Add Supplier"}
+                {(() => {
+                  if (isPending) return "Saving..."
+                  if (supplier) return "Update Supplier"
+                  return "Add Supplier"
+                })()}
               </Button>
             </div>
           </form>

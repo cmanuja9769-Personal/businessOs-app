@@ -152,7 +152,7 @@ export function BarcodeDisplay({
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 space-y-3">
           <h3 className="text-lg font-semibold text-yellow-900">Barcode Not Available</h3>
           <p className="text-yellow-700">
-            This item doesn't have a barcode yet. A barcode is generated for new items if left empty.
+            This item doesn&apos;t have a barcode yet. A barcode is generated for new items if left empty.
           </p>
         </div>
       </div>

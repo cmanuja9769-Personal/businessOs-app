@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Truck, FileText, RefreshCw } from "lucide-react"
+import { Truck, FileText } from "lucide-react"
 import { PortalEWayBillsViewer } from "@/components/invoices/portal-ewaybills-viewer"
 import { EWayBillSync } from "@/components/invoices/ewaybill-sync"
 import Link from "next/link"
@@ -84,7 +84,7 @@ export default function EWayBillManagementPage() {
                 <p className="font-medium text-blue-900">How to generate E-Way Bills:</p>
                 <ul className="list-disc pl-5 text-blue-800 space-y-1">
                   <li>Go to any invoice with amount ≥ ₹50,000</li>
-                  <li>Click "Generate E-Way Bill" button</li>
+                  <li>Click &quot;Generate E-Way Bill&quot; button</li>
                   <li>E-Way Bill will be auto-generated from invoice details</li>
                   <li>You can update vehicle, extend validity, or cancel from invoice page</li>
                 </ul>

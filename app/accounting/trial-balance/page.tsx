@@ -8,8 +8,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
 
+interface TrialBalanceEntry {
+  accountCode: string
+  accountName: string
+  debit: number
+  credit: number
+  debitBalance: number
+  creditBalance: number
+}
+
 export default function TrialBalancePage() {
-  const [trialBalance, setTrialBalance] = useState<any[]>([])
+  const [trialBalance, setTrialBalance] = useState<TrialBalanceEntry[]>([])
   const [totals, setTotals] = useState({ totalDebit: 0, totalCredit: 0 })
 
   useEffect(() => {

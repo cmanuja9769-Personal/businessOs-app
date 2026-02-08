@@ -3,6 +3,10 @@
  * This service handles all e-way bill operations and integrates with backend APIs
  */
 
+export type TransportMode = "1" | "2" | "3" | "4"
+
+export type ReasonCode = "1" | "2" | "3" | "4"
+
 export interface EWayBillData {
   ewbNo: number
   ewbDate: string
@@ -10,7 +14,7 @@ export interface EWayBillData {
   status: "active" | "cancelled" | "expired"
   distance?: number
   vehicleNo?: string
-  transportMode?: "1" | "2" | "3" | "4" // 1=Road, 2=Rail, 3=Air, 4=Ship
+  transportMode?: TransportMode
   vehicleType?: "regular" | "over_dimensional"
 }
 
@@ -29,9 +33,9 @@ export interface UpdateVehicleRequest {
   vehicleNo: string
   fromPlace: string
   fromState: number
-  reasonCode: "1" | "2" | "3" | "4" // 1=Breakdown, 2=Transhipment, 3=Others, 4=First Time
+  reasonCode: ReasonCode
   reasonRem?: string
-  transMode: "1" | "2" | "3" | "4"
+  transMode: TransportMode
   transDocNo?: string
   transDocDate?: string
   vehicleType?: "regular" | "over_dimensional"
@@ -39,7 +43,7 @@ export interface UpdateVehicleRequest {
 
 export interface CancelEWayBillRequest {
   ewbNo: number
-  cancelRsnCode: "1" | "2" | "3" | "4" // 1=Duplicate, 2=Order Cancelled, 3=Data Entry Mistake, 4=Others
+  cancelRsnCode: ReasonCode
   cancelRmrk: string
 }
 
@@ -53,8 +57,8 @@ export interface ExtendValidityRequest {
   transDocDate?: string
   reasonCode: "1" | "2" | "3" | "4" | "5" // 1=Natural Calamity, 2=Law & Order, 3=Transhipment, 4=Accident, 5=Others
   reasonRem?: string
-  consignmentStatus: "M" | "T" // M=In Movement, T=In Transit
-  transMode: "1" | "2" | "3" | "4"
+  consignmentStatus: "M" | "T"
+  transMode: TransportMode
 }
 
 export interface EWayBillQueueJob {
@@ -114,26 +118,22 @@ export class EWayBillService {
    * Generate E-Way Bill for an invoice
    */
   async generateEWayBill(invoiceId: string): Promise<EWayBillResponse> {
-    try {
-      const url = `${this.baseUrl}/generate`
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: this.getHeaders(),
-        body: JSON.stringify({ invoiceId }),
-        credentials: 'include', // Include cookies for backend auth
-      })
+    const url = `${this.baseUrl}/generate`
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({ invoiceId }),
+      credentials: 'include',
+    })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to generate E-Way Bill")
-      }
-
-      const data = await response.json()
-      return data
-    } catch (error) {
-      throw error
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to generate E-Way Bill")
     }
+
+    const data = await response.json()
+    return data
   }
 
   /**
@@ -264,7 +264,7 @@ export class EWayBillService {
         updated: number
         skipped: number
       }
-      ewayBills: any[]
+      ewayBills: EWayBillData[]
     }
   }> {
     try {
@@ -389,7 +389,7 @@ export const EWayBillUtils = {
   /**
    * Check if E-Way Bill is required for invoice
    */
-  isEWayBillRequired(total: number, isInterState: boolean = false): boolean {
+  isEWayBillRequired(total: number, _isInterState: boolean = false): boolean {
     // E-Way Bill required for goods > ₹50,000
     return total >= 50000
   },
@@ -526,7 +526,7 @@ export const EWayBillUtils = {
    */
   isValidVehicleNumber(vehicleNo: string): boolean {
     // Format: MH12AB1234 (2 letters + 2 digits + 1-2 letters + 4 digits)
-    const regex = /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/
+    const regex = /^[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}$/
     return regex.test(vehicleNo.replace(/\s/g, ""))
   },
 

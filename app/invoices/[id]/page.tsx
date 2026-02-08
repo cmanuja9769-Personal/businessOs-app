@@ -7,9 +7,6 @@ import Link from "next/link"
 import { GenerateEInvoiceButton } from "@/components/invoices/generate-einvoice-button"
 import { GenerateEWayBillButton } from "@/components/invoices/generate-ewaybill-button"
 import { EWayBillStatusCard } from "@/components/invoices/e-waybill-status-card"
-import { ClassicTemplate } from "@/components/invoices/templates/classic-template"
-import { ModernTemplate } from "@/components/invoices/templates/modern-template"
-import { MinimalTemplate } from "@/components/invoices/templates/minimal-template"
 import { DOCUMENT_TYPE_CONFIG } from "@/types"
 import { SendInvoiceEmailDialog } from "@/components/invoices/send-invoice-email-dialog"
 import { InvoiceViewDisplay } from "@/components/invoices/invoice-view-display"
@@ -40,14 +37,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   }
 
   const settings = await getSettings()
-
-  // Select template based on settings
-  const TemplateComponent =
-    settings.invoiceTemplate === "modern"
-      ? ModernTemplate
-      : settings.invoiceTemplate === "minimal"
-        ? MinimalTemplate
-        : ClassicTemplate
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">

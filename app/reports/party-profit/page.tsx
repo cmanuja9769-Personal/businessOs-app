@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfYear, endOfMonth } from "date-fns"
+import type { ApiInvoiceResponse, ApiInvoiceItemResponse } from "@/types/api-responses"
 
 interface PartyProfit {
   partyId: string
@@ -33,6 +34,13 @@ interface PartyProfit {
   transactionCount: number
 }
 
+function calculateItemsCost(items: ApiInvoiceItemResponse[] | undefined): number {
+  if (!items) return 0
+  return items.reduce((sum: number, item: ApiInvoiceItemResponse) => {
+    return sum + (item.purchasePrice || 0) * (item.quantity || 0)
+  }, 0)
+}
+
 export default function PartyProfitPage() {
   const [partyProfits, setPartyProfits] = useState<PartyProfit[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,10 +49,7 @@ export default function PartyProfitPage() {
   const [sortBy, setSortBy] = useState<string>("profit")
 
   useEffect(() => {
-    fetchPartyProfits()
-  }, [dateFrom, dateTo])
-
-  const fetchPartyProfits = async () => {
+    async function fetchPartyProfits() {
     setLoading(true)
     try {
       const response = await fetch('/api/invoices')
@@ -55,7 +60,7 @@ export default function PartyProfitPage() {
       // Group invoices by customer and calculate profits
       const customerMap = new Map<string, PartyProfit>()
       
-      invoices.forEach((inv: any) => {
+      invoices.forEach((inv: ApiInvoiceResponse) => {
         const invDate = new Date(inv.invoiceDate)
         const fromDate = new Date(dateFrom)
         const toDate = new Date(dateTo)
@@ -63,8 +68,9 @@ export default function PartyProfitPage() {
         
         if (invDate < fromDate || invDate > toDate) return
         
-        const existing = customerMap.get(inv.customerId) || {
-          partyId: inv.customerId,
+        const customerId = inv.customerId || ''
+        const existing = customerMap.get(customerId) || {
+          partyId: customerId,
           partyName: inv.customerName,
           partyType: 'customer' as const,
           totalSales: 0,
@@ -74,16 +80,13 @@ export default function PartyProfitPage() {
           transactionCount: 0
         }
         
-        // Calculate cost from items
-        const itemsCost = inv.items?.reduce((sum: number, item: any) => {
-          return sum + (item.purchasePrice || 0) * (item.quantity || 0)
-        }, 0) || 0
+        const itemsCost = calculateItemsCost(inv.items)
         
         existing.totalSales += inv.subtotal || 0
         existing.totalCost += itemsCost
         existing.transactionCount += 1
         
-        customerMap.set(inv.customerId, existing)
+        customerMap.set(customerId, existing)
       })
       
       // Calculate profit and margin for each
@@ -100,6 +103,8 @@ export default function PartyProfitPage() {
       setLoading(false)
     }
   }
+    fetchPartyProfits()
+  }, [dateFrom, dateTo])
 
   const sortedProfits = [...partyProfits].sort((a, b) => {
     switch (sortBy) {
@@ -119,6 +124,19 @@ export default function PartyProfitPage() {
   }), { sales: 0, cost: 0, profit: 0, transactions: 0 })
 
   const avgMargin = totals.sales > 0 ? ((totals.profit / totals.sales) * 100) : 0
+
+  function getMarginBadgeClass(margin: number) {
+    if (margin >= 30) return "bg-green-500/10 text-green-700"
+    if (margin >= 15) return "bg-yellow-500/10 text-yellow-700"
+    return "bg-red-500/10 text-red-700"
+  }
+
+  function getPerformanceBadge(margin: number) {
+    if (margin >= 30) return <Badge className="bg-green-500/10 text-green-700">High Performer</Badge>
+    if (margin >= 15) return <Badge className="bg-yellow-500/10 text-yellow-700">Average</Badge>
+    if (margin > 0) return <Badge className="bg-orange-500/10 text-orange-700">Low Margin</Badge>
+    return <Badge className="bg-red-500/10 text-red-700">Loss</Badge>
+  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -332,28 +350,14 @@ export default function PartyProfitPage() {
                         <TableCell className="text-right">
                           <Badge 
                             variant="secondary" 
-                            className={
-                              p.profitMargin >= 30 
-                                ? "bg-green-500/10 text-green-700"
-                                : p.profitMargin >= 15
-                                  ? "bg-yellow-500/10 text-yellow-700"
-                                  : "bg-red-500/10 text-red-700"
-                            }
+                            className={getMarginBadgeClass(p.profitMargin)}
                           >
                             {p.profitMargin.toFixed(1)}%
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">{p.transactionCount}</TableCell>
                         <TableCell>
-                          {p.profitMargin >= 30 ? (
-                            <Badge className="bg-green-500/10 text-green-700">High Performer</Badge>
-                          ) : p.profitMargin >= 15 ? (
-                            <Badge className="bg-yellow-500/10 text-yellow-700">Average</Badge>
-                          ) : p.profitMargin > 0 ? (
-                            <Badge className="bg-orange-500/10 text-orange-700">Low Margin</Badge>
-                          ) : (
-                            <Badge className="bg-red-500/10 text-red-700">Loss</Badge>
-                          )}
+                          {getPerformanceBadge(p.profitMargin)}
                         </TableCell>
                       </TableRow>
                     ))

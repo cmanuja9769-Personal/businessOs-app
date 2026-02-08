@@ -32,7 +32,6 @@ import type { IItem } from "@/types"
 import { searchItems } from "@/app/items/actions"
 import {
   useBarcodeQueueStore,
-  type BarcodeQueueEntry,
 } from "@/store/use-barcode-queue-store"
 import {
   LABEL_LAYOUTS,
@@ -349,15 +348,18 @@ export function BarcodeQueueModal({ logoUrl }: BarcodeQueueModalProps) {
                   Items {searchResults.length > 0 && <span className="text-muted-foreground font-normal">({searchResults.length})</span>}
                 </Label>
                 <ScrollArea className="h-52 md:h-60 rounded-md border">
-                  {isLoadingItems ? (
+                  {(() => {
+                    if (isLoadingItems) return (
                     <div className="flex items-center justify-center h-40 p-6">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
-                  ) : searchResults.length === 0 ? (
+                    )
+                    if (searchResults.length === 0) return (
                     <div className="flex items-center justify-center h-40 p-6 text-sm text-muted-foreground">
                       {searchQuery ? "No items found" : "No items available"}
                     </div>
-                  ) : (
+                    )
+                    return (
                     <div className="p-2 space-y-1">
                       {searchResults.map((item) => {
                         const inQueue = queueItemIds.has(item.id)
@@ -394,7 +396,8 @@ export function BarcodeQueueModal({ logoUrl }: BarcodeQueueModalProps) {
                         )
                       })}
                     </div>
-                  )}
+                    )
+                  })()}
                 </ScrollArea>
               </div>
 
@@ -610,7 +613,7 @@ interface GridPreviewProps {
   readonly labelsPerPage: number
 }
 
-function GridPreview({ slots, columns, rows, labelsPerPage }: GridPreviewProps) {
+function GridPreview({ slots, columns, rows: _rows, labelsPerPage }: GridPreviewProps) {
   const pageOneSlots = slots.slice(0, labelsPerPage)
   return (
     <div className="space-y-1.5">

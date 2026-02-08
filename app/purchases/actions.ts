@@ -27,7 +27,7 @@ export async function getPurchases(): Promise<IPurchase[]> {
       supplierAddress: purchase.supplier_address || "",
       supplierGst: purchase.supplier_gst || "",
       date: new Date(purchase.purchase_date || purchase.created_at),
-      items: purchase.purchase_items.map((item: any) => ({
+      items: purchase.purchase_items.map((item: { item_id: string | null; item_name: string; hsn: string | null; quantity: number; rate: number; discount: number | null; discount_type: string | null; tax_rate: number; amount: number }) => ({
         itemId: item.item_id || "",
         name: item.item_name,
         hsn: item.hsn || "",
@@ -74,7 +74,7 @@ export async function getPurchase(id: string): Promise<IPurchase | undefined> {
     supplierAddress: data.supplier_address || "",
     supplierGst: data.supplier_gst || "",
     date: new Date(data.purchase_date || data.created_at),
-    items: data.purchase_items.map((item: any) => ({
+    items: data.purchase_items.map((item: { item_id: string | null; item_name: string; hsn: string | null; quantity: number; rate: number; discount: number | null; discount_type: string | null; tax_rate: number; amount: number }) => ({
       itemId: item.item_id || "",
       name: item.item_name,
       hsn: item.hsn || "",

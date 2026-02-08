@@ -5,12 +5,79 @@ import { createClient } from "@/lib/supabase/server"
 import type { IPayment } from "@/types"
 import { paymentSchema } from "@/lib/schemas"
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>
+
+const TOTAL_PAID_SELECT = "total, paid_amount"
+const ERROR_FETCHING_PAYMENTS = "[v0] Error fetching payments:"
+
+function derivePaymentStatus(balance: number, paidAmount: number): "paid" | "partial" | "unpaid" {
+  if (balance <= 0) return "paid"
+  if (paidAmount > 0) return "partial"
+  return "unpaid"
+}
+
+async function updateInvoiceBalance(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  amountDelta: number
+) {
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select(TOTAL_PAID_SELECT)
+    .eq("id", invoiceId)
+    .single()
+
+  if (!invoice) return
+
+  const newPaidAmount = Number(invoice.paid_amount) + amountDelta
+  const newBalance = Number(invoice.total) - newPaidAmount
+
+  await supabase
+    .from("invoices")
+    .update({
+      paid_amount: newPaidAmount,
+      balance: newBalance,
+      status: derivePaymentStatus(newBalance, newPaidAmount),
+    })
+    .eq("id", invoiceId)
+
+  revalidatePath("/invoices")
+  revalidatePath(`/invoices/${invoiceId}`)
+}
+
+async function updatePurchaseBalance(
+  supabase: SupabaseClient,
+  purchaseId: string,
+  amountDelta: number
+) {
+  const { data: purchase } = await supabase
+    .from("purchases")
+    .select(TOTAL_PAID_SELECT)
+    .eq("id", purchaseId)
+    .single()
+
+  if (!purchase) return
+
+  const newPaidAmount = Number(purchase.paid_amount) + amountDelta
+  const newBalance = Number(purchase.total) - newPaidAmount
+
+  await supabase
+    .from("purchases")
+    .update({
+      paid_amount: newPaidAmount,
+      balance: newBalance,
+      status: derivePaymentStatus(newBalance, newPaidAmount),
+    })
+    .eq("id", purchaseId)
+
+  revalidatePath("/purchases")
+  revalidatePath(`/purchases/${purchaseId}`)
+}
+
 export async function createPayment(data: unknown) {
   const validated = paymentSchema.parse(data)
-
   const supabase = await createClient()
 
-  // Create payment record
   const { data: newPayment, error: paymentError } = await supabase
     .from("payments")
     .insert({
@@ -30,57 +97,12 @@ export async function createPayment(data: unknown) {
     return { success: false, error: paymentError.message }
   }
 
-  // Update invoice or purchase balance and status
   if (validated.invoiceId) {
-    const { data: invoice } = await supabase
-      .from("invoices")
-      .select("total, paid_amount")
-      .eq("id", validated.invoiceId)
-      .single()
-
-    if (invoice) {
-      const newPaidAmount = Number(invoice.paid_amount) + validated.amount
-      const newBalance = Number(invoice.total) - newPaidAmount
-      const newStatus = newBalance <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid"
-
-      await supabase
-        .from("invoices")
-        .update({
-          paid_amount: newPaidAmount,
-          balance: newBalance,
-          status: newStatus,
-        })
-        .eq("id", validated.invoiceId)
-
-      revalidatePath("/invoices")
-      revalidatePath(`/invoices/${validated.invoiceId}`)
-    }
+    await updateInvoiceBalance(supabase, validated.invoiceId, validated.amount)
   }
 
   if (validated.purchaseId) {
-    const { data: purchase } = await supabase
-      .from("purchases")
-      .select("total, paid_amount")
-      .eq("id", validated.purchaseId)
-      .single()
-
-    if (purchase) {
-      const newPaidAmount = Number(purchase.paid_amount) + validated.amount
-      const newBalance = Number(purchase.total) - newPaidAmount
-      const newStatus = newBalance <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid"
-
-      await supabase
-        .from("purchases")
-        .update({
-          paid_amount: newPaidAmount,
-          balance: newBalance,
-          status: newStatus,
-        })
-        .eq("id", validated.purchaseId)
-
-      revalidatePath("/purchases")
-      revalidatePath(`/purchases/${validated.purchaseId}`)
-    }
+    await updatePurchaseBalance(supabase, validated.purchaseId, validated.amount)
   }
 
   return { success: true, payment: newPayment }
@@ -95,7 +117,7 @@ export async function getPaymentsByInvoice(invoiceId: string): Promise<IPayment[
     .order("payment_date", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching payments:", error)
+    console.error(ERROR_FETCHING_PAYMENTS, error)
     return []
   }
 
@@ -109,7 +131,7 @@ export async function getPaymentsByInvoice(invoiceId: string): Promise<IPayment[
       supplierName: undefined,
       paymentDate: new Date(payment.payment_date),
       amount: Number(payment.amount),
-      paymentMethod: payment.payment_method as any,
+      paymentMethod: payment.payment_method as IPayment["paymentMethod"],
       referenceNumber: payment.reference_number,
       notes: payment.notes,
       createdAt: new Date(payment.created_at),
@@ -126,7 +148,7 @@ export async function getPaymentsByPurchase(purchaseId: string): Promise<IPaymen
     .order("payment_date", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching payments:", error)
+    console.error(ERROR_FETCHING_PAYMENTS, error)
     return []
   }
 
@@ -138,7 +160,7 @@ export async function getPaymentsByPurchase(purchaseId: string): Promise<IPaymen
       type: payment.purchase_id ? "payable" : "receivable" as "receivable" | "payable",
       paymentDate: new Date(payment.payment_date),
       amount: Number(payment.amount),
-      paymentMethod: payment.payment_method as any,
+      paymentMethod: payment.payment_method as IPayment["paymentMethod"],
       referenceNumber: payment.reference_number,
       notes: payment.notes,
       createdAt: new Date(payment.created_at),
@@ -158,7 +180,7 @@ export async function getAllPayments() {
     .order("payment_date", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching payments:", error)
+    console.error(ERROR_FETCHING_PAYMENTS, error)
     return []
   }
 
@@ -184,7 +206,6 @@ export async function getAllPayments() {
 export async function deletePayment(id: string, invoiceId?: string, purchaseId?: string) {
   const supabase = await createClient()
 
-  // Get payment amount before deletion
   const { data: paymentData } = await supabase.from("payments").select("amount").eq("id", id).single()
 
   if (!paymentData) {
@@ -198,53 +219,14 @@ export async function deletePayment(id: string, invoiceId?: string, purchaseId?:
     return { success: false, error: deleteError.message }
   }
 
-  // Update invoice or purchase balance
+  const reverseAmount = -Number(paymentData.amount)
+
   if (invoiceId) {
-    const { data: invoice } = await supabase.from("invoices").select("total, paid_amount").eq("id", invoiceId).single()
-
-    if (invoice) {
-      const newPaidAmount = Number(invoice.paid_amount) - Number(paymentData.amount)
-      const newBalance = Number(invoice.total) - newPaidAmount
-      const newStatus = newBalance <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid"
-
-      await supabase
-        .from("invoices")
-        .update({
-          paid_amount: newPaidAmount,
-          balance: newBalance,
-          status: newStatus,
-        })
-        .eq("id", invoiceId)
-
-      revalidatePath("/invoices")
-      revalidatePath(`/invoices/${invoiceId}`)
-    }
+    await updateInvoiceBalance(supabase, invoiceId, reverseAmount)
   }
 
   if (purchaseId) {
-    const { data: purchase } = await supabase
-      .from("purchases")
-      .select("total, paid_amount")
-      .eq("id", purchaseId)
-      .single()
-
-    if (purchase) {
-      const newPaidAmount = Number(purchase.paid_amount) - Number(paymentData.amount)
-      const newBalance = Number(purchase.total) - newPaidAmount
-      const newStatus = newBalance <= 0 ? "paid" : newPaidAmount > 0 ? "partial" : "unpaid"
-
-      await supabase
-        .from("purchases")
-        .update({
-          paid_amount: newPaidAmount,
-          balance: newBalance,
-          status: newStatus,
-        })
-        .eq("id", purchaseId)
-
-      revalidatePath("/purchases")
-      revalidatePath(`/purchases/${purchaseId}`)
-    }
+    await updatePurchaseBalance(supabase, purchaseId, reverseAmount)
   }
 
   revalidatePath("/payments")

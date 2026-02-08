@@ -48,6 +48,18 @@ export function InvoiceTable({
   // Cache for storing loose quantities when switching to carton mode
   const [looseQuantityCache, setLooseQuantityCache] = useState<Record<string, number>>({});
 
+  const getPriceByMode = (item: IItem): number => {
+    switch (pricingMode) {
+      case "wholesale":
+        return item.wholesalePrice || item.salePrice;
+      case "quantity":
+        return item.quantityPrice || item.salePrice;
+      case "sale":
+      default:
+        return item.salePrice;
+    }
+  };
+
   useEffect(() => {
     if (invoiceItems.length === 0) return;
 
@@ -254,89 +266,76 @@ export function InvoiceTable({
     onItemsChange(invoiceItems.filter((_, i) => i !== index));
   };
 
-  const getPriceByMode = (item: IItem): number => {
-    switch (pricingMode) {
-      case "wholesale":
-        return item.wholesalePrice || item.salePrice;
-      case "quantity":
-        return item.quantityPrice || item.salePrice;
-      case "sale":
-      default:
-        return item.salePrice;
-    }
-  };
-
   const updateRow = (
     index: number,
     field: keyof IInvoiceItem,
     value: unknown
   ) => {
-    const updatedItems = [...invoiceItems];
-    const item = { ...updatedItems[index], [field]: value };
+    let cacheUpdate: { id: string; qty: number } | null = null;
 
-    // Update cache when quantity is manually changed in loose mode
-    if (field === "quantity" && packingType === "loose" && item.itemId) {
-      setLooseQuantityCache(prev => ({
-        ...prev,
-        [item.itemId]: value as number
-      }));
-    }
+    const updatedItems = invoiceItems.map((item, i) => {
+      if (i !== index) return item;
+      const updated = { ...item, [field]: value };
 
-    // Auto-calculate amount
-    if (
-      ["quantity", "rate", "gstRate", "cessRate", "discount"].includes(field)
-    ) {
-      item.amount = calculateItemAmount(
-        item.quantity,
-        item.rate,
-        item.gstRate,
-        item.cessRate,
-        item.discount,
-        billingMode
-      );
-    }
+      if (field === "quantity" && packingType === "loose" && updated.itemId) {
+        cacheUpdate = { id: updated.itemId, qty: value as number };
+      }
 
-    if (field === "itemId" && value) {
-      const selectedItem = items.find((i) => i.id === value);
-      if (selectedItem) {
-        item.itemName = selectedItem.name;
-        item.unit = selectedItem.unit;
-        item.rate = getPriceByMode(selectedItem); // Use pricing mode to determine rate
-        item.gstRate = selectedItem.gstRate;
-        item.cessRate = selectedItem.cessRate;
-        
-        // Store packaging info for PDF display
-        item.packagingUnit = selectedItem.packagingUnit;
-        item.perCartonQuantity = selectedItem.perCartonQuantity;
-        item.displayAsPackaging = packingType === "carton";
-        
-        // Set initial quantity based on packing type
-        const initialQuantity = packingType === "carton" 
-          ? Math.floor(selectedItem.perCartonQuantity || 1)
-          : 1;
-        
-        item.quantity = initialQuantity;
-        
-        // Cache if loose mode
-        if (packingType === "loose") {
-          setLooseQuantityCache(prev => ({
-            ...prev,
-            [selectedItem.id]: initialQuantity
-          }));
-        }
-        
-        item.amount = calculateItemAmount(
-          item.quantity,
-          getPriceByMode(selectedItem),
-          selectedItem.gstRate,
-          selectedItem.cessRate,
-          item.discount,
+      if (
+        ["quantity", "rate", "gstRate", "cessRate", "discount"].includes(field)
+      ) {
+        updated.amount = calculateItemAmount(
+          updated.quantity,
+          updated.rate,
+          updated.gstRate,
+          updated.cessRate,
+          updated.discount,
           billingMode
         );
       }
+
+      if (field === "itemId" && value) {
+        const selectedItem = items.find((si) => si.id === value);
+        if (selectedItem) {
+          updated.itemName = selectedItem.name;
+          updated.unit = selectedItem.unit;
+          updated.rate = getPriceByMode(selectedItem);
+          updated.gstRate = selectedItem.gstRate;
+          updated.cessRate = selectedItem.cessRate;
+          updated.packagingUnit = selectedItem.packagingUnit;
+          updated.perCartonQuantity = selectedItem.perCartonQuantity;
+          updated.displayAsPackaging = packingType === "carton";
+
+          const initialQuantity = packingType === "carton"
+            ? Math.floor(selectedItem.perCartonQuantity || 1)
+            : 1;
+          updated.quantity = initialQuantity;
+
+          if (packingType === "loose") {
+            cacheUpdate = { id: selectedItem.id, qty: initialQuantity };
+          }
+
+          updated.amount = calculateItemAmount(
+            updated.quantity,
+            getPriceByMode(selectedItem),
+            selectedItem.gstRate,
+            selectedItem.cessRate,
+            updated.discount,
+            billingMode
+          );
+        }
+      }
+
+      return updated;
+    });
+
+    if (cacheUpdate) {
+      setLooseQuantityCache(prev => ({
+        ...prev,
+        [cacheUpdate!.id]: cacheUpdate!.qty
+      }));
     }
 
-    updatedItems[index] = item;
     onItemsChange(updatedItems);
   };
 

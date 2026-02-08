@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth"
 import { NextResponse } from "next/server"
 
-export async function POST(request: Request) {
+export async function POST(_request: Request) {
   try {
     const user = await getCurrentUser()
 
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const user = await getCurrentUser()
 

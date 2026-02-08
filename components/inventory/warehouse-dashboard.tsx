@@ -26,9 +26,7 @@ import {
 } from "@/components/ui/select"
 import {
   Warehouse,
-  Package,
   AlertTriangle,
-  TrendingDown,
   IndianRupee,
   Star,
   ArchiveX,

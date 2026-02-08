@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { use, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,18 +11,17 @@ import { UserPlus, Loader2, ArrowLeft } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 
-export default function InviteUserPage({ params }: { params: Promise<{ id: string }> }) {
-  const [organizationId, setOrganizationId] = useState<string>("")
+interface InviteUserPageProps {
+  readonly params: Promise<{ id: string }>
+}
+
+export default function InviteUserPage({ params }: InviteUserPageProps) {
+  const { id: organizationId } = use(params)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState("member")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-
-  // Unwrap params
-  useState(() => {
-    params.then((p) => setOrganizationId(p.id))
-  })
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,7 +53,7 @@ export default function InviteUserPage({ params }: { params: Promise<{ id: strin
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to send invitation",

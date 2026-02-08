@@ -3,16 +3,13 @@
 import { useAuth } from "@/hooks/use-auth"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Building2 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useSyncExternalStore } from "react"
+
+const subscribe = () => () => {}
 
 export function OrganizationSwitcher() {
   const { organization, organizations, setOrganization, loading } = useAuth()
-  const [mounted, setMounted] = useState(false)
-
-  // Prevent hydration mismatch by only rendering after client mount
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false)
 
   if (!mounted) {
     return null

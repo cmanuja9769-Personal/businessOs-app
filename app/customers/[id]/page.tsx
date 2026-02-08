@@ -9,6 +9,34 @@ import { ArrowLeft, Mail, Phone, MapPin, FileText, IndianRupee, TrendingUp, Tren
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+function InvoiceStatusBadge({ status }: { readonly status: string }) {
+  if (status === "paid") {
+    return (
+      <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400">
+        Paid
+      </Badge>
+    )
+  }
+  if (status === "sent") {
+    return (
+      <Badge variant="secondary" className="bg-blue-500/10 text-blue-700 dark:text-blue-400">
+        Sent
+      </Badge>
+    )
+  }
+  if (status === "unpaid" || status === "partial" || status === "overdue") {
+    let label = "Unpaid"
+    if (status === "overdue") label = "Overdue"
+    else if (status === "partial") label = "Partial"
+    return (
+      <Badge variant="secondary" className="bg-orange-500/10 text-orange-700 dark:text-orange-400">
+        {label}
+      </Badge>
+    )
+  }
+  return <Badge variant="secondary">{status}</Badge>
+}
+
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const [customers, allInvoices] = await Promise.all([getCustomers(), getInvoices()])
@@ -194,21 +222,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                       <div className="flex-1">
                         <div className="flex items-center gap-3">
                           <p className="font-mono font-semibold">{invoice.invoiceNo}</p>
-                          {invoice.status === "paid" ? (
-                            <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400">
-                              Paid
-                            </Badge>
-                          ) : invoice.status === "sent" ? (
-                            <Badge variant="secondary" className="bg-blue-500/10 text-blue-700 dark:text-blue-400">
-                              Sent
-                            </Badge>
-                          ) : invoice.status === "unpaid" || invoice.status === "partial" || invoice.status === "overdue" ? (
-                            <Badge variant="secondary" className="bg-orange-500/10 text-orange-700 dark:text-orange-400">
-                              {invoice.status === "overdue" ? "Overdue" : invoice.status === "partial" ? "Partial" : "Unpaid"}
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">{invoice.status}</Badge>
-                          )}
+                          <InvoiceStatusBadge status={invoice.status} />
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                           <span>
@@ -284,21 +298,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     <TableCell className="text-green-600">₹{invoice.paidAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-orange-600 font-semibold">₹{invoice.balance.toFixed(2)}</TableCell>
                     <TableCell>
-                      {invoice.status === "paid" ? (
-                        <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400">
-                          Paid
-                        </Badge>
-                      ) : invoice.status === "sent" ? (
-                        <Badge variant="secondary" className="bg-blue-500/10 text-blue-700 dark:text-blue-400">
-                          Sent
-                        </Badge>
-                      ) : invoice.status === "unpaid" || invoice.status === "partial" || invoice.status === "overdue" ? (
-                        <Badge variant="secondary" className="bg-orange-500/10 text-orange-700 dark:text-orange-400">
-                          {invoice.status === "overdue" ? "Overdue" : invoice.status === "partial" ? "Partial" : "Unpaid"}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">{invoice.status}</Badge>
-                      )}
+                      <InvoiceStatusBadge status={invoice.status} />
                     </TableCell>
                   </TableRow>
                 ))}

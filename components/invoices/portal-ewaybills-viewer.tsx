@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Loader2, Search, RefreshCw, ExternalLink, Truck } from "lucide-react"
+import { Loader2, Search, Truck } from "lucide-react"
 import { eWayBillService, EWayBillUtils, type PortalEWayBill } from "@/lib/e-waybill-service"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -40,9 +40,9 @@ export function PortalEWayBillsViewer() {
       } else {
         toast.success(`Found ${bills.length} E-Way Bill(s)`)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to fetch portal E-Way Bills:", error)
-      toast.error(error.message || "Failed to fetch E-Way Bills from portal")
+      toast.error(error instanceof Error ? error.message : "Failed to fetch E-Way Bills from portal")
     } finally {
       setLoading(false)
     }

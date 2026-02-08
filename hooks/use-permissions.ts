@@ -14,7 +14,7 @@ export function usePermissions() {
     }
   }
 
-  const permissions: Permissions = userRole.permissions as Permissions || {
+  const permissions: Permissions = userRole.permissions as unknown as Permissions || {
     invoices: { create: false, read: false, update: false, delete: false },
     purchases: { create: false, read: false, update: false, delete: false },
     customers: { create: false, read: false, update: false, delete: false },

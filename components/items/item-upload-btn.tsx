@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 
 type UploadStep = "upload" | "confirm"
+type ItemUnit = "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"
 
 interface ParsedItemRow {
   data: Partial<IItem>
@@ -42,11 +43,11 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const validUnits: Array<"PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
-  const validPackagingUnits: Array<"CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"> = ["CTN", "GONI", "BAG", "BUNDLE", "PKT", "BOX", "CASE", "ROLL", "DRUM"]
+  const validUnits: Array<ItemUnit> = ["PCS", "KG", "LTR", "MTR", "BOX", "DOZEN", "PKT", "BAG"]
+  const validPackagingUnits: Array<PackagingUnit> = ["CTN", "GONI", "BAG", "BUNDLE", "PKT", "BOX", "CASE", "ROLL", "DRUM"]
 
   // Map user input variations to standard units
-  const unitMappings: Record<string, "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"> = {
+  const unitMappings: Record<string, ItemUnit> = {
     // PCS variants
     "PIECE": "PCS",
     "PIECES": "PCS",
@@ -91,7 +92,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
   }
 
   // Map user input variations to standard packaging units
-  const packagingUnitMappings: Record<string, "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"> = {
+  const packagingUnitMappings: Record<string, PackagingUnit> = {
     // CTN variants
     "CARTON": "CTN",
     "CARTONS": "CTN",
@@ -131,8 +132,8 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     const normalized = String(input || "").toUpperCase().trim()
     
     // Check if it's already a valid unit
-    if (validUnits.includes(normalized as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG")) {
-      return normalized as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"
+    if (validUnits.includes(normalized as ItemUnit)) {
+      return normalized as ItemUnit
     }
     
     // Check if it matches a mapping
@@ -141,7 +142,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     }
     
     // Return original if not found (will fail validation later)
-    return normalized as "PCS" | "KG" | "LTR" | "MTR" | "BOX" | "DOZEN" | "PKT" | "BAG"
+    return normalized as ItemUnit
   }
 
   // Function to normalize packaging unit input
@@ -149,8 +150,8 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     const normalized = String(input || "").toUpperCase().trim()
     
     // Check if it's already a valid packaging unit
-    if (validPackagingUnits.includes(normalized as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM")) {
-      return normalized as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"
+    if (validPackagingUnits.includes(normalized as PackagingUnit)) {
+      return normalized as PackagingUnit
     }
     
     // Check if it matches a mapping
@@ -159,7 +160,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
     }
     
     // Default to CTN if not found
-    return "CTN" as "CTN" | "GONI" | "BAG" | "BUNDLE" | "PKT" | "BOX" | "CASE" | "ROLL" | "DRUM"
+    return "CTN" as PackagingUnit
   }
 
   // Helper function to safely parse numeric fields, handling NaN
@@ -562,26 +563,25 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         try {
           const result = await bulkImportItems(chunk)
 
-          if (Array.isArray((result as any)?.debugBlocks) && (result as any).debugBlocks.length > 0) {
-            allDebugBlocks.push(...((result as any).debugBlocks as string[]))
+          if ("debugBlocks" in result && Array.isArray(result.debugBlocks) && result.debugBlocks.length > 0) {
+            allDebugBlocks.push(...result.debugBlocks)
           }
-          
-          if (result.success || ((result.inserted || 0) + (result.updated || 0) > 0)) {
-            const imported = (result.inserted || 0) + (result.updated || 0)
-            totalImported += imported
-            toast.success(`Batch ${chunkNum}: ${imported}/${chunk.length} items imported`, { id: batchToastId })
-            
-            if (result.details && result.details.length > 0) {
-              totalErrors += result.details.length
-              allErrors.push(...result.details.slice(0, 5)) // Collect first 5 errors per batch
-            }
-          } else {
+
+          const isSuccess = result.success || ((result.inserted || 0) + (result.updated || 0) > 0)
+
+          if (!isSuccess) {
             toast.error(`Batch ${chunkNum} failed: ${result.error}`, { id: batchToastId })
             totalErrors += chunk.length
-            if (result.details && result.details.length > 0) {
-              allErrors.push(result.details[0])
-            }
+            allErrors.push(...(result.details?.slice(0, 1) ?? []))
+            continue
           }
+
+          const imported = (result.inserted || 0) + (result.updated || 0)
+          totalImported += imported
+          toast.success(`Batch ${chunkNum}: ${imported}/${chunk.length} items imported`, { id: batchToastId })
+          const errorDetails = result.details?.slice(0, 5) ?? []
+          totalErrors += errorDetails.length
+          allErrors.push(...errorDetails)
         } catch (chunkError) {
           const errorMsg = chunkError instanceof Error ? chunkError.message : "Unknown error"
           console.error(`[CHUNK ${chunkNum}] Error:`, chunkError)
@@ -680,7 +680,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
               <Alert>
                 <AlertCircle className="w-4 h-4" />
                 <AlertDescription>
-                  Download the template, fill in item data, and upload the completed file. You'll be able to review and
+                  Download the template, fill in item data, and upload the completed file. You&apos;ll be able to review and
                   modify all records before submitting.
                   <br />
                   <br />
@@ -830,7 +830,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
                 <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
                   <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <AlertDescription className="text-blue-800 dark:text-blue-200">
-                    <strong>Tip:</strong> Hover over the error icon (⊙) next to invalid rows to see what's missing or incorrect. Common issues: empty item name, invalid unit, or missing prices.
+                    <strong>Tip:</strong> Hover over the error icon (⊙) next to invalid rows to see what&apos;s missing or incorrect. Common issues: empty item name, invalid unit, or missing prices.
                   </AlertDescription>
                 </Alert>
               )}

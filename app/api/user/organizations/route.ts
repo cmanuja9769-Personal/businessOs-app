@@ -21,8 +21,8 @@ export async function GET() {
   }
 
   const organizations = orgData
-    ?.filter((item: any) => item.app_organizations)
-    .map((item: any) => item.app_organizations) || []
+    ?.filter((item: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => item.app_organizations.length > 0)
+    .map((item: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => item.app_organizations[0]) || []
 
   return NextResponse.json({ organizations })
 }

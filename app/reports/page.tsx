@@ -1,5 +1,3 @@
-"use client"
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -289,7 +287,7 @@ export default function ReportsDashboard() {
                         <report.icon className="h-4 w-4" />
                       </div>
                       {report.badge && (
-                        <Badge variant={getBadgeVariant(report.badge)} className="text-[10px] px-1.5 py-0">
+                        <Badge variant={getBadgeVariant(report.badge)} className="text-[0.625rem] px-1.5 py-0">
                           {report.badge}
                         </Badge>
                       )}
@@ -363,7 +361,7 @@ function QuickStatCard({
           <div>
             <p className="text-xs text-muted-foreground">{title}</p>
             <p className="text-2xl font-bold">{value}</p>
-            <p className="text-[10px] text-muted-foreground">{description}</p>
+            <p className="text-[0.625rem] text-muted-foreground">{description}</p>
           </div>
           <div className="p-2 rounded-lg bg-primary/10">
             <Icon className="h-5 w-5 text-primary" />

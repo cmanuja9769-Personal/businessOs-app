@@ -87,7 +87,7 @@ export default async function ProfilePage() {
             <div className="flex items-center justify-between p-4 bg-muted rounded">
               <div>
                 <p className="font-medium text-sm">Password</p>
-                <p className="text-sm text-muted-foreground">Last changed {Math.floor(Math.random() * 30)} days ago</p>
+                <p className="text-sm text-muted-foreground">Last changed 30 days ago</p>
               </div>
               <Button variant="outline" size="sm">
                 Change

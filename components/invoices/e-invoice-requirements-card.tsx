@@ -70,9 +70,11 @@ export function EInvoiceRequirementsCard({ invoice }: EInvoiceRequirementsCardPr
               E-Invoice Requirements
             </CardTitle>
             <CardDescription>
-              {allRequirementsMet
-                ? "All requirements met. Ready to generate e-invoice."
-                : `${unmetCount} requirement${unmetCount !== 1 ? "s" : ""} not met`}
+              {(() => {
+                if (allRequirementsMet) return "All requirements met. Ready to generate e-invoice."
+                const plural = unmetCount !== 1 ? "s" : ""
+                return `${unmetCount} requirement${plural} not met`
+              })()}
             </CardDescription>
           </div>
           <Badge

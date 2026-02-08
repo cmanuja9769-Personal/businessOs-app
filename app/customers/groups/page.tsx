@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 
 export default function CustomerGroupsPage() {
-  const [isCreating, setIsCreating] = useState(false)
+  const [, setIsCreating] = useState(false)
 
   return (
     <div className="space-y-6">

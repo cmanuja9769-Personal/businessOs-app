@@ -86,9 +86,9 @@ export function ExtendValidityDialog({ ewbNo, currentVehicle, onSuccess }: Exten
       toast.success("E-Way Bill validity extended successfully")
       setOpen(false)
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to extend validity:", error)
-      toast.error(error.message || "Failed to extend validity")
+      toast.error(error instanceof Error ? error.message : "Failed to extend validity")
     } finally {
       setLoading(false)
     }

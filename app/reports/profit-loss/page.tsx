@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, endOfMonth, startOfYear } from "date-fns"
+import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
 
 interface ProfitLossData {
   revenue: {
@@ -51,10 +52,7 @@ export default function ProfitLossPage() {
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
 
   useEffect(() => {
-    fetchProfitLossData()
-  }, [dateFrom, dateTo])
-
-  const fetchProfitLossData = async () => {
+    async function fetchProfitLossData() {
     setLoading(true)
     try {
       // Fetch invoices and purchases
@@ -71,21 +69,21 @@ export default function ProfitLossPage() {
       toDate.setHours(23, 59, 59, 999)
 
       // Filter for date range
-      const periodInvoices = invoices.filter((inv: any) => {
+      const periodInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
         const d = new Date(inv.invoiceDate)
         return d >= fromDate && d <= toDate
       })
-      const periodPurchases = purchases.filter((pur: any) => {
+      const periodPurchases = purchases.filter((pur: ApiPurchaseResponse) => {
         const d = new Date(pur.date)
         return d >= fromDate && d <= toDate
       })
 
       // Calculate revenue
-      const totalSales = periodInvoices.reduce((s: number, inv: any) => s + (inv.subtotal || 0), 0)
+      const totalSales = periodInvoices.reduce((s: number, inv: ApiInvoiceResponse) => s + (inv.subtotal || 0), 0)
       const otherIncome = 0 // Can be extended
 
       // Calculate COGS
-      const totalPurchases = periodPurchases.reduce((s: number, pur: any) => s + (pur.subtotal || 0), 0)
+      const totalPurchases = periodPurchases.reduce((s: number, pur: ApiPurchaseResponse) => s + (pur.subtotal || 0), 0)
       const openingStock = 50000 // Mock - in real app, calculate from inventory
       const closingStock = 45000 // Mock
       const cogs = openingStock + totalPurchases - closingStock
@@ -135,6 +133,8 @@ export default function ProfitLossPage() {
       setLoading(false)
     }
   }
+    fetchProfitLossData()
+  }, [dateFrom, dateTo])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -312,11 +312,21 @@ export default function ProfitLossPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : data ? (
+      )}
+
+      {!loading && !data && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No data available for the selected period
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && data && (
         <>
           {/* Key Metrics */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -500,12 +510,6 @@ export default function ProfitLossPage() {
             </CardContent>
           </Card>
         </>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No data available for the selected period
-          </CardContent>
-        </Card>
       )}
     </div>
   )

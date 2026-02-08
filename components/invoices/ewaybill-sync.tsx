@@ -37,9 +37,9 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
         ? `${baseUrl}/api/v1/e-waybill/sync?date=${syncDate}`
         : `${baseUrl}/api/v1/e-waybill/sync`
 
-      console.log('🔄 Syncing E-Way Bills from portal...')
-      console.log('📅 Date filter:', syncDate || 'None (today)')
-      console.log('🌐 Request URL:', url)
+      console.warn('🔄 Syncing E-Way Bills from portal...')
+      console.warn('📅 Date filter:', syncDate || 'None (today)')
+      console.warn('🌐 Request URL:', url)
 
       const response = await fetch(url, {
         method: "POST",
@@ -49,7 +49,7 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
         credentials: "include", // Include cookies for backend auth
       })
 
-      console.log('📥 Response status:', response.status)
+      console.warn('📥 Response status:', response.status)
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -63,7 +63,7 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
       }
 
       const result = await response.json()
-      console.log('✅ Sync result:', result)
+      console.warn('✅ Sync result:', result)
 
       if (!result.success) {
         throw new Error(result.error?.message || "Sync failed")
@@ -91,9 +91,9 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
       // Callback to refresh parent list
       onSyncComplete?.()
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Sync failed:", error)
-      toast.error(error.message || "Failed to sync E-Way Bills")
+      toast.error(error instanceof Error ? error.message : "Failed to sync E-Way Bills")
     } finally {
       setIsSyncing(false)
     }

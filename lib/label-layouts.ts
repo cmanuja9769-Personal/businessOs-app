@@ -171,7 +171,7 @@ export function getDefaultLayout(): LabelLayout {
  * @returns boolean - True if valid
  */
 export function isValidLayout(layout: Partial<LabelLayout> | null | undefined): layout is LabelLayout {
-  return (
+  return !!(
     layout &&
     typeof layout === 'object' &&
     typeof layout.columns === 'number' &&

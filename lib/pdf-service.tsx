@@ -16,7 +16,7 @@ export interface PDFOptions {
   }
 }
 
-const defaultOptions: PDFOptions = {
+const _defaultOptions: PDFOptions = {
   format: "A4",
   margin: { top: 20, right: 20, bottom: 20, left: 20 },
 }
@@ -25,8 +25,12 @@ const defaultOptions: PDFOptions = {
  * Generate invoice HTML for PDF conversion
  * Used with html2pdf or similar tools
  */
-export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, templateName = "classic"): string {
+export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, _templateName = "classic"): string {
   const primaryColor = settings.templateColor || "#6366f1"
+  const igstHtml = invoice.igst > 0
+    ? `<div class="totals-row"><span>IGST:</span><span>₹${invoice.igst.toFixed(2)}</span></div>`
+    : ""
+  const upiHtml = settings.upiId ? `<div><strong>UPI ID:</strong> ${settings.upiId}</div>` : ""
 
   // Base HTML structure with all invoice data
   return `
@@ -165,16 +169,7 @@ export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, temp
                 <span>SGST (${((invoice.sgst / (invoice.subtotal * 0.5)) * 100).toFixed(1)}%):</span>
                 <span>₹${invoice.sgst.toFixed(2)}</span>
               </div>
-              ${
-                invoice.igst > 0
-                  ? `
-                <div class="totals-row">
-                  <span>IGST:</span>
-                  <span>₹${invoice.igst.toFixed(2)}</span>
-                </div>
-              `
-                  : ""
-              }
+              ${igstHtml}
             `
                 : ""
             }
@@ -207,7 +202,7 @@ export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, temp
                 </div>
                 <div>
                   <div><strong>IFSC Code:</strong> ${settings.bankIfsc || "N/A"}</div>
-                  ${settings.upiId ? `<div><strong>UPI ID:</strong> ${settings.upiId}</div>` : ""}
+                  ${upiHtml}
                 </div>
               </div>
             </div>

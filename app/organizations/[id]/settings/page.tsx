@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Building2, Users, Mail, Phone, MapPin, UserPlus } from "lucide-react"
+import { Mail, Phone, MapPin, UserPlus } from "lucide-react"
 import Link from "next/link"
 
 export default async function OrganizationSettingsPage({ params }: { params: Promise<{ id: string }> }) {

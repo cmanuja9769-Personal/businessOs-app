@@ -147,7 +147,7 @@ export function CustomerUploadBtn() {
       setParsedData(parsed)
       setStep("confirm")
       toast.success(`Parsed ${parsed.length} records. Please review before submitting.`)
-    } catch (error) {
+    } catch {
       toast.error("Failed to parse Excel file")
     } finally {
       setIsProcessing(false)
@@ -172,7 +172,7 @@ export function CustomerUploadBtn() {
       setOpen(false)
       setStep("upload")
       setParsedData([])
-    } catch (error) {
+    } catch {
       toast.error("Failed to import customers")
     } finally {
       setIsProcessing(false)
@@ -206,7 +206,7 @@ export function CustomerUploadBtn() {
               <Alert>
                 <AlertCircle className="w-4 h-4" />
                 <AlertDescription>
-                  Download the template, fill in customer data, and upload the completed file. You'll be able to review
+                  Download the template, fill in customer data, and upload the completed file. You&apos;ll be able to review
                   and modify all records before submitting.
                 </AlertDescription>
               </Alert>

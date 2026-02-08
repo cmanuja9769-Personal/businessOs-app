@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import type { IInvoice, DocumentType } from "@/types";

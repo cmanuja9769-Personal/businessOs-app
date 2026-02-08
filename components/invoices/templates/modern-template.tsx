@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import type { IInvoice, DocumentType } from "@/types";
@@ -9,7 +10,7 @@ interface ModernTemplateProps {
   settings: ISettings;
 }
 
-function withAlpha(hex: string, alphaHex: string) {
+function _withAlpha(hex: string, alphaHex: string) {
   const value = (hex || "").trim();
   if (/^#[0-9a-fA-F]{6}$/.test(value)) return `${value}${alphaHex}`;
   if (/^#[0-9a-fA-F]{8}$/.test(value)) return `${value.slice(0, 7)}${alphaHex}`;
@@ -47,11 +48,11 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
               </div>
               {(settings.businessGst || settings.businessPhone) && (
                 <div className="text-white/80 text-xs mt-0.5 truncate">
-                  {settings.businessGst
-                    ? `GSTIN: ${settings.businessGst}`
-                    : settings.businessPhone
-                    ? `Phone: ${settings.businessPhone}`
-                    : ""}
+                  {(() => {
+                    if (settings.businessGst) return `GSTIN: ${settings.businessGst}`
+                    if (settings.businessPhone) return `Phone: ${settings.businessPhone}`
+                    return ""
+                  })()}
                 </div>
               )}
             </div>

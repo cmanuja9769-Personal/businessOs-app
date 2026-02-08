@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, differenceInDays } from "date-fns"
+import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
 
 interface OutstandingEntry {
   id: string
@@ -44,73 +45,70 @@ export default function OutstandingReportPage() {
   const [agingFilter, setAgingFilter] = useState<string>("all")
 
   useEffect(() => {
+    const fetchOutstanding = async () => {
+      setLoading(true)
+      try {
+        const [invoicesRes, purchasesRes] = await Promise.all([
+          fetch('/api/invoices'),
+          fetch('/api/purchases')
+        ])
+
+        const invoices = invoicesRes.ok ? await invoicesRes.json() : []
+        const purchases = purchasesRes.ok ? await purchasesRes.json() : []
+
+        const today = new Date()
+
+        const receivables: OutstandingEntry[] = invoices
+          .filter((inv: ApiInvoiceResponse) => inv.balance > 0)
+          .map((inv: ApiInvoiceResponse) => {
+            const dueDate = new Date(inv.dueDate || inv.invoiceDate)
+            return {
+              id: inv.id,
+              partyId: inv.customerId,
+              partyName: inv.customerName,
+              partyType: 'customer' as const,
+              phone: inv.customerPhone,
+              email: inv.customerEmail,
+              documentNo: inv.invoiceNo,
+              documentDate: inv.invoiceDate,
+              dueDate: inv.dueDate || inv.invoiceDate,
+              totalAmount: inv.total,
+              paidAmount: inv.paidAmount,
+              balance: inv.balance,
+              daysOverdue: Math.max(0, differenceInDays(today, dueDate))
+            }
+          })
+
+        const payables: OutstandingEntry[] = purchases
+          .filter((pur: ApiPurchaseResponse) => pur.balance > 0)
+          .map((pur: ApiPurchaseResponse) => {
+            const dueDate = new Date(pur.dueDate || pur.date)
+            return {
+              id: pur.id,
+              partyId: pur.supplierId,
+              partyName: pur.supplierName,
+              partyType: 'supplier' as const,
+              phone: pur.supplierPhone,
+              documentNo: pur.purchaseNo,
+              documentDate: pur.date,
+              dueDate: pur.dueDate || pur.date,
+              totalAmount: pur.total,
+              paidAmount: pur.paidAmount,
+              balance: pur.balance,
+              daysOverdue: Math.max(0, differenceInDays(today, dueDate))
+            }
+          })
+
+        setEntries([...receivables, ...payables])
+      } catch (error) {
+        console.error('Failed to fetch outstanding:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchOutstanding()
   }, [])
-
-  const fetchOutstanding = async () => {
-    setLoading(true)
-    try {
-      // Fetch invoices and purchases for outstanding calculation
-      const [invoicesRes, purchasesRes] = await Promise.all([
-        fetch('/api/invoices'),
-        fetch('/api/purchases')
-      ])
-
-      const invoices = invoicesRes.ok ? await invoicesRes.json() : []
-      const purchases = purchasesRes.ok ? await purchasesRes.json() : []
-
-      const today = new Date()
-
-      // Process receivables (from invoices)
-      const receivables: OutstandingEntry[] = invoices
-        .filter((inv: any) => inv.balance > 0)
-        .map((inv: any) => {
-          const dueDate = new Date(inv.dueDate || inv.invoiceDate)
-          return {
-            id: inv.id,
-            partyId: inv.customerId,
-            partyName: inv.customerName,
-            partyType: 'customer' as const,
-            phone: inv.customerPhone,
-            email: inv.customerEmail,
-            documentNo: inv.invoiceNo,
-            documentDate: inv.invoiceDate,
-            dueDate: inv.dueDate || inv.invoiceDate,
-            totalAmount: inv.total,
-            paidAmount: inv.paidAmount,
-            balance: inv.balance,
-            daysOverdue: Math.max(0, differenceInDays(today, dueDate))
-          }
-        })
-
-      // Process payables (from purchases)
-      const payables: OutstandingEntry[] = purchases
-        .filter((pur: any) => pur.balance > 0)
-        .map((pur: any) => {
-          const dueDate = new Date(pur.dueDate || pur.date)
-          return {
-            id: pur.id,
-            partyId: pur.supplierId,
-            partyName: pur.supplierName,
-            partyType: 'supplier' as const,
-            phone: pur.supplierPhone,
-            documentNo: pur.purchaseNo,
-            documentDate: pur.date,
-            dueDate: pur.dueDate || pur.date,
-            totalAmount: pur.total,
-            paidAmount: pur.paidAmount,
-            balance: pur.balance,
-            daysOverdue: Math.max(0, differenceInDays(today, dueDate))
-          }
-        })
-
-      setEntries([...receivables, ...payables])
-    } catch (error) {
-      console.error('Failed to fetch outstanding:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const receivables = entries.filter(e => e.partyType === 'customer')
   const payables = entries.filter(e => e.partyType === 'supplier')
@@ -283,7 +281,7 @@ export default function OutstandingReportPage() {
         </div>
         <div className="flex gap-2">
           <Select value={agingFilter} onValueChange={setAgingFilter}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-[9.375rem]">
               <SelectValue placeholder="Aging filter" />
             </SelectTrigger>
             <SelectContent>

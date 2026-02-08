@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, endOfMonth, subMonths } from "date-fns"
+import type { ApiInvoiceResponse } from "@/types/api-responses"
 
 interface GSTR1Entry {
   id: string
@@ -44,10 +45,7 @@ export default function GSTR1Page() {
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState("all")
 
   useEffect(() => {
-    fetchGSTR1Data()
-  }, [month])
-
-  const fetchGSTR1Data = async () => {
+    async function fetchGSTR1Data() {
     setLoading(true)
     try {
       const [year, monthNum] = month.split('-').map(Number)
@@ -61,11 +59,11 @@ export default function GSTR1Page() {
       
       // Filter invoices for the selected month and map to GSTR-1 format
       const gstr1Data: GSTR1Entry[] = invoices
-        .filter((inv: any) => {
+        .filter((inv: ApiInvoiceResponse) => {
           const invDate = new Date(inv.invoiceDate)
           return invDate >= monthStart && invDate <= monthEnd
         })
-        .map((inv: any) => {
+        .map((inv: ApiInvoiceResponse) => {
           const hasGstin = inv.customerGstin && inv.customerGstin.length === 15
           const isInterState = inv.placeOfSupply !== inv.stateCode
           
@@ -78,8 +76,8 @@ export default function GSTR1Page() {
             placeOfSupply: inv.placeOfSupply || inv.state || 'N/A',
             invoiceType: hasGstin ? 'B2B' : 'B2C',
             taxableValue: inv.subtotal || 0,
-            cgst: isInterState ? 0 : (inv.cgst || inv.totalTax / 2 || 0),
-            sgst: isInterState ? 0 : (inv.sgst || inv.totalTax / 2 || 0),
+            cgst: isInterState ? 0 : (inv.cgst || (inv.totalTax ?? 0) / 2 || 0),
+            sgst: isInterState ? 0 : (inv.sgst || (inv.totalTax ?? 0) / 2 || 0),
             igst: isInterState ? (inv.igst || inv.totalTax || 0) : 0,
             cess: inv.cess || 0,
             totalTax: inv.totalTax || 0,
@@ -94,6 +92,8 @@ export default function GSTR1Page() {
       setLoading(false)
     }
   }
+    fetchGSTR1Data()
+  }, [month])
 
   const filteredEntries = entries.filter(e => 
     invoiceTypeFilter === "all" || e.invoiceType === invoiceTypeFilter

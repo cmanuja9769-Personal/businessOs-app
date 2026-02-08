@@ -55,50 +55,49 @@ export default function ExpenseReportPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
 
   useEffect(() => {
+    const fetchExpenses = async () => {
+      setLoading(true)
+      try {
+        const mockExpenses: Expense[] = [
+          {
+            id: '1',
+            expenseNo: 'EXP-001',
+            category: 'Rent',
+            description: 'Monthly office rent',
+            date: new Date().toISOString(),
+            amount: 25000,
+            paymentMethod: 'bank',
+            vendor: 'Property Owner'
+          },
+          {
+            id: '2',
+            expenseNo: 'EXP-002',
+            category: 'Utilities',
+            description: 'Electricity bill',
+            date: new Date().toISOString(),
+            amount: 5500,
+            paymentMethod: 'upi'
+          },
+          {
+            id: '3',
+            expenseNo: 'EXP-003',
+            category: 'Office Supplies',
+            description: 'Stationery and printer ink',
+            date: new Date().toISOString(),
+            amount: 2500,
+            paymentMethod: 'cash'
+          }
+        ]
+        setExpenses(mockExpenses)
+      } catch (error) {
+        console.error('Failed to fetch expenses:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchExpenses()
   }, [])
-
-  const fetchExpenses = async () => {
-    setLoading(true)
-    try {
-      // Simulated data - replace with actual API call
-      const mockExpenses: Expense[] = [
-        {
-          id: '1',
-          expenseNo: 'EXP-001',
-          category: 'Rent',
-          description: 'Monthly office rent',
-          date: new Date().toISOString(),
-          amount: 25000,
-          paymentMethod: 'bank',
-          vendor: 'Property Owner'
-        },
-        {
-          id: '2',
-          expenseNo: 'EXP-002',
-          category: 'Utilities',
-          description: 'Electricity bill',
-          date: new Date().toISOString(),
-          amount: 5500,
-          paymentMethod: 'upi'
-        },
-        {
-          id: '3',
-          expenseNo: 'EXP-003',
-          category: 'Office Supplies',
-          description: 'Stationery and printer ink',
-          date: new Date().toISOString(),
-          amount: 2500,
-          paymentMethod: 'cash'
-        }
-      ]
-      setExpenses(mockExpenses)
-    } catch (error) {
-      console.error('Failed to fetch expenses:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredExpenses = expenses.filter(exp => {
     const expDate = new Date(exp.date)

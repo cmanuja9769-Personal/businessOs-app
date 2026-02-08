@@ -45,7 +45,7 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
 
         const customer = customersData.find((c) => c.id === invoice.customerId)
         setSelectedCustomer(customer || null)
-      } catch (error) {
+      } catch {
         toast.error("Failed to load data")
       } finally {
         setIsLoading(false)
@@ -85,7 +85,7 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
       await updateInvoice(invoice.id, invoiceData)
       toast.success("Invoice updated successfully")
       router.push(`/invoices/${invoice.id}`)
-    } catch (error) {
+    } catch {
       toast.error("Failed to update invoice")
     } finally {
       setIsSaving(false)

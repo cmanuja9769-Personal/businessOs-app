@@ -1,5 +1,6 @@
 "use client"
 
+/* eslint-disable @next/next/no-img-element */
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"

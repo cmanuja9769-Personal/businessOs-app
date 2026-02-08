@@ -16,7 +16,10 @@ function Table({ className, containerClassName, ...props }: TableProps) {
         containerClassName
       )}
     >
+      {/* eslint-disable-next-line sonarjs/table-header -- headers provided by consumer via TableHeader/TableHead children */}
       <table 
+        role="table"
+        aria-label="Data table"
         data-slot="table" 
         className={cn("w-full caption-bottom text-xs sm:text-sm", className)} 
         {...props} 

@@ -3,15 +3,109 @@
 import { enqueueJob } from "@/lib/invoice-queue"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import type { IInvoice, DocumentType } from "@/types"
+import type { IInvoice, DocumentType, DocumentStatus, BillingMode, PricingMode } from "@/types"
 import { invoiceSchema } from "@/lib/schemas"
 import { logStockMovement } from "@/lib/stock-management"
+
+interface DbInvoiceItem {
+  readonly item_id: string | null
+  readonly item_name: string
+  readonly quantity: number
+  readonly unit: string | null
+  readonly rate: number
+  readonly tax_rate: number | null
+  readonly gst_rate: number | null
+  readonly cess_rate: number | null
+  readonly discount: number | null
+  readonly custom_field_1_value: string | null
+  readonly custom_field_2_value: number | null
+  readonly amount: number
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const INVOICE_WITH_ITEMS_SELECT = "*, invoice_items(*)"
+const INVALID_INVOICE_ID = "Invalid invoice ID"
+const SALE_DOC_TYPES = ["invoice", "cash_memo", "tax_invoice"]
+const RETURN_DOC_TYPES = ["sales_return"]
+
+interface ValidatedInvoiceItem {
+  readonly itemId?: string
+  readonly itemName: string
+  readonly quantity: number
+  readonly unit?: string
+  readonly rate: number
+  readonly gstRate?: number
+  readonly cessRate?: number
+  readonly discount?: number
+  readonly customField1Value?: string | null
+  readonly customField2Value?: number | null
+  readonly amount: number
+}
+
+async function resolveOrganizationId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  items: readonly ValidatedInvoiceItem[],
+): Promise<string | null> {
+  for (const item of items) {
+    if (!item.itemId) continue
+    const { data: itemData } = await supabase
+      .from("items")
+      .select("organization_id")
+      .eq("id", item.itemId)
+      .single()
+    if (itemData?.organization_id) return itemData.organization_id
+  }
+  return null
+}
+
+async function logInvoiceStockMovements(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  items: readonly ValidatedInvoiceItem[],
+  docType: string,
+  invoiceId: string,
+  invoiceNo: string,
+  customerId: string | undefined,
+  customerName: string | undefined,
+  userId: string,
+): Promise<void> {
+  const isStockDoc = SALE_DOC_TYPES.includes(docType) || RETURN_DOC_TYPES.includes(docType)
+  if (!isStockDoc) return
+
+  const organizationId = await resolveOrganizationId(supabase, items)
+  if (!organizationId) return
+
+  const isSale = SALE_DOC_TYPES.includes(docType)
+  const transactionType = isSale ? "SALE" : "RETURN"
+
+  for (const item of items) {
+    if (!item.itemId) continue
+    try {
+      await logStockMovement({
+        itemId: item.itemId,
+        organizationId,
+        transactionType,
+        entryQuantity: item.quantity,
+        entryUnit: item.unit || "PCS",
+        referenceType: "invoice",
+        referenceId: invoiceId,
+        referenceNo: invoiceNo,
+        ratePerUnit: item.rate,
+        partyId: customerId,
+        partyName: customerName,
+        notes: `${docType === "invoice" ? "Invoice" : docType} ${invoiceNo}`,
+      }, userId)
+    } catch (stockError) {
+      console.error("[v0] Error logging stock movement for item:", item.itemId, stockError)
+    }
+  }
+}
 
 export async function getInvoices(): Promise<IInvoice[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("invoices")
-    .select("*, invoice_items(*)")
+    .select(INVOICE_WITH_ITEMS_SELECT)
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -23,7 +117,7 @@ export async function getInvoices(): Promise<IInvoice[]> {
     data?.map((invoice) => ({
       id: invoice.id,
       invoiceNo: invoice.invoice_number,
-      documentType: (invoice.document_type || "invoice") as any,
+      documentType: (invoice.document_type || "invoice") as DocumentType,
       customerId: invoice.customer_id || "",
       customerName: invoice.customer_name,
       customerPhone: invoice.customer_phone || "",
@@ -32,9 +126,9 @@ export async function getInvoices(): Promise<IInvoice[]> {
       invoiceDate: new Date(invoice.invoice_date || invoice.created_at),
       dueDate: new Date(invoice.due_date || invoice.invoice_date || invoice.created_at),
       validityDate: invoice.validity_date ? new Date(invoice.validity_date) : undefined,
-      billingMode: (invoice.gst_enabled ? "gst" : "non-gst") as "gst" | "non-gst",
-      pricingMode: (invoice.pricing_mode || "sale") as "sale" | "wholesale" | "quantity",
-      items: invoice.invoice_items.map((item: any) => ({
+      billingMode: (invoice.gst_enabled ? "gst" : "non-gst") as BillingMode,
+      pricingMode: (invoice.pricing_mode || "sale") as PricingMode,
+      items: invoice.invoice_items.map((item: DbInvoiceItem) => ({
         itemId: item.item_id || "",
         itemName: item.item_name,
         quantity: item.quantity,
@@ -57,7 +151,7 @@ export async function getInvoices(): Promise<IInvoice[]> {
       total: Number(invoice.total),
       paidAmount: Number(invoice.paid_amount || 0),
       balance: Number(invoice.balance || invoice.total),
-      status: invoice.status as any,
+      status: invoice.status as DocumentStatus,
       gstEnabled: invoice.gst_enabled,
       notes: invoice.notes || undefined,
       irn: invoice.irn || undefined,
@@ -79,10 +173,7 @@ export async function getInvoices(): Promise<IInvoice[]> {
 }
 
 export async function getInvoice(id: string): Promise<IInvoice | undefined> {
-  // Validate UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!id || !uuidRegex.test(id)) {
-    // Only log if it's not an empty/null/undefined value
+  if (!id || !UUID_REGEX.test(id)) {
     if (id && id !== 'undefined' && id !== 'null') {
       console.error(`[v0] Invalid invoice ID format: ${id}`)
     }
@@ -90,7 +181,7 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase.from("invoices").select("*, invoice_items(*)").eq("id", id).single()
+  const { data, error } = await supabase.from("invoices").select(INVOICE_WITH_ITEMS_SELECT).eq("id", id).single()
 
   if (error || !data) {
     console.error("[v0] Error fetching invoice:", error)
@@ -100,7 +191,7 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
   return {
     id: data.id,
     invoiceNo: data.invoice_number,
-    documentType: (data.document_type || "invoice") as any,
+    documentType: (data.document_type || "invoice") as DocumentType,
     customerId: data.customer_id || "",
     customerName: data.customer_name,
     customerPhone: data.customer_phone || "",
@@ -109,9 +200,9 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
     invoiceDate: new Date(data.invoice_date || data.created_at),
     dueDate: new Date(data.due_date || data.invoice_date || data.created_at),
     validityDate: data.validity_date ? new Date(data.validity_date) : undefined,
-    billingMode: (data.gst_enabled ? "gst" : "non-gst") as "gst" | "non-gst",
-    pricingMode: (data.pricing_mode || "sale") as "sale" | "wholesale" | "quantity",
-    items: data.invoice_items.map((item: any) => ({
+    billingMode: (data.gst_enabled ? "gst" : "non-gst") as BillingMode,
+    pricingMode: (data.pricing_mode || "sale") as PricingMode,
+    items: data.invoice_items.map((item: DbInvoiceItem) => ({
       itemId: item.item_id || "",
       itemName: item.item_name,
       quantity: item.quantity,
@@ -134,7 +225,7 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
     total: Number(data.total),
     paidAmount: Number(data.paid_amount || 0),
     balance: Number(data.balance || data.total),
-    status: data.status as any,
+    status: data.status as DocumentStatus,
     gstEnabled: data.gst_enabled,
     notes: data.notes || undefined,
     irn: data.irn || undefined,
@@ -157,14 +248,11 @@ export async function getInvoice(id: string): Promise<IInvoice | undefined> {
 export async function createInvoice(data: unknown) {
   try {
     const validated = invoiceSchema.parse(data)
-
     const supabase = await createClient()
 
-    // Get current user for stock movements
     const { data: { user } } = await supabase.auth.getUser()
     const userId = user?.id || "system"
 
-    // Create invoice
     const { data: newInvoice, error: invoiceError } = await supabase
       .from("invoices")
       .insert({
@@ -206,7 +294,6 @@ export async function createInvoice(data: unknown) {
       return { success: false, error: invoiceError?.message || "Failed to create invoice" }
     }
 
-    // Create invoice items
     const invoiceItems = validated.items.map((item) => ({
       invoice_id: newInvoice.id,
       item_id: item.itemId || null,
@@ -229,59 +316,20 @@ export async function createInvoice(data: unknown) {
       return { success: false, error: itemsError.message }
     }
 
-    // Deduct stock for SALE documents (invoice, cash_memo, sales_return with negative)
-    const saleDocTypes = ["invoice", "cash_memo", "tax_invoice"]
-    const returnDocTypes = ["sales_return"]
     const docType = validated.documentType || "invoice"
-    
-    if (saleDocTypes.includes(docType) || returnDocTypes.includes(docType)) {
-      // Get organization ID from one of the items
-      let organizationId: string | null = null
-      for (const item of validated.items) {
-        if (item.itemId) {
-          const { data: itemData } = await supabase
-            .from("items")
-            .select("organization_id")
-            .eq("id", item.itemId)
-            .single()
-          if (itemData?.organization_id) {
-            organizationId = itemData.organization_id
-            break
-          }
-        }
-      }
-
-      // Log stock movements for each item with an itemId
-      for (const item of validated.items) {
-        if (item.itemId && organizationId) {
-          const isSale = saleDocTypes.includes(docType)
-          const transactionType = isSale ? "SALE" : "RETURN"
-          
-          try {
-            await logStockMovement({
-              itemId: item.itemId,
-              organizationId,
-              transactionType,
-              entryQuantity: item.quantity,
-              entryUnit: item.unit || "PCS",
-              referenceType: "invoice",
-              referenceId: newInvoice.id,
-              referenceNo: validated.invoiceNo,
-              ratePerUnit: item.rate,
-              partyId: validated.customerId || undefined,
-              partyName: validated.customerName || undefined,
-              notes: `${docType === "invoice" ? "Invoice" : docType} ${validated.invoiceNo}`,
-            }, userId)
-          } catch (stockError) {
-            console.error("[v0] Error logging stock movement for item:", item.itemId, stockError)
-            // Don't fail the invoice creation if stock logging fails
-          }
-        }
-      }
-    }
+    await logInvoiceStockMovements(
+      supabase,
+      validated.items,
+      docType,
+      newInvoice.id,
+      validated.invoiceNo,
+      validated.customerId || undefined,
+      validated.customerName || undefined,
+      userId,
+    )
 
     revalidatePath("/invoices")
-    revalidatePath("/items") // Revalidate items as stock has changed
+    revalidatePath("/items")
     return { success: true, invoice: newInvoice }
   } catch (error) {
     console.error("[v0] Error in createInvoice:", error)
@@ -293,10 +341,8 @@ export async function createInvoice(data: unknown) {
 }
 
 export async function updateInvoice(id: string, data: unknown) {
-  // Validate UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(id)) {
-    return { success: false, error: "Invalid invoice ID" }
+  if (!UUID_REGEX.test(id)) {
+    return { success: false, error: INVALID_INVOICE_ID }
   }
 
   try {
@@ -384,10 +430,8 @@ export async function updateInvoice(id: string, data: unknown) {
 }
 
 export async function deleteInvoice(id: string) {
-  // Validate UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(id)) {
-    return { success: false, error: "Invalid invoice ID" }
+  if (!UUID_REGEX.test(id)) {
+    return { success: false, error: INVALID_INVOICE_ID }
   }
 
   const supabase = await createClient()
@@ -407,9 +451,7 @@ export async function bulkDeleteInvoices(ids: string[]) {
     return { success: false, error: "No invoices selected" }
   }
 
-  // Validate all UUIDs
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  const invalidIds = ids.filter(id => !uuidRegex.test(id))
+  const invalidIds = ids.filter(id => !UUID_REGEX.test(id))
   if (invalidIds.length > 0) {
     return { success: false, error: "Invalid invoice IDs detected" }
   }
@@ -464,10 +506,8 @@ export async function deleteAllInvoices() {
 }
 
 export async function updateInvoiceStatus(id: string, status: IInvoice["status"]) {
-  // Validate UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(id)) {
-    return { success: false, error: "Invalid invoice ID" }
+  if (!UUID_REGEX.test(id)) {
+    return { success: false, error: INVALID_INVOICE_ID }
   }
 
   const supabase = await createClient()
@@ -550,7 +590,7 @@ export async function convertDocumentToInvoice(documentId: string) {
     total: originalDoc.total,
     paidAmount: 0,
     balance: originalDoc.total,
-    status: "draft" as any,
+    status: "draft" as DocumentStatus,
     gstEnabled: originalDoc.gstEnabled,
     notes: originalDoc.notes,
     parentDocumentId: documentId,
@@ -581,7 +621,7 @@ export async function getInvoicesByType(documentType: DocumentType): Promise<IIn
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("invoices")
-    .select("*, invoice_items(*)")
+    .select(INVOICE_WITH_ITEMS_SELECT)
     .eq("document_type", documentType)
     .order("created_at", { ascending: false })
 
@@ -594,7 +634,7 @@ export async function getInvoicesByType(documentType: DocumentType): Promise<IIn
     data?.map((invoice) => ({
       id: invoice.id,
       invoiceNo: invoice.invoice_number,
-      documentType: (invoice.document_type || "invoice") as any,
+      documentType: (invoice.document_type || "invoice") as DocumentType,
       customerId: invoice.customer_id || "",
       customerName: invoice.customer_name,
       customerPhone: invoice.customer_phone || "",
@@ -603,9 +643,9 @@ export async function getInvoicesByType(documentType: DocumentType): Promise<IIn
       invoiceDate: new Date(invoice.invoice_date || invoice.created_at),
       dueDate: new Date(invoice.due_date || invoice.invoice_date || invoice.created_at),
       validityDate: invoice.validity_date ? new Date(invoice.validity_date) : undefined,
-      billingMode: (invoice.gst_enabled ? "gst" : "non-gst") as "gst" | "non-gst",
-      pricingMode: (invoice.pricing_mode || "sale") as "sale" | "wholesale" | "quantity",
-      items: invoice.invoice_items.map((item: any) => ({
+      billingMode: (invoice.gst_enabled ? "gst" : "non-gst") as BillingMode,
+      pricingMode: (invoice.pricing_mode || "sale") as PricingMode,
+      items: invoice.invoice_items.map((item: DbInvoiceItem) => ({
         itemId: item.item_id || "",
         itemName: item.item_name,
         quantity: item.quantity,
@@ -626,7 +666,7 @@ export async function getInvoicesByType(documentType: DocumentType): Promise<IIn
       total: Number(invoice.total),
       paidAmount: Number(invoice.paid_amount || 0),
       balance: Number(invoice.balance || invoice.total),
-      status: invoice.status as any,
+      status: invoice.status as DocumentStatus,
       gstEnabled: invoice.gst_enabled,
       notes: invoice.notes || undefined,
       irn: invoice.irn || undefined,
@@ -686,7 +726,7 @@ export async function sendInvoiceEmail(invoiceId: string, recipientEmail: string
 }
 
 // Cancel E-Invoice IRN
-export async function cancelEInvoice(invoiceId: string, reason: string) {
+export async function cancelEInvoice(invoiceId: string, _reason: string) {
   const supabase = await createClient()
 
   const invoice = await getInvoice(invoiceId)
@@ -694,7 +734,6 @@ export async function cancelEInvoice(invoiceId: string, reason: string) {
     return { success: false, error: "Invoice not found or not e-invoiced" }
   }
 
-  // Check if within 24 hours
   if (invoice.eInvoiceDate) {
     const hoursSinceGeneration = (Date.now() - new Date(invoice.eInvoiceDate).getTime()) / (1000 * 60 * 60)
     if (hoursSinceGeneration > 24) {
@@ -703,10 +742,6 @@ export async function cancelEInvoice(invoiceId: string, reason: string) {
   }
 
   try {
-    // TODO: Call actual IRP cancellation API
-    // await cancelIRN(invoice.irn, reason)
-
-    // Clear IRN fields
     const { error: updateError } = await supabase
       .from("invoices")
       .update({
@@ -723,7 +758,7 @@ export async function cancelEInvoice(invoiceId: string, reason: string) {
     revalidatePath("/invoices")
     revalidatePath(`/invoices/${invoiceId}`)
     return { success: true }
-  } catch (error) {
+  } catch  {
     return { success: false, error: "Failed to cancel e-invoice with IRP" }
   }
 }

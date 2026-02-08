@@ -1,29 +1,35 @@
 import { createServerClient } from "@supabase/ssr"
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 
-export async function POST(request: Request) {
-  const req = request as any
-  // Prepare a NextResponse to set cookie headers
+interface CookieToSet {
+  name: string
+  value: string
+  options?: Record<string, unknown>
+}
+
+interface RequestCookie {
+  name?: string
+  key?: string
+}
+
+export async function POST(request: NextRequest) {
   const res = NextResponse.json({ ok: true })
 
   try {
-    const url = new URL(request.url)
-
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
-            // @ts-ignore - running in Edge runtime, use Request cookies
-            return req.cookies.getAll()
+            return request.cookies.getAll()
           },
-          setAll(cookiesToSet: Array<any>) {
-            cookiesToSet.forEach(({ name, value, options }: any) => {
+          setAll(cookiesToSet: Array<CookieToSet>) {
+            cookiesToSet.forEach(({ name, value, options }: CookieToSet) => {
               try {
                 res.cookies.set(name, value, options)
-              } catch (e) {
-                // ignore
+              } catch {
+                /* cookie set not critical */
               }
             })
           },
@@ -31,18 +37,15 @@ export async function POST(request: Request) {
       },
     )
 
-    // Attempt to sign out via Supabase server client
     try {
       await supabase.auth.signOut()
-    } catch (e) {
-      // ignore
+    } catch {
+      /* sign out best-effort */
     }
 
-    // Clear common Supabase cookie names in the response
     try {
-      // @ts-ignore
-      const allCookies = req.cookies.getAll()
-      allCookies.forEach((c: any) => {
+      const allCookies = request.cookies.getAll()
+      allCookies.forEach((c: RequestCookie) => {
         const name: string = c.name || c.key || ""
         if (
           name.startsWith("sb-") ||
@@ -53,22 +56,25 @@ export async function POST(request: Request) {
         ) {
           try {
             res.cookies.set(name, "", { maxAge: 0, path: "/" })
-          } catch (e) {}
+          } catch {
+            /* cookie cleanup not critical */
+          }
         }
       })
-    } catch (e) {
-      // ignore
+    } catch {
+      /* cookie cleanup not critical */
     }
 
-    // Also set common session cookies to expired just in case
     try {
       res.cookies.set("sb-access-token", "", { maxAge: 0, path: "/" })
       res.cookies.set("sb-refresh-token", "", { maxAge: 0, path: "/" })
       res.cookies.set("supabase-auth-token", "", { maxAge: 0, path: "/" })
-    } catch (e) {}
+    } catch {
+      /* cookie cleanup not critical */
+    }
 
     return res
-  } catch (err) {
+  } catch {
     return NextResponse.json({ ok: false }, { status: 500 })
   }
 }

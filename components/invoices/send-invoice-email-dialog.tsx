@@ -43,7 +43,7 @@ export function SendInvoiceEmailDialog({ invoice }: SendInvoiceEmailDialogProps)
     }
 
     // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(email)) {
       toast({
         title: "Error",
         description: "Please enter a valid email address",
@@ -55,7 +55,6 @@ export function SendInvoiceEmailDialog({ invoice }: SendInvoiceEmailDialogProps)
     setLoading(true)
 
     try {
-      // TODO: Replace with actual organizationId when multi-tenancy is implemented (Phase 1)
       const result = await sendInvoiceEmail(invoice.id, email, "default-org")
 
       if (result.success) {
@@ -72,7 +71,7 @@ export function SendInvoiceEmailDialog({ invoice }: SendInvoiceEmailDialogProps)
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "An error occurred while sending the email",

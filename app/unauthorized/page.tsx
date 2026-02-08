@@ -24,7 +24,7 @@ export default async function UnauthorizedPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Access Denied</h1>
           <p className="text-muted-foreground">
-            You don't have permission to access this page. Please contact your administrator if you believe this is a
+            You don&apos;t have permission to access this page. Please contact your administrator if you believe this is a
             mistake.
           </p>
 

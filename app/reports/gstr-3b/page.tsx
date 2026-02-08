@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, endOfMonth, subMonths } from "date-fns"
+import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
 
 interface GSTR3BData {
   outwardSupplies: {
@@ -56,10 +57,7 @@ export default function GSTR3BPage() {
   const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'))
 
   useEffect(() => {
-    fetchGSTR3BData()
-  }, [month])
-
-  const fetchGSTR3BData = async () => {
+    async function fetchGSTR3BData() {
     setLoading(true)
     try {
       const [year, monthNum] = month.split('-').map(Number)
@@ -76,12 +74,12 @@ export default function GSTR3BPage() {
       const purchases = purchasesRes.ok ? await purchasesRes.json() : []
 
       // Filter for the selected month
-      const monthInvoices = invoices.filter((inv: any) => {
-        const invDate = new Date(inv.invoiceDate)
-        return invDate >= monthStart && invDate <= monthEnd
-      })
+const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
+          const invDate = new Date(inv.invoiceDate)
+          return invDate >= monthStart && invDate <= monthEnd
+        })
 
-      const monthPurchases = purchases.filter((pur: any) => {
+        const monthPurchases = purchases.filter((pur: ApiPurchaseResponse) => {
         const purDate = new Date(pur.date)
         return purDate >= monthStart && purDate <= monthEnd
       })
@@ -90,7 +88,7 @@ export default function GSTR3BPage() {
       let outwardCgst = 0, outwardSgst = 0, outwardIgst = 0, outwardCess = 0
       let b2bTaxable = 0, b2cTaxable = 0
 
-      monthInvoices.forEach((inv: any) => {
+        monthInvoices.forEach((inv: ApiInvoiceResponse) => {
         const hasGstin = inv.customerGstin && inv.customerGstin.length === 15
         const isInterState = inv.placeOfSupply !== inv.stateCode
         const taxable = inv.subtotal || 0
@@ -115,7 +113,7 @@ export default function GSTR3BPage() {
       let inwardCgst = 0, inwardSgst = 0, inwardIgst = 0, inwardCess = 0
       let interStateItc = 0, intraStateItc = 0
 
-      monthPurchases.forEach((pur: any) => {
+        monthPurchases.forEach((pur: ApiPurchaseResponse) => {
         const hasGstin = pur.supplierGstin && pur.supplierGstin.length === 15
         if (!hasGstin) return // ITC only for registered suppliers
 
@@ -175,6 +173,8 @@ export default function GSTR3BPage() {
       setLoading(false)
     }
   }
+    fetchGSTR3BData()
+  }, [month])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -251,11 +251,21 @@ export default function GSTR3BPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : data ? (
+      )}
+
+      {!loading && !data && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No data available for the selected period
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && data && (
         <>
           {/* Tax Summary Cards */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -449,12 +459,6 @@ export default function GSTR3BPage() {
             </CardContent>
           </Card>
         </>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No data available for the selected period
-          </CardContent>
-        </Card>
       )}
     </div>
   )

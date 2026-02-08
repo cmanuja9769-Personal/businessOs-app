@@ -63,7 +63,7 @@ export async function seedChartOfAccounts(organizationId: string) {
 
   // First pass: Create all parent accounts
   for (const acc of DEFAULT_ACCOUNTS.filter((a) => !a.parent)) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("accounts")
       .insert({
         organization_id: organizationId,

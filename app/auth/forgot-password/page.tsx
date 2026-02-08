@@ -19,7 +19,7 @@ export default function ForgotPasswordPage() {
             <span className="text-2xl font-bold text-foreground">BusinessOS</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Reset password</h1>
-          <p className="text-muted-foreground">Enter your email and we'll send you a link to reset your password</p>
+          <p className="text-muted-foreground">Enter your email and we&apos;ll send you a link to reset your password</p>
         </div>
 
         {/* Form Card */}

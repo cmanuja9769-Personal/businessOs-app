@@ -1,5 +1,7 @@
 import { format, formatRelative, formatDistance, parseISO } from "date-fns"
 
+export type DateInput = Date | string | null | undefined
+
 export const DATE_FORMATS = {
   short: "dd MMM yyyy",
   medium: "dd MMMM yyyy",
@@ -16,7 +18,7 @@ export const DATE_FORMATS = {
 export type DateFormatKey = keyof typeof DATE_FORMATS
 
 export function formatDate(
-  date: Date | string | null | undefined,
+  date: DateInput,
   formatKey: DateFormatKey = "short"
 ): string {
   if (!date) return "-"
@@ -26,7 +28,7 @@ export function formatDate(
 }
 
 export function formatDateCustom(
-  date: Date | string | null | undefined,
+  date: DateInput,
   formatString: string
 ): string {
   if (!date) return "-"
@@ -36,7 +38,7 @@ export function formatDateCustom(
 }
 
 export function formatRelativeDate(
-  date: Date | string | null | undefined,
+  date: DateInput,
   baseDate: Date = new Date()
 ): string {
   if (!date) return "-"
@@ -46,7 +48,7 @@ export function formatRelativeDate(
 }
 
 export function formatTimeAgo(
-  date: Date | string | null | undefined,
+  date: DateInput,
   options?: { addSuffix?: boolean }
 ): string {
   if (!date) return "-"
@@ -55,14 +57,14 @@ export function formatTimeAgo(
   return formatDistance(dateObj, new Date(), { addSuffix: options?.addSuffix ?? true })
 }
 
-export function toInputDateString(date: Date | string | null | undefined): string {
+export function toInputDateString(date: DateInput): string {
   if (!date) return ""
   
   const dateObj = typeof date === "string" ? parseISO(date) : date
   return format(dateObj, DATE_FORMATS.input)
 }
 
-export function toMonthString(date: Date | string | null | undefined): string {
+export function toMonthString(date: DateInput): string {
   if (!date) return ""
   
   const dateObj = typeof date === "string" ? parseISO(date) : date

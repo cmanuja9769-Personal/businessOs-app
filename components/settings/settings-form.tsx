@@ -88,7 +88,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
       } else {
         toast.error(result.error || "Could not fetch GST details")
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch GST details. Please try again.")
     } finally {
       setIsFetchingGST(false)

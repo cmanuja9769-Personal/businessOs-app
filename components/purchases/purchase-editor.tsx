@@ -43,7 +43,7 @@ export function PurchaseEditor({ purchase }: PurchaseEditorProps) {
 
         const supplier = suppliersData.find((s) => s.id === purchase.supplierId)
         setSelectedSupplier(supplier || null)
-      } catch (error) {
+      } catch {
         toast.error("Failed to load data")
       } finally {
         setIsLoading(false)
@@ -69,7 +69,7 @@ export function PurchaseEditor({ purchase }: PurchaseEditorProps) {
     ])
   }
 
-  const updateItem = (index: number, field: keyof IPurchaseItem, value: any) => {
+  const updateItem = (index: number, field: keyof IPurchaseItem, value: IPurchaseItem[keyof IPurchaseItem]) => {
     const updated = [...purchaseItems]
     updated[index] = { ...updated[index], [field]: value }
 
@@ -147,7 +147,7 @@ export function PurchaseEditor({ purchase }: PurchaseEditorProps) {
       await updatePurchase(purchase.id, purchaseData)
       toast.success("Purchase order updated successfully")
       router.push(`/purchases/${purchase.id}`)
-    } catch (error) {
+    } catch {
       toast.error("Failed to update purchase")
     } finally {
       setIsSaving(false)
@@ -266,7 +266,7 @@ export function PurchaseEditor({ purchase }: PurchaseEditorProps) {
                 {purchaseItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No items added. Click "Add Item" to start.
+                      No items added. Click &quot;Add Item&quot; to start.
                     </TableCell>
                   </TableRow>
                 ) : (

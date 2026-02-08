@@ -33,9 +33,9 @@ export default tseslint.config(
       },
     },
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
-        "warn",
+        "error",
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_",
@@ -43,20 +43,20 @@ export default tseslint.config(
       ],
 
       "no-console": ["warn", { allow: ["warn", "error"] }],
-      "prefer-const": "warn",
+      "prefer-const": "error",
 
-      "max-depth": ["warn", 6],
-      "no-nested-ternary": "warn",
+      "max-depth": ["error", 4],
+      "no-nested-ternary": "error",
 
-      "sonarjs/cognitive-complexity": "off",
-      "sonarjs/no-duplicate-string": "off",
-      "sonarjs/no-identical-functions": "warn",
-      "sonarjs/no-collapsible-if": "warn",
+      "sonarjs/cognitive-complexity": ["warn", 10],
+      "sonarjs/no-duplicate-string": ["warn", { threshold: 3 }],
+      "sonarjs/no-identical-functions": "error",
+      "sonarjs/no-collapsible-if": "error",
       "sonarjs/prefer-immediate-return": "off",
       "sonarjs/no-nested-template-literals": "off",
-      "sonarjs/no-empty-collection": "off",
-      "sonarjs/no-ignored-exceptions": "warn",
-      "sonarjs/no-nested-conditional": "warn",
+      "sonarjs/no-empty-collection": "warn",
+      "sonarjs/no-ignored-exceptions": "error",
+      "sonarjs/no-nested-conditional": "error",
     },
   }
 );

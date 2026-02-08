@@ -111,7 +111,11 @@ export default async function PurchaseDetailPage({ params }: { params: Promise<{
                       <TableCell>{item.quantity}</TableCell>
                       <TableCell>₹{item.rate.toFixed(2)}</TableCell>
                       <TableCell>
-                        {item.discount > 0 ? `${item.discount}${item.discountType === "percentage" ? "%" : "₹"}` : "-"}
+                        {(() => {
+                          if (item.discount <= 0) return "-"
+                          const suffix = item.discountType === "percentage" ? "%" : "₹"
+                          return `${item.discount}${suffix}`
+                        })()}
                       </TableCell>
                       {purchase.gstEnabled && <TableCell>{item.taxRate}%</TableCell>}
                       <TableCell className="text-right font-semibold">₹{item.amount.toFixed(2)}</TableCell>

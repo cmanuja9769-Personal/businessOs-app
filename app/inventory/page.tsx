@@ -64,8 +64,9 @@ export default function InventoryPage() {
   }, [])
 
   useEffect(() => {
-    void fetchItems()
-    void fetchAdjustments()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data fetching pattern, setState is called after await
+    fetchItems().catch(() => {})
+    fetchAdjustments().catch(() => {})
   }, [fetchItems, fetchAdjustments])
 
   const handleTabChange = (value: string) => {

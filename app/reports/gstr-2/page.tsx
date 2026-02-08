@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, endOfMonth, subMonths } from "date-fns"
+import type { ApiPurchaseResponse } from "@/types/api-responses"
 
 interface GSTR2Entry {
   id: string
@@ -45,10 +46,7 @@ export default function GSTR2Page() {
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState("all")
 
   useEffect(() => {
-    fetchGSTR2Data()
-  }, [month])
-
-  const fetchGSTR2Data = async () => {
+    async function fetchGSTR2Data() {
     setLoading(true)
     try {
       const [year, monthNum] = month.split('-').map(Number)
@@ -62,24 +60,24 @@ export default function GSTR2Page() {
       
       // Filter purchases for the selected month and map to GSTR-2 format
       const gstr2Data: GSTR2Entry[] = purchases
-        .filter((pur: any) => {
+        .filter((pur: ApiPurchaseResponse) => {
           const purDate = new Date(pur.date)
           return purDate >= monthStart && purDate <= monthEnd
         })
-        .map((pur: any) => {
+        .map((pur: ApiPurchaseResponse) => {
           const isInterState = pur.placeOfSupply !== pur.stateCode
           
           return {
             id: pur.id,
-            purchaseNo: pur.purchaseNo || pur.invoiceNo,
+            purchaseNo: pur.purchaseNo || '',
             purchaseDate: pur.date,
             supplierName: pur.supplierName,
             supplierGstin: pur.supplierGstin || 'N/A',
             placeOfSupply: pur.placeOfSupply || pur.state || 'N/A',
             invoiceType: 'B2B',
             taxableValue: pur.subtotal || 0,
-            cgst: isInterState ? 0 : (pur.cgst || pur.totalTax / 2 || 0),
-            sgst: isInterState ? 0 : (pur.sgst || pur.totalTax / 2 || 0),
+            cgst: isInterState ? 0 : (pur.cgst || (pur.totalTax ?? 0) / 2 || 0),
+            sgst: isInterState ? 0 : (pur.sgst || (pur.totalTax ?? 0) / 2 || 0),
             igst: isInterState ? (pur.igst || pur.totalTax || 0) : 0,
             cess: pur.cess || 0,
             totalTax: pur.totalTax || 0,
@@ -95,6 +93,8 @@ export default function GSTR2Page() {
       setLoading(false)
     }
   }
+    fetchGSTR2Data()
+  }, [month])
 
   const filteredEntries = entries.filter(e => 
     invoiceTypeFilter === "all" || e.invoiceType === invoiceTypeFilter

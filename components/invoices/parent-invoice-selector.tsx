@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { IInvoice } from "@/types";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -28,12 +28,14 @@ export function ParentInvoiceSelector({
   onSelect,
   documentType,
 }: ParentInvoiceSelectorProps) {
-  const [selectedInvoice, setSelectedInvoice] = useState<IInvoice | null>(null);
-
-  // Filter only regular invoices (not other document types)
   const availableInvoices = invoices.filter(
     (inv) => inv.documentType === "invoice"
   );
+
+  const selectedInvoice = useMemo(() => {
+    if (!selectedInvoiceId) return null;
+    return availableInvoices.find((inv) => inv.id === selectedInvoiceId) || null;
+  }, [selectedInvoiceId, availableInvoices]);
 
   useEffect(() => {
     if (selectedInvoiceId) {
@@ -41,7 +43,6 @@ export function ParentInvoiceSelector({
         (inv) => inv.id === selectedInvoiceId
       );
       if (invoice) {
-        setSelectedInvoice(invoice);
         onSelect(invoice);
       }
     }
@@ -49,12 +50,10 @@ export function ParentInvoiceSelector({
 
   const handleSelectInvoice = (invoiceId: string) => {
     const invoice = availableInvoices.find((inv) => inv.id === invoiceId);
-    setSelectedInvoice(invoice || null);
     onSelect(invoice || null);
   };
 
   const handleClear = () => {
-    setSelectedInvoice(null);
     onSelect(null);
   };
 

@@ -3,7 +3,6 @@
 import { Bell, Search, Package, Users, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { globalSearch } from "@/app/actions"
 import Link from "next/link"
@@ -17,7 +16,6 @@ type SearchResults = {
 }
 
 export function Header() {
-  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
@@ -90,7 +88,7 @@ export function Header() {
             <div className="absolute top-full mt-2 left-0 right-0 bg-popover border border-border rounded-lg shadow-lg max-h-96 overflow-auto z-50">
               {totalResults === 0 && !isSearching && (
                 <div className="p-4 text-center text-muted-foreground text-sm">
-                  No results found for "{searchQuery}"
+                  No results found for &quot;{searchQuery}&quot;
                 </div>
               )}
 

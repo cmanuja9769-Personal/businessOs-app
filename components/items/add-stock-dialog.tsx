@@ -478,12 +478,14 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
                 <Warehouse className="w-4 h-4" />
                 Stock by Godown - Select godown to {operationType === "ADD" ? "add stock" : "reduce stock"}
               </div>
-              {isLoadingStocks ? (
+              {(() => {
+                if (isLoadingStocks) return (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Loading godown stocks...
                 </div>
-              ) : warehouseStocks.length > 0 ? (
+                )
+                if (warehouseStocks.length > 0) return (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {warehouseStocks.map((ws) => (
                     <button
@@ -500,7 +502,8 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
                     </button>
                   ))}
                 </div>
-              ) : (
+                )
+                return (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {godowns.map((godown) => (
                     <button
@@ -517,7 +520,8 @@ export function AddStockDialog({ item, godowns, trigger, defaultOperation = "ADD
                     </button>
                   ))}
                 </div>
-              )}
+                )
+              })()}
               {warehouseId && selectedWarehouseStock && (
                 <p className="text-xs text-primary font-medium pt-1">
                   Selected: {selectedWarehouseStock.warehouseName} - {selectedWarehouseStock.quantity} {packagingUnit} available

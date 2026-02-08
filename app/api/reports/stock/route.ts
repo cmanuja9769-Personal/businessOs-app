@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface LedgerEntry {
+  item_id: string
+  warehouse_id: string | null
+  quantity_change: number | null
+}
+
+function processLedgerEntries(
+  entries: LedgerEntry[],
+  postDateItemChanges: Map<string, number>,
+  postDateWarehouseChanges: Map<string, Map<string, number>>
+) {
+  for (const entry of entries) {
+    const prev = postDateItemChanges.get(entry.item_id) || 0
+    postDateItemChanges.set(entry.item_id, prev + (entry.quantity_change || 0))
+
+    if (!entry.warehouse_id) continue
+
+    if (!postDateWarehouseChanges.has(entry.item_id)) {
+      postDateWarehouseChanges.set(entry.item_id, new Map())
+    }
+    const whMap = postDateWarehouseChanges.get(entry.item_id)!
+    const whPrev = whMap.get(entry.warehouse_id) || 0
+    whMap.set(entry.warehouse_id, whPrev + (entry.quantity_change || 0))
+  }
+}
+
 interface StockReportItem {
   id: string
   item_code: string | null
@@ -10,8 +36,8 @@ interface StockReportItem {
   packaging_unit: string | null
   per_carton_quantity: number | null
   purchase_price: number | null
+  sale_price: number | null
   min_stock: number | null
-  max_stock: number | null
   current_stock: number | null
   opening_stock: number | null
   warehouse_id: string | null
@@ -22,7 +48,7 @@ interface WarehouseStockRow {
   quantity: number | null
   location: string | null
   warehouse_id: string
-  warehouses: { id: string; name: string } | null
+  warehouses: { id: string; name: string }[] | null
 }
 
 /**
@@ -90,8 +116,8 @@ export async function GET(request: NextRequest) {
           packaging_unit,
           per_carton_quantity,
           purchase_price,
+          sale_price,
           min_stock,
-          max_stock,
           current_stock,
           opening_stock,
           warehouse_id
@@ -124,7 +150,7 @@ export async function GET(request: NextRequest) {
     let itemsData = allItemsData
     
     if (categories.length > 0) {
-      itemsData = itemsData.filter(item => categories.includes(item.category))
+      itemsData = itemsData.filter(item => item.category !== null && categories.includes(item.category))
     }
 
     if (searchTerm) {
@@ -228,19 +254,7 @@ export async function GET(request: NextRequest) {
           .gte('transaction_date', nextDayStr)
 
         if (ledgerBatch) {
-          for (const entry of ledgerBatch) {
-            const prev = postDateItemChanges.get(entry.item_id) || 0
-            postDateItemChanges.set(entry.item_id, prev + (entry.quantity_change || 0))
-
-            if (entry.warehouse_id) {
-              if (!postDateWarehouseChanges.has(entry.item_id)) {
-                postDateWarehouseChanges.set(entry.item_id, new Map())
-              }
-              const whMap = postDateWarehouseChanges.get(entry.item_id)!
-              const whPrev = whMap.get(entry.warehouse_id) || 0
-              whMap.set(entry.warehouse_id, whPrev + (entry.quantity_change || 0))
-            }
-          }
+          processLedgerEntries(ledgerBatch, postDateItemChanges, postDateWarehouseChanges)
         }
       }
     }
@@ -262,11 +276,12 @@ export async function GET(request: NextRequest) {
         calculated_stock = currentStock - postDateAdj
       }
       
-      const stock_value = calculated_stock * (item.purchase_price || 0)
+      const unitPrice = (item.purchase_price || 0) > 0 ? item.purchase_price! : (item.sale_price || 0)
+      const stock_value = calculated_stock * unitPrice
       
       let stock_status_flag: 'low' | 'normal' | 'high' = 'normal'
       const minStock = item.min_stock || 0
-      const maxStock = item.max_stock || 0
+      const maxStock = minStock > 0 ? minStock * 3 : 0
       if (calculated_stock <= minStock) {
         stock_status_flag = 'low'
       } else if (maxStock > 0 && calculated_stock >= maxStock) {
@@ -280,7 +295,7 @@ export async function GET(request: NextRequest) {
       if (itemWarehouses.length > 0) {
         locations = itemWarehouses.map(ws => ({
           warehouseId: ws.warehouse_id,
-          warehouseName: (ws.warehouses as { name?: string })?.name || warehouseNameById.get(ws.warehouse_id) || 'Unknown',
+          warehouseName: (ws.warehouses as { name?: string }[] | null)?.[0]?.name || warehouseNameById.get(ws.warehouse_id) || 'Unknown',
           quantity: ws.quantity || 0,
           location: ws.location || ''
         }))
@@ -335,9 +350,17 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Stock report API error:', error)
+    let message: string
+    if (error instanceof Error) {
+      message = error.message
+    } else if (typeof error === 'object' && error !== null && 'message' in error) {
+      message = String((error as { message: unknown }).message)
+    } else {
+      message = String(error)
+    }
+    console.error('Stock report API error:', message)
     return NextResponse.json(
-      { error: 'Failed to generate stock report', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to generate stock report', details: message },
       { status: 500 }
     )
   }

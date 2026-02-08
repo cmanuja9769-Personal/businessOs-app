@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,11 +21,12 @@ import { BarcodeQueueModal } from "@/components/items/barcode-queue-modal";
 import { useBarcodeQueueStore } from "@/store/use-barcode-queue-store";
 import { logBarcodePrint } from "@/app/barcode-logs/actions";
 
-export default function BarcodePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+interface BarcodePageProps {
+  readonly params: Promise<{ id: string }>;
+}
+
+export default function BarcodePage({ params }: BarcodePageProps) {
+  const { id } = use(params);
   const [item, setItem] = useState<IItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -33,7 +34,6 @@ export default function BarcodePage({
   const [showPerCartonQty, setShowPerCartonQty] = useState(true);
   const [layoutId, setLayoutId] = useState("xl");
   const [startPosition, setStartPosition] = useState(1);
-  const [id, setId] = useState<string>("");
   const [hindiName, setHindiName] = useState<string | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -44,10 +44,6 @@ export default function BarcodePage({
 
   const openQueueModal = useBarcodeQueueStore((s) => s.openModal);
   const addToQueue = useBarcodeQueueStore((s) => s.addToQueue);
-
-  useEffect(() => {
-    params.then((p) => setId(p.id));
-  }, [params]);
 
   useEffect(() => {
     if (!id) return;

@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
+import type { ApiInvoiceResponse } from "@/types/api-responses"
 
 interface ReturnEntry {
   id: string
@@ -43,40 +44,38 @@ export default function ReturnsReportPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all")
 
   useEffect(() => {
+    const fetchReturns = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch('/api/invoices')
+        if (!response.ok) throw new Error('Failed to fetch')
+        
+        const invoices = await response.json()
+        
+        const returnEntries: ReturnEntry[] = invoices
+          .filter((inv: ApiInvoiceResponse) => inv.documentType === 'credit_note' || inv.documentType === 'debit_note')
+          .map((inv: ApiInvoiceResponse) => ({
+            id: inv.id,
+            returnNo: inv.invoiceNo,
+            originalInvoiceNo: inv.notes?.includes('INV-') ? inv.notes.match(/INV-\d+/)?.[0] : '-',
+            partyName: inv.customerName,
+            date: inv.invoiceDate,
+            type: inv.documentType as 'credit_note' | 'debit_note',
+            amount: inv.total,
+            reason: inv.notes || 'Not specified',
+            status: inv.status === 'paid' ? 'processed' as const : 'pending' as const
+          }))
+
+        setReturns(returnEntries)
+      } catch (error) {
+        console.error('Failed to fetch returns:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchReturns()
   }, [])
-
-  const fetchReturns = async () => {
-    setLoading(true)
-    try {
-      // Fetch credit notes and debit notes from invoices API
-      const response = await fetch('/api/invoices')
-      if (!response.ok) throw new Error('Failed to fetch')
-      
-      const invoices = await response.json()
-      
-      // Filter for credit notes and debit notes
-      const returnEntries: ReturnEntry[] = invoices
-        .filter((inv: any) => inv.documentType === 'credit_note' || inv.documentType === 'debit_note')
-        .map((inv: any) => ({
-          id: inv.id,
-          returnNo: inv.invoiceNo,
-          originalInvoiceNo: inv.notes?.includes('INV-') ? inv.notes.match(/INV-\d+/)?.[0] : '-',
-          partyName: inv.customerName,
-          date: inv.invoiceDate,
-          type: inv.documentType as 'credit_note' | 'debit_note',
-          amount: inv.total,
-          reason: inv.notes || 'Not specified',
-          status: inv.status === 'paid' ? 'processed' as const : 'pending' as const
-        }))
-
-      setReturns(returnEntries)
-    } catch (error) {
-      console.error('Failed to fetch returns:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredReturns = returns.filter(ret => {
     const retDate = new Date(ret.date)

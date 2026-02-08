@@ -3,14 +3,14 @@ import { z } from "zod"
 // Customer validation schema
 export const customerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  contactNo: z.string().regex(/^[0-9]{10,15}$/, "Contact number must be 10-15 digits"),
+  contactNo: z.string().regex(/^\d{10,15}$/, "Contact number must be 10-15 digits"),
   email: z.string().email("Invalid email format").optional().or(z.literal("")),
   address: z.string().max(500, "Address must be less than 500 characters").optional().or(z.literal("")),
   openingBalance: z.coerce.number().default(0),
   openingDate: z.coerce.date(),
   gstinNo: z
     .string()
-    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, "Invalid GSTIN format")
+    .regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, "Invalid GSTIN format")
     .optional()
     .or(z.literal(""))
     .transform((val) => val?.toUpperCase()),
@@ -164,12 +164,12 @@ export type InvoiceFormData = z.infer<typeof invoiceSchema>
 // Supplier validation schema
 export const supplierSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  contactNo: z.string().regex(/^[0-9]{10,15}$/, "Contact number must be 10-15 digits"),
+  contactNo: z.string().regex(/^\d{10,15}$/, "Contact number must be 10-15 digits"),
   email: z.string().email("Invalid email format").optional().or(z.literal("")),
   address: z.string().max(500, "Address must be less than 500 characters").optional().or(z.literal("")),
   gstinNo: z
     .string()
-    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, "Invalid GSTIN format")
+    .regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, "Invalid GSTIN format")
     .optional()
     .or(z.literal(""))
     .transform((val) => val?.toUpperCase()),

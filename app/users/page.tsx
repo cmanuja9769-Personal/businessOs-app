@@ -9,6 +9,12 @@ import { RoleBadge, type UserRole } from "@/components/ui/role-badge"
 import { Users } from "lucide-react"
 import { EditUserRoleDialog } from "@/components/users/edit-user-role-dialog"
 
+interface UserRecord {
+  user_id: string
+  role: string
+  created_at: string
+}
+
 export const metadata = {
   title: "Users - BusinessOS",
   description: "Manage application users and permissions",
@@ -80,7 +86,7 @@ export default async function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u: any) => (
+                {users.map((u: UserRecord) => (
                   <TableRow key={u.user_id}>
                     <TableCell className="font-mono text-sm">{u.user_id.slice(0, 8)}...</TableCell>
                     <TableCell>

@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +16,6 @@ export function ResetPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {

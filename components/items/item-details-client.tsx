@@ -2,8 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import type { IItem, IItemWarehouseStock, IStockLedgerEntry, IItemInvoiceUsage } from "@/types"
-import { PACKAGING_UNITS } from "@/types"
+import type { IItem } from "@/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +19,6 @@ import {
   TrendingDown,
   AlertTriangle,
   Edit,
-  Plus,
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw
@@ -95,7 +93,11 @@ export function ItemDetailsClient({
 }: ItemDetailsClientProps) {
   const [activeTab, setActiveTab] = useState("overview")
 
-  const stockStatus = item.stock <= item.minStock ? "low" : item.stock >= item.maxStock ? "high" : "normal"
+  const stockStatus = (() => {
+    if (item.stock <= item.minStock) return "low"
+    if (item.stock >= item.maxStock) return "high"
+    return "normal"
+  })()
   const totalQuantitySold = invoiceUsage.reduce((sum, inv) => sum + inv.quantity, 0)
   const totalRevenue = invoiceUsage.reduce((sum, inv) => sum + inv.amount, 0)
 
@@ -271,10 +273,14 @@ export function ItemDetailsClient({
                   <div>
                     <p className="text-muted-foreground">Warehouses</p>
                     <p className="font-medium">
-                      {stockDistribution.length > 0 
-                        ? `${stockDistribution.length} location${stockDistribution.length > 1 ? 's' : ''}`
-                        : (item.godownName && item.godownName !== "null" ? item.godownName : "Not assigned")
-                      }
+                      {(() => {
+                        if (stockDistribution.length > 0) {
+                          const suffix = stockDistribution.length > 1 ? "s" : ""
+                          return `${stockDistribution.length} location${suffix}`
+                        }
+                        if (item.godownName && item.godownName !== "null") return item.godownName
+                        return "Not assigned"
+                      })()}
                     </p>
                   </div>
                 </div>

@@ -43,49 +43,48 @@ export default function LowStockPage() {
   const [severityFilter, setSeverityFilter] = useState("all")
 
   useEffect(() => {
+    const fetchLowStockItems = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch('/api/items')
+        if (!response.ok) throw new Error('Failed to fetch')
+        
+        const allItems = await response.json()
+        
+        const lowStockItems: LowStockItem[] = allItems
+          .filter((item: Record<string, unknown>) => {
+            const currentStock = Number(item.current_stock) || 0
+            const reorderLevel = Number(item.min_stock) || 10
+            return currentStock <= reorderLevel
+          })
+          .map((item: Record<string, unknown>) => ({
+            id: item.id as string,
+            name: (item.name as string) || "",
+            sku: (item.item_code as string) || "-",
+            currentStock: Number(item.current_stock) || 0,
+            reorderLevel: Number(item.min_stock) || 10,
+            optimalStock: Number(item.max_stock) || 50,
+            shortfall: 0,
+            unit: (item.unit as string) || "pcs",
+            category: (item.category as string) || "Uncategorized",
+            lastPurchaseDate: undefined,
+            supplier: undefined,
+          }))
+          .map((item: LowStockItem) => ({
+            ...item,
+            shortfall: Math.max(0, item.optimalStock - item.currentStock)
+          }))
+
+        setItems(lowStockItems)
+      } catch (error) {
+        console.error('Failed to fetch low stock items:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchLowStockItems()
   }, [])
-
-  const fetchLowStockItems = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/items')
-      if (!response.ok) throw new Error('Failed to fetch')
-      
-      const allItems = await response.json()
-      
-      // Filter items below reorder level and calculate shortfall
-      const lowStockItems: LowStockItem[] = allItems
-        .filter((item: Record<string, unknown>) => {
-          const currentStock = Number(item.current_stock) || 0
-          const reorderLevel = Number(item.min_stock) || 10
-          return currentStock <= reorderLevel
-        })
-        .map((item: Record<string, unknown>) => ({
-          id: item.id as string,
-          name: (item.name as string) || "",
-          sku: (item.item_code as string) || "-",
-          currentStock: Number(item.current_stock) || 0,
-          reorderLevel: Number(item.min_stock) || 10,
-          optimalStock: Number(item.max_stock) || 50,
-          shortfall: 0,
-          unit: (item.unit as string) || "pcs",
-          category: (item.category as string) || "Uncategorized",
-          lastPurchaseDate: undefined,
-          supplier: undefined,
-        }))
-        .map((item: LowStockItem) => ({
-          ...item,
-          shortfall: Math.max(0, item.optimalStock - item.currentStock)
-        }))
-
-      setItems(lowStockItems)
-    } catch (error) {
-      console.error('Failed to fetch low stock items:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getSeverity = (item: LowStockItem) => {
     const stockPercentage = (item.currentStock / item.reorderLevel) * 100

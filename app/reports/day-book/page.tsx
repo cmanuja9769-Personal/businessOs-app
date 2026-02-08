@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfDay, endOfDay } from "date-fns"
+import type { ApiInvoiceResponse, ApiPurchaseResponse, ApiPaymentResponse } from "@/types/api-responses"
 
 interface DayBookEntry {
   id: string
@@ -41,10 +42,7 @@ export default function DayBookPage() {
   const [typeFilter, setTypeFilter] = useState("all")
 
   useEffect(() => {
-    fetchDayBookEntries()
-  }, [selectedDate])
-
-  const fetchDayBookEntries = async () => {
+    async function fetchDayBookEntries() {
     setLoading(true)
     try {
       const dayStart = startOfDay(new Date(selectedDate))
@@ -64,7 +62,7 @@ export default function DayBookPage() {
       const dayBookEntries: DayBookEntry[] = []
 
       // Add sales
-      invoices.forEach((inv: any) => {
+      invoices.forEach((inv: ApiInvoiceResponse) => {
         const invDate = new Date(inv.invoiceDate)
         if (invDate >= dayStart && invDate <= dayEnd) {
           dayBookEntries.push({
@@ -81,7 +79,7 @@ export default function DayBookPage() {
       })
 
       // Add purchases
-      purchases.forEach((pur: any) => {
+      purchases.forEach((pur: ApiPurchaseResponse) => {
         const purDate = new Date(pur.date)
         if (purDate >= dayStart && purDate <= dayEnd) {
           dayBookEntries.push({
@@ -98,15 +96,15 @@ export default function DayBookPage() {
       })
 
       // Add payments
-      payments.forEach((pay: any) => {
-        const payDate = new Date(pay.paymentDate || pay.date)
+      payments.forEach((pay: ApiPaymentResponse) => {
+        const payDate = new Date(pay.paymentDate || pay.date || new Date())
         if (payDate >= dayStart && payDate <= dayEnd) {
           const isIncoming = pay.type === 'receipt' || pay.type === 'incoming'
           dayBookEntries.push({
             id: pay.id,
             time: format(payDate, 'HH:mm'),
             type: isIncoming ? 'payment_in' : 'payment_out',
-            documentNo: pay.paymentNo || pay.referenceNo,
+            documentNo: pay.paymentNo || pay.referenceNo || '',
             partyName: pay.partyName || pay.customerName || pay.supplierName || '-',
             description: `${isIncoming ? 'Payment Received' : 'Payment Made'} - ${pay.paymentMode || 'Cash'}`,
             debit: isIncoming ? (pay.amount || 0) : 0,
@@ -125,6 +123,8 @@ export default function DayBookPage() {
       setLoading(false)
     }
   }
+    fetchDayBookEntries()
+  }, [selectedDate])
 
   const getTypeInfo = (type: string) => {
     switch (type) {

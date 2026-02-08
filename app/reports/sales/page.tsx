@@ -60,10 +60,6 @@ export default function SalesReportPage() {
   const [filters, setFilters] = useState<ReportFilters>(getDefaultFilters)
   const [viewMode, setViewMode] = useState<"summary" | "itemwise">("summary")
 
-  useEffect(() => {
-    fetchInvoices()
-  }, [])
-
   const fetchInvoices = async () => {
     setLoading(true)
     try {
@@ -78,6 +74,10 @@ export default function SalesReportPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchInvoices()
+  }, [])
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {

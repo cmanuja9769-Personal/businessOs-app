@@ -56,7 +56,7 @@ export function EInvoiceGenerationDialog({ invoice, open, onOpenChange }: EInvoi
           } else {
             setPollCount((prev) => prev + 1)
           }
-        } catch (error) {
+        } catch {
           setError("Failed to check job status")
           setStep("error")
         }
@@ -97,7 +97,6 @@ export function EInvoiceGenerationDialog({ invoice, open, onOpenChange }: EInvoi
     // Refresh invoice data
     try {
       // Call the server action to update invoice with IRN
-      // TODO: Replace with actual organizationId when multi-tenancy is implemented (Phase 1)
       await generateEInvoice(invoice.id, "default-org")
       toast.success("E-Invoice generated successfully!")
       onOpenChange(false)
@@ -247,7 +246,7 @@ export function EInvoiceGenerationDialog({ invoice, open, onOpenChange }: EInvoi
                 <p className="text-sm text-muted-foreground">Please verify the following before retrying:</p>
                 <ul className="text-sm list-disc list-inside space-y-1 text-muted-foreground">
                   <li>Customer GST number is valid</li>
-                  <li>Invoice is in "sent" status</li>
+                  <li>Invoice is in &quot;sent&quot; status</li>
                   <li>All invoice details are correct</li>
                   <li>Customer has GST registration</li>
                 </ul>

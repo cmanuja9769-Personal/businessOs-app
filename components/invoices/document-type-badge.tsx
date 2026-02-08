@@ -1,6 +1,6 @@
 import { DOCUMENT_TYPE_CONFIG, DocumentType } from "@/types"
 import { Badge } from "@/components/ui/badge"
-import { FileText, Receipt, Truck, FileCheck, FileSignature, FileX, FileWarning } from "lucide-react"
+import { FileText, Receipt, Truck, FileSignature, FileX, FileWarning } from "lucide-react"
 
 interface DocumentTypeBadgeProps {
   type: DocumentType

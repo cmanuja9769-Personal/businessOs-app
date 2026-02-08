@@ -5,6 +5,21 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { useNumberInputScrollPrevention } from '@/hooks/use-number-input-scroll-prevention'
 
+function normalizeIntegerInput(value: string): string {
+  if (value === '') return value
+
+  const isNegative = value.startsWith('-')
+  const sign = isNegative ? '-' : ''
+  let rest = isNegative ? value.slice(1) : value
+
+  if (rest.startsWith('0') && rest.length > 1 && !rest.startsWith('0.')) {
+    rest = rest.replace(/^0+(?=\d)/, '')
+    if (rest === '') rest = '0'
+  }
+
+  return sign + rest
+}
+
 function Input({ className, type, step, onFocus, onClick, onChange, ...props }: React.ComponentProps<'input'>) {
   const inputRef = useNumberInputScrollPrevention()
   
@@ -58,22 +73,9 @@ function Input({ className, type, step, onFocus, onClick, onChange, ...props }: 
 
           if (isIntegerStep) {
             const input = e.currentTarget
-            const current = input.value
-
-            if (current !== '') {
-              const isNegative = current.startsWith('-')
-              const sign = isNegative ? '-' : ''
-              let rest = isNegative ? current.slice(1) : current
-
-              if (rest.startsWith('0') && rest.length > 1 && !rest.startsWith('0.')) {
-                rest = rest.replace(/^0+(?=\d)/, '')
-                if (rest === '') rest = '0'
-              }
-
-              const normalized = sign + rest
-              if (normalized !== current) {
-                input.value = normalized
-              }
+            const normalized = normalizeIntegerInput(input.value)
+            if (normalized !== input.value) {
+              input.value = normalized
             }
           }
         }

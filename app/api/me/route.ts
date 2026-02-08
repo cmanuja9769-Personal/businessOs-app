@@ -25,7 +25,7 @@ export async function GET() {
     .eq("user_id", user.id)
 
   const organizations =
-    orgData?.filter((row: any) => row.app_organizations).map((row: any) => row.app_organizations) || []
+    orgData?.filter((row: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => row.app_organizations.length > 0).map((row: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => row.app_organizations[0]) || []
 
   return NextResponse.json({ user, userRole: roleData ?? null, organizations }, { status: 200 })
 }

@@ -54,7 +54,7 @@ export function InvoiceBuilder() {
           field2Enabled: settingsData.customField2Enabled,
           field2Label: settingsData.customField2Label,
         })
-      } catch (error) {
+      } catch {
         toast.error("Failed to load data")
       } finally {
         setIsLoading(false)
@@ -94,7 +94,7 @@ export function InvoiceBuilder() {
       await createInvoice(invoiceData)
       toast.success(`Invoice ${status === "draft" ? "saved as draft" : "created"} successfully`)
       router.push("/invoices")
-    } catch (error) {
+    } catch {
       toast.error("Failed to save invoice")
     } finally {
       setIsSaving(false)

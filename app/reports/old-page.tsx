@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { TrendingUp, DollarSign, ShoppingCart, Package, FileText, AlertTriangle, Warehouse } from "lucide-react"
 import { format, startOfMonth, endOfMonth, startOfYear } from "date-fns"
 import StockReportComponent from "@/components/reports/stock-summary-report"
+import type { IItem } from "@/types"
+
+function getStatusBadgeClass(status: string): string {
+  if (status === "paid") return "bg-green-500/10 text-green-700"
+  if (status === "partial") return "bg-yellow-500/10 text-yellow-700"
+  return "bg-red-500/10 text-red-700"
+}
 
 export default async function ReportsPage() {
   const invoices = await getInvoices()
@@ -35,7 +42,6 @@ export default async function ReportsPage() {
   const monthSales = thisMonthInvoices.reduce((sum, inv) => sum + inv.total, 0)
   const yearSales = thisYearInvoices.reduce((sum, inv) => sum + inv.total, 0)
 
-  const totalCollected = invoices.reduce((sum, inv) => sum + inv.paidAmount, 0)
   const totalOutstanding = invoices.reduce((sum, inv) => sum + inv.balance, 0)
 
   // Purchase Analytics
@@ -55,7 +61,7 @@ export default async function ReportsPage() {
   const totalStockValue = items.reduce((sum, item) => sum + item.stock * item.purchasePrice, 0)
 
   // Top performing items by sales quantity
-  const itemSalesMap = new Map<string, { item: any; quantity: number; revenue: number }>()
+  const itemSalesMap = new Map<string, { item: IItem | undefined; quantity: number; revenue: number }>()
 
   invoices.forEach((invoice) => {
     invoice.items.forEach((invItem) => {
@@ -241,13 +247,7 @@ export default async function ReportsPage() {
                       <TableCell>
                         <Badge
                           variant="secondary"
-                          className={
-                            invoice.status === "paid"
-                              ? "bg-green-500/10 text-green-700"
-                              : invoice.status === "partial"
-                                ? "bg-yellow-500/10 text-yellow-700"
-                                : "bg-red-500/10 text-red-700"
-                          }
+                          className={getStatusBadgeClass(invoice.status)}
                         >
                           {invoice.status}
                         </Badge>
@@ -323,13 +323,7 @@ export default async function ReportsPage() {
                       <TableCell>
                         <Badge
                           variant="secondary"
-                          className={
-                            purchase.status === "paid"
-                              ? "bg-green-500/10 text-green-700"
-                              : purchase.status === "partial"
-                                ? "bg-yellow-500/10 text-yellow-700"
-                                : "bg-red-500/10 text-red-700"
-                          }
+                          className={getStatusBadgeClass(purchase.status)}
                         >
                           {purchase.status}
                         </Badge>

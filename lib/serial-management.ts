@@ -66,7 +66,7 @@ export async function getSerialsForItem(itemId: string) {
 export async function updateSerialStatus(serialId: string, status: string, invoiceId?: string, customerId?: string) {
   const supabase = await createClient()
 
-  const update: any = {
+  const update: Record<string, string | null> = {
     status,
     sale_date: status === "sold" ? new Date().toISOString().split("T")[0] : null,
   }

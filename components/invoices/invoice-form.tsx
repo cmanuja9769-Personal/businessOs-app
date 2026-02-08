@@ -98,7 +98,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
           const invoiceNumber = await generateInvoiceNumber(documentType)
           setInvoiceNo(invoiceNumber)
         }
-      } catch (error) {
+      } catch {
         toast.error("Failed to load data")
       } finally {
         setIsLoading(false)

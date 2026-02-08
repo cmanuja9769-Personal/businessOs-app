@@ -4,8 +4,10 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Check } from "lucide-react"
 
+type TemplateValue = "classic" | "modern" | "minimal"
+
 interface TemplateOption {
-  value: "classic" | "modern" | "minimal"
+  value: TemplateValue
   label: string
   description: string
   preview: string

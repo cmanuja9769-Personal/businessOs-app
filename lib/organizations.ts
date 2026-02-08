@@ -1,8 +1,41 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
-export async function getCurrentOrganization(userId: string) {
-  const supabase = await createServerClient(
+interface Organization {
+  readonly id: string
+  readonly name: string
+  readonly email: string
+  readonly phone: string | null
+  readonly gst_number: string | null
+  readonly pan_number: string | null
+  readonly address: string | null
+}
+
+interface OrganizationSummary {
+  readonly id: string
+  readonly name: string
+  readonly email: string
+  readonly phone: string | null
+}
+
+interface SupabaseError {
+  readonly code?: string
+  readonly message: string
+  readonly details?: string
+  readonly hint?: string
+}
+
+interface UserOrgRow {
+  readonly organization_id: string
+  readonly app_organizations: Organization | null
+}
+
+interface UserOrgSummaryRow {
+  readonly app_organizations: OrganizationSummary | null
+}
+
+async function createSupabaseClient() {
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -17,8 +50,26 @@ export async function getCurrentOrganization(userId: string) {
       },
     },
   )
+}
 
-  // Get the first active organization for the user
+function isRlsRecursionError(error: SupabaseError): boolean {
+  return error.code === "42P17"
+}
+
+function logSupabaseError(label: string, error: SupabaseError): void {
+  if (!isRlsRecursionError(error)) {
+    console.error(label, {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    })
+  }
+}
+
+export async function getCurrentOrganization(userId: string): Promise<Organization | null> {
+  const supabase = await createSupabaseClient()
+
   const { data, error } = await supabase
     .from("app_user_organizations")
     .select("organization_id, app_organizations(id, name, email, phone, gst_number, pan_number, address)")
@@ -28,37 +79,26 @@ export async function getCurrentOrganization(userId: string) {
     .maybeSingle()
 
   if (error) {
-    // Avoid noisy logs for expected "no rows" or RLS recursion (42P17) cases.
-    const anyErr = error as any
-    const code = anyErr?.code
-    const message = anyErr?.message
-    const details = anyErr?.details
-    const hint = anyErr?.hint
-
-    if (code !== "42P17") {
-      console.error("[v0] Error fetching organization:", { code, message, details, hint })
-    }
+    logSupabaseError("[v0] Error fetching organization:", error as SupabaseError)
     return null
   }
 
-  // Try multiple ways to extract the organization
-  if ((data as any)?.app_organizations) {
-    return (data as any).app_organizations
+  const row = data as unknown as UserOrgRow | null
+  if (row?.app_organizations) {
+    return row.app_organizations
   }
-  
-  // Fallback: if the nested select failed, use organization_id directly
-  if ((data as any)?.organization_id) {
+
+  if (row?.organization_id) {
     const { data: orgData } = await supabase
       .from("app_organizations")
       .select("id, name, email, phone, gst_number, pan_number, address")
-      .eq("id", (data as any).organization_id)
+      .eq("id", row.organization_id)
       .single()
-    
-    if (orgData) return orgData
+
+    if (orgData) return orgData as Organization
   }
 
-  // Fallback: if nothing is marked active (or schema differs), pick any membership.
-  const { data: anyData, error: anyError } = await supabase
+  const { data: fallbackData, error: fallbackError } = await supabase
     .from("app_user_organizations")
     .select("app_organizations(id, name, email, phone, gst_number, pan_number, address)")
     .eq("user_id", userId)
@@ -66,37 +106,17 @@ export async function getCurrentOrganization(userId: string) {
     .limit(1)
     .maybeSingle()
 
-  if (anyError) {
-    const anyErr = anyError as any
-    const code = anyErr?.code
-    const message = anyErr?.message
-    const details = anyErr?.details
-    const hint = anyErr?.hint
-    if (code !== "42P17") {
-      console.error("[v0] Error fetching organization (fallback):", { code, message, details, hint })
-    }
+  if (fallbackError) {
+    logSupabaseError("[v0] Error fetching organization (fallback):", fallbackError as SupabaseError)
     return null
   }
 
-  return (anyData as any)?.app_organizations || null
+  const fallbackRow = fallbackData as unknown as UserOrgSummaryRow | null
+  return (fallbackRow?.app_organizations as unknown as Organization) ?? null
 }
 
-export async function getUserOrganizations(userId: string) {
-  const supabase = await createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: async () => (await cookies()).getAll(),
-        setAll: async (cookiesToSet) => {
-          const cookieStore = await cookies()
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    },
-  )
+export async function getUserOrganizations(userId: string): Promise<OrganizationSummary[]> {
+  const supabase = await createSupabaseClient()
 
   const { data, error } = await supabase
     .from("app_user_organizations")
@@ -110,10 +130,13 @@ export async function getUserOrganizations(userId: string) {
     return []
   }
 
-  return data?.map((item: any) => item.app_organizations) || []
+  const rows = (data ?? []) as unknown as UserOrgSummaryRow[]
+  return rows
+    .map((item) => item.app_organizations)
+    .filter((org): org is OrganizationSummary => org !== null)
 }
 
-export type CreateOrganizationInput = {
+export type CreateOrganizationInput = Readonly<{
   name: string
   email: string
   phone?: string
@@ -125,26 +148,15 @@ export type CreateOrganizationInput = {
   pincode?: string
   legalName?: string
   tradeName?: string
-}
+}>
 
-export async function createOrganization(userId: string, input: CreateOrganizationInput) {
-  const supabase = await createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: async () => (await cookies()).getAll(),
-        setAll: async (cookiesToSet) => {
-          const cookieStore = await cookies()
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    },
-  )
+type CreateOrgResult =
+  | { readonly success: true; readonly organization: Organization }
+  | { readonly success: false; readonly error: string }
 
-  // Create organization
+export async function createOrganization(userId: string, input: CreateOrganizationInput): Promise<CreateOrgResult> {
+  const supabase = await createSupabaseClient()
+
   const { data: org, error: orgError } = await supabase
     .from("app_organizations")
     .insert({
@@ -171,7 +183,6 @@ export async function createOrganization(userId: string, input: CreateOrganizati
     return { success: false, error: orgError.message }
   }
 
-  // Add creator as owner
   const { error: memberError } = await supabase.from("app_user_organizations").insert({
     user_id: userId,
     organization_id: org.id,
@@ -184,8 +195,6 @@ export async function createOrganization(userId: string, input: CreateOrganizati
     return { success: false, error: memberError.message }
   }
 
-  // Persist business details in a dedicated table as well.
-  // We align `business_details.id` with `organizations.id` so the business record is 1:1 with the tenant.
   const { error: businessError } = await supabase.from("business_details").upsert(
     {
       id: org.id,
@@ -204,11 +213,12 @@ export async function createOrganization(userId: string, input: CreateOrganizati
   )
 
   if (businessError) {
+    const sbErr = businessError as SupabaseError
     console.error("[v0] Error saving business details:", {
-      code: (businessError as any)?.code,
-      message: businessError.message,
-      details: (businessError as any)?.details,
-      hint: (businessError as any)?.hint,
+      code: sbErr.code,
+      message: sbErr.message,
+      details: sbErr.details,
+      hint: sbErr.hint,
     })
     return {
       success: false,
@@ -217,5 +227,5 @@ export async function createOrganization(userId: string, input: CreateOrganizati
     }
   }
 
-  return { success: true, organization: org }
+  return { success: true, organization: org as unknown as Organization }
 }

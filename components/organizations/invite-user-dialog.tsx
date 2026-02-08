@@ -81,7 +81,7 @@ export function InviteUserDialog({ organizationId, organizationName }: InviteUse
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to send invitation",

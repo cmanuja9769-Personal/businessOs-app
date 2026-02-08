@@ -356,6 +356,7 @@ export function generateEmailContent(
   const template = getEmailTemplate(templateId)
   if (!template) return null
 
+  const upiSuffix = settings.upiId ? `, UPI: ${settings.upiId}` : ""
   const variables: Record<string, string> = {
     customerName: invoice.customerName,
     invoiceNumber: invoice.invoiceNo,
@@ -368,9 +369,7 @@ export function generateEmailContent(
     organizationEmail: settings.businessEmail || "support@businessos.local",
     invoiceLink: invoiceLink || `https://businessos.local/invoices/${invoice.id}`,
     bankDetails: settings.bankName
-      ? `Bank: ${settings.bankName}, Account: ${settings.bankAccountNo}${
-          settings.upiId ? `, UPI: ${settings.upiId}` : ""
-        }`
+      ? `Bank: ${settings.bankName}, Account: ${settings.bankAccountNo}${upiSuffix}`
       : "",
     daysOverdue: Math.floor((Date.now() - new Date(invoice.dueDate).getTime()) / (1000 * 60 * 60 * 24)).toString(),
   }

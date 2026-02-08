@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
+import type { ApiPaymentResponse } from "@/types/api-responses"
 
 interface CashFlowCategory {
   name: string
@@ -45,22 +46,15 @@ export default function CashFlowPage() {
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
 
-  useEffect(() => {
-    fetchCashFlowData()
-  }, [dateFrom, dateTo])
-
-  const fetchCashFlowData = async () => {
+  const fetchCashFlowData = useCallback(async () => {
     setLoading(true)
     try {
-      // Fetch all relevant data
-      const [invoicesRes, purchasesRes, paymentsRes] = await Promise.all([
+      const [, , paymentsRes] = await Promise.all([
         fetch('/api/invoices'),
         fetch('/api/purchases'),
         fetch('/api/payments')
       ])
 
-      const _invoices = invoicesRes.ok ? await invoicesRes.json() : []
-      const _purchases = purchasesRes.ok ? await purchasesRes.json() : []
       const payments = paymentsRes.ok ? await paymentsRes.json() : []
 
       const fromDate = new Date(dateFrom)
@@ -68,19 +62,18 @@ export default function CashFlowPage() {
       toDate.setHours(23, 59, 59, 999)
 
       // Filter for date range
-      const periodPayments = payments.filter((pay: any) => {
-        const d = new Date(pay.paymentDate || pay.date)
+      const periodPayments = payments.filter((pay: ApiPaymentResponse) => {
+        const d = new Date(pay.paymentDate || pay.date || "")
         return d >= fromDate && d <= toDate
       })
 
-      // Calculate operating activities
       const salesReceipts = periodPayments
-        .filter((p: any) => p.type === 'receipt' || p.type === 'incoming')
-        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+        .filter((p: ApiPaymentResponse) => p.type === 'receipt' || p.type === 'incoming')
+        .reduce((s: number, p: ApiPaymentResponse) => s + (p.amount || 0), 0)
       
       const purchasePayments = periodPayments
-        .filter((p: any) => p.type === 'payment' || p.type === 'outgoing')
-        .reduce((s: number, p: any) => s + (p.amount || 0), 0)
+        .filter((p: ApiPaymentResponse) => p.type === 'payment' || p.type === 'outgoing')
+        .reduce((s: number, p: ApiPaymentResponse) => s + (p.amount || 0), 0)
 
       const operatingActivities: CashFlowCategory = {
         name: 'Operating Activities',
@@ -131,7 +124,11 @@ export default function CashFlowPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dateFrom, dateTo])
+
+  useEffect(() => {
+    fetchCashFlowData()
+  }, [fetchCashFlowData])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -239,11 +236,21 @@ export default function CashFlowPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : data ? (
+      )}
+
+      {!loading && !data && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No data available for the selected period
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && data && (
         <>
           {/* Summary Cards */}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -334,12 +341,6 @@ export default function CashFlowPage() {
             </CardContent>
           </Card>
         </>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No data available for the selected period
-          </CardContent>
-        </Card>
       )}
     </div>
   )

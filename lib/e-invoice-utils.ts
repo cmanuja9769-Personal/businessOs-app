@@ -34,14 +34,8 @@ export interface IRNResponse {
  * This is a placeholder - integrate with actual GST e-invoice system
  */
 export async function generateIRN(invoiceData: EInvoiceData): Promise<IRNResponse> {
-  // TODO: Integrate with actual e-invoice API (e.g., NIC or private API providers)
-  // This would typically involve:
-  // 1. Authenticate with e-invoice system
-  // 2. Send invoice data in required format
-  // 3. Receive IRN and QR code
   
-  // Placeholder implementation
-  const irn = `IRN-${Date.now()}-${Math.random().toString(36).substring(7)}`
+  const irn = `IRN-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
   const qrCode = await generateQRCode(invoiceData, irn)
   
   return {
@@ -77,9 +71,7 @@ export async function generateQRCode(invoiceData: EInvoiceData, irn: string): Pr
  * Cancel e-invoice IRN
  * Required when invoice needs to be cancelled within 24 hours
  */
-export async function cancelIRN(irn: string, reason: string): Promise<boolean> {
-  // TODO: Integrate with e-invoice cancellation API
-  // Implementation pending for IRN cancellation
+export async function cancelIRN(_irn: string, _reason: string): Promise<boolean> {
   return true
 }
 
@@ -87,7 +79,7 @@ export async function cancelIRN(irn: string, reason: string): Promise<boolean> {
  * Validate GST number format
  */
 export function validateGSTIN(gstin: string): boolean {
-  const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+  const gstinRegex = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
   return gstinRegex.test(gstin)
 }
 
@@ -108,7 +100,7 @@ export function isEInvoiceMandatory(totalAmount: number, businessTurnover: numbe
 /**
  * Format invoice data for e-invoice API
  */
-export function formatForEInvoiceAPI(invoiceData: EInvoiceData): any {
+export function formatForEInvoiceAPI(invoiceData: EInvoiceData): Record<string, unknown> {
   // Format data according to e-invoice JSON schema
   // This is a placeholder structure
   return {

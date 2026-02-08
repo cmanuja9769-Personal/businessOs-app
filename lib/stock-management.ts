@@ -61,7 +61,7 @@ export function calculateBaseQuantity(
   entryUnit: string,
   itemUnit: string,
   packagingUnit: string | null,
-  perCartonQuantity: number | null
+  _perCartonQuantity: number | null
 ): number {
   // Stock is maintained in packaging units (e.g., CTN) in this app.
   // So if the user enters in packagingUnit, keep it as-is.

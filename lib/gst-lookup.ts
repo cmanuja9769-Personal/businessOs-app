@@ -13,9 +13,29 @@
  *    - GST Public Search Portal (requires web scraping - not recommended)
  *    - Master GST API
  * 
+
  * For this implementation, we'll create a structure that can work with any API provider.
  * You'll need to sign up for a GST API service and add your API key to environment variables.
  */
+
+interface GSTAddressObject {
+  bno?: string
+  building_number?: string
+  bnm?: string
+  building_name?: string
+  flno?: string
+  floor_number?: string
+  st?: string
+  street?: string
+  loc?: string
+  locality?: string
+  dst?: string
+  district?: string
+  stcd?: string
+  state?: string
+  pncd?: string
+  pincode?: string
+}
 
 export interface GSTDetails {
   gstin: string
@@ -34,7 +54,7 @@ export interface GSTDetails {
  * Validates GST number format
  */
 export function isValidGSTIN(gstin: string): boolean {
-  const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+  const gstinRegex = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
   return gstinRegex.test(gstin)
 }
 
@@ -122,7 +142,7 @@ export async function fetchGSTDetails(gstin: string): Promise<GSTDetails | null>
 /**
  * Formats address object to a single string
  */
-function formatAddress(addressObj: any): string {
+function formatAddress(addressObj: string | GSTAddressObject | null | undefined): string {
   if (typeof addressObj === "string") {
     return addressObj
   }

@@ -42,7 +42,7 @@ export function PurchaseBuilder() {
         setSuppliers(suppliersData)
         setItems(itemsData)
         setPurchaseNo(purchaseNumber)
-      } catch (error) {
+      } catch {
         toast.error("Failed to load data")
       } finally {
         setIsLoading(false)
@@ -68,7 +68,7 @@ export function PurchaseBuilder() {
     ])
   }
 
-  const updateItem = (index: number, field: keyof IPurchaseItem, value: any) => {
+  const updateItem = (index: number, field: keyof IPurchaseItem, value: IPurchaseItem[keyof IPurchaseItem]) => {
     const updated = [...purchaseItems]
     updated[index] = { ...updated[index], [field]: value }
 
@@ -146,7 +146,7 @@ export function PurchaseBuilder() {
       await createPurchase(purchaseData)
       toast.success("Purchase order created successfully")
       router.push("/purchases")
-    } catch (error) {
+    } catch {
       toast.error("Failed to save purchase")
     } finally {
       setIsSaving(false)
@@ -265,7 +265,7 @@ export function PurchaseBuilder() {
                 {purchaseItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No items added. Click "Add Item" to start.
+                      No items added. Click &quot;Add Item&quot; to start.
                     </TableCell>
                   </TableRow>
                 ) : (

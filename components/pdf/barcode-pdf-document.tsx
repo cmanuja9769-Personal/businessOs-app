@@ -1,5 +1,6 @@
 "use client"
 
+/* eslint-disable jsx-a11y/alt-text */
 import {
   Document,
   Page,
@@ -93,9 +94,9 @@ const generateBarcodeDataURL = (value: string, labelWidth: number): string => {
 
   const canvas = document.createElement("canvas")
   try {
-    let barcodeWidth = 1.5
-    let barcodeHeight = 35
-    let margin = 2
+    let barcodeWidth: number
+    let barcodeHeight: number
+    let margin: number
 
     if (labelWidth <= 40) {
       barcodeWidth = 1.2

@@ -1,17 +1,25 @@
 import ExcelJS from "exceljs"
+import type { IItem } from "@/types"
 
 export interface ParsedRow {
   [key: string]: string | number | Date | null
 }
 
+function trimTrailingUnderscores(s: string): string {
+  let end = s.length
+  while (end > 0 && s[end - 1] === "_") end--
+  return s.slice(0, end)
+}
+
 function normalizeHeader(header: string): string {
-  return header
+  const cleaned = header
     .trim()
     .toLowerCase()
-    .replace(/\([^)]*\)/g, "")
-    .replace(/[%]/g, "")
+    .replace(/\([^()]*\)/g, "")
+    .replace(/%/g, "")
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
+    .replace(/^_+/, "")
+  return trimTrailingUnderscores(cleaned)
 }
 
 function remapRowKeys(row: ParsedRow): ParsedRow {
@@ -457,7 +465,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
   window.URL.revokeObjectURL(url)
 }
 
-export async function exportItemsToExcel(items: any[], filename = "items_export.xlsx", godownNames: string[] = []) {
+export async function exportItemsToExcel(items: IItem[], filename = "items_export.xlsx", godownNames: string[] = []) {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "businessOs-app"
   workbook.created = new Date()

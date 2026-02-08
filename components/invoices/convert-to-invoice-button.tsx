@@ -57,7 +57,7 @@ export function ConvertToInvoiceButton({
         const error = "error" in result ? result.error : "Failed to convert document"
         toast.error(error || "Failed to convert document")
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred during conversion")
     } finally {
       setIsConverting(false)
@@ -81,7 +81,7 @@ export function ConvertToInvoiceButton({
           <AlertDialogTitle>Convert to Invoice?</AlertDialogTitle>
           <AlertDialogDescription>
             This will create a new invoice from this {config.label.toLowerCase()} ({documentNo}).
-            The original document will be marked as "converted" and linked to the new invoice.
+            The original document will be marked as &quot;converted&quot; and linked to the new invoice.
             <br />
             <br />
             All items, customer details, and amounts will be copied to the new invoice.

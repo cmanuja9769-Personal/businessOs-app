@@ -406,20 +406,22 @@ export default function StockReportComponent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {(() => {
+                  if (loading) return (
                   <TableRow>
                     <TableCell colSpan={showItemCode ? 7 : 6} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
-                ) : stockData.length === 0 ? (
+                  )
+                  if (stockData.length === 0) return (
                   <TableRow>
                     <TableCell colSpan={showItemCode ? 7 : 6} className="text-center py-8 text-muted-foreground">
                       No items found with the selected filters
                     </TableCell>
                   </TableRow>
-                ) : (
-                  stockData.map((item) => (
+                  )
+                  return stockData.map((item) => (
                     <React.Fragment key={item.id}>
                       <TableRow
                         className={`cursor-pointer hover:bg-muted/50 ${item.calculated_stock < 0 ? "bg-red-50 dark:bg-red-950/20" : ""}`}
@@ -467,7 +469,7 @@ export default function StockReportComponent() {
                       )}
                     </React.Fragment>
                   ))
-                )}
+                })()}
               </TableBody>
             </Table>
           </div>

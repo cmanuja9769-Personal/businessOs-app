@@ -435,7 +435,7 @@ function isConsonant(char: string): boolean {
 /**
  * Check if a Hindi character is a consonant (has implicit 'a')
  */
-function isHindiConsonant(char: string): boolean {
+function _isHindiConsonant(char: string): boolean {
   const code = char.charCodeAt(0)
   // Devanagari consonants range: 0x0915-0x0939
   return code >= 0x0915 && code <= 0x0939
@@ -444,7 +444,7 @@ function isHindiConsonant(char: string): boolean {
 /**
  * Get the base consonant (without matra) from Hindi text
  */
-function getBaseConsonant(hindiChar: string): string {
+function _getBaseConsonant(hindiChar: string): string {
   // If it ends with halant, return as-is (already a pure consonant)
   if (hindiChar.endsWith(HALANT)) {
     return hindiChar
@@ -524,26 +524,16 @@ function transliterateWord(word: string): string {
       const nextPos = i + length
       const nextChar = processedWord[nextPos]
       
-      if (nextChar && isVowel(nextChar)) {
-        // Vowel follows - add consonant, then add matra
+      if (nextChar && isConsonant(nextChar)) {
         if (pendingHalant) {
-          result = result.slice(0, -1) // Remove previous halant
-        }
-        result += hindi
-        lastWasConsonant = true
-        pendingHalant = false
-      } else if (nextChar && isConsonant(nextChar)) {
-        // Another consonant follows - add with halant
-        if (pendingHalant) {
-          result = result.slice(0, -1) // Remove previous halant
+          result = result.slice(0, -1)
         }
         result += hindi + HALANT
         lastWasConsonant = true
         pendingHalant = true
       } else {
-        // End of word or non-letter
         if (pendingHalant) {
-          result = result.slice(0, -1) // Remove previous halant
+          result = result.slice(0, -1)
         }
         result += hindi
         lastWasConsonant = true
@@ -578,19 +568,12 @@ function transliterateWord(word: string): string {
     // Handle remaining characters
     const char = remaining[0]
     
-    if (/[a-z]/i.test(char)) {
-      // Unknown letter - keep as is with a note
-      result += char
-      lastWasConsonant = false
-      pendingHalant = false
-    } else if (/[0-9]/.test(char)) {
-      // Number - convert to Devanagari numerals
+    if (/\d/.test(char)) {
       const devanagariNumerals = '०१२३४५६७८९'
       result += devanagariNumerals[parseInt(char)]
       lastWasConsonant = false
       pendingHalant = false
     } else {
-      // Non-alphanumeric - keep as is
       result += char
       lastWasConsonant = false
       pendingHalant = false

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useTransition } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import type { ICustomer } from "@/types"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -46,6 +46,12 @@ export function CustomersTable({ customers }: CustomersTableProps) {
     router.refresh()
   }, [router])
 
+  const selectAllChecked: boolean | "indeterminate" = (() => {
+    if (allSelected) return true
+    if (someSelected) return "indeterminate"
+    return false
+  })()
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {selectedIds.size > 0 && (
@@ -66,7 +72,7 @@ export function CustomersTable({ customers }: CustomersTableProps) {
           <TableRow>
             <TableHead className="w-[2.75rem] min-w-[2.75rem] pl-4">
               <Checkbox
-                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                checked={selectAllChecked}
                 onCheckedChange={toggleSelectAll}
                 aria-label="Select all rows"
               />

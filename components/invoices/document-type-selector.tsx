@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Receipt, Truck, FileCheck, FileSignature, FileX, FileWarning, ChevronDown, ChevronUp } from "lucide-react"
+import { FileText, Receipt, Truck, FileSignature, FileX, FileWarning, ChevronDown, ChevronUp } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface DocumentTypeSelectorProps {

@@ -63,16 +63,15 @@ export function CancelEWayBillDialog({ ewbNo, invoiceNo, onSuccess }: CancelEWay
       toast.success("E-Way Bill cancelled successfully")
       setOpen(false)
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to cancel E-Way Bill:", error)
-      
-      // Handle specific errors
-      if (error.message.includes("2008") || error.message.includes("24 hours")) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes("2008") || errorMessage.includes("24 hours")) {
         toast.error("E-Way Bill can only be cancelled within 24 hours of generation")
-      } else if (error.message.includes("2015") || error.message.includes("already cancelled")) {
+      } else if (errorMessage.includes("2015") || errorMessage.includes("already cancelled")) {
         toast.error("E-Way Bill has already been cancelled")
       } else {
-        toast.error(error.message || "Failed to cancel E-Way Bill")
+        toast.error(errorMessage || "Failed to cancel E-Way Bill")
       }
     } finally {
       setLoading(false)

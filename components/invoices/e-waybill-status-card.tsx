@@ -111,7 +111,19 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
 
   const isExpiringSoon = details?.validUpto ? EWayBillUtils.isExpiringSoon(details.validUpto) : false
   const isExpired = details?.validUpto ? EWayBillUtils.isExpired(details.validUpto) : false
-  const status = isExpired ? "expired" : isExpiringSoon ? "expiring" : details?.status || "active"
+  type EWayBillStatus = "active" | "cancelled" | "expired" | "expiring"
+  let status: EWayBillStatus
+  if (isExpired) {
+    status = "expired"
+  } else if (isExpiringSoon) {
+    status = "expiring"
+  } else {
+    status = (details?.status as EWayBillStatus) || "active"
+  }
+
+  let validityTextClass = "text-green-600"
+  if (isExpired) validityTextClass = "text-red-600"
+  else if (isExpiringSoon) validityTextClass = "text-orange-600"
 
   const getStatusColor = () => {
     if (isExpired) return "border-red-200 bg-red-50"
@@ -182,7 +194,7 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
                   <p className="text-sm font-semibold text-gray-800">
                     {details?.validUpto && new Date(details.validUpto).toLocaleString()}
                   </p>
-                  <p className={`text-xs mt-1 ${isExpired ? "text-red-600" : isExpiringSoon ? "text-orange-600" : "text-green-600"}`}>
+                  <p className={`text-xs mt-1 ${validityTextClass}`}>
                     {timeRemaining}
                   </p>
                 </div>

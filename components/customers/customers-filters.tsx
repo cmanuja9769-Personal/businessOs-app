@@ -19,17 +19,6 @@ export function CustomersFilters({ q, gstin, sort, dir }: CustomersFiltersProps)
   const [isPending, startTransition] = useTransition()
   const [searchValue, setSearchValue] = useState(q)
 
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchValue !== q) {
-        updateFilters({ q: searchValue })
-      }
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [searchValue])
-
   const updateFilters = useCallback((updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
     
@@ -45,6 +34,16 @@ export function CustomersFilters({ q, gstin, sort, dir }: CustomersFiltersProps)
       router.push(`/customers?${params.toString()}`, { scroll: false })
     })
   }, [router, searchParams])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchValue !== q) {
+        updateFilters({ q: searchValue })
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchValue, q, updateFilters])
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchValue(e.target.value)

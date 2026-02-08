@@ -1,5 +1,6 @@
 "use client"
 
+/* eslint-disable @next/next/no-img-element */
 import { format } from "date-fns"
 import type { IInvoice } from "@/types"
 import type { ISettings } from "@/app/settings/actions"

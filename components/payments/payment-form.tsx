@@ -103,7 +103,11 @@ export function PaymentForm({ children, invoiceId, purchaseId, maxAmount }: Paym
                     <Input 
                       type="date" 
                       {...field} 
-                      value={typeof field.value === 'string' ? field.value : field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                      value={(() => {
+                        if (typeof field.value === 'string') return field.value
+                        if (field.value instanceof Date) return field.value.toISOString().split('T')[0]
+                        return ''
+                      })()}
                     />
                   </FormControl>
                   <FormMessage />

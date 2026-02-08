@@ -1,5 +1,4 @@
 import { getCurrentUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { OnboardingForm } from "@/components/onboarding/onboarding-form"
 

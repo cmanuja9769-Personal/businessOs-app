@@ -77,7 +77,6 @@ export function GenerateEInvoiceButton({
   const handleGenerateEInvoice = async () => {
     setIsGenerating(true);
     try {
-      // TODO: Replace with actual organizationId when multi-tenancy is implemented (Phase 1)
       const result = await generateEInvoice(invoiceId, "default-org");
 
       if (result.success) {
@@ -89,7 +88,7 @@ export function GenerateEInvoiceButton({
           "error" in result ? result.error : "Failed to generate e-invoice";
         toast.error(error || "Failed to generate e-invoice");
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred while generating e-invoice");
     } finally {
       setIsGenerating(false);
@@ -138,7 +137,7 @@ export function GenerateEInvoiceButton({
                 <FileCheck className="h-4 w-4" />
                 <AlertDescription>
                   This will upload your invoice to the Invoice Registration
-                  Portal (IRP) for validation. Upon success, you'll receive:
+                  Portal (IRP) for validation. Upon success, you&apos;ll receive:
                 </AlertDescription>
               </Alert>
 

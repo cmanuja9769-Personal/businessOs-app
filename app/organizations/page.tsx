@@ -1,4 +1,4 @@
-import { getCurrentUser, getUserRole } from "@/lib/auth"
+import { getCurrentUser } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,16 +17,49 @@ export const metadata = {
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+interface AppOrganization {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  address: string | null
+  gst_number: string | null
+  pan_number: string | null
+  owner_id: string
+}
+
+interface UserOrgJoin {
+  id: string
+  role: string
+  is_active: boolean
+  created_at: string
+  app_organizations: AppOrganization | AppOrganization[] | null
+}
+
+interface OrgWithRole {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  address: string | null
+  gst_number: string | null
+  pan_number: string | null
+  owner_id: string
+  userRole: string
+  isActive: boolean
+  membershipId: string
+}
+
 export default async function OrganizationsPage() {
   const user = await getCurrentUser()
 
   if (!user) {
     redirect("/auth/login")
-  }0
+  }
 
   const supabase = await createClient()
 
-  const { data: userOrgs, error } = await supabase
+  const { data: userOrgs } = await supabase
     .from("app_user_organizations")
     .select(
       `
@@ -49,14 +82,26 @@ export default async function OrganizationsPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
 
-  const organizations = userOrgs
-    ?.filter((uo: any) => uo.app_organizations)
-    .map((uo: any) => ({
-      ...uo.app_organizations,
-      userRole: uo.role,
-      isActive: uo.is_active,
-      membershipId: uo.id,
-    })) || []
+  const organizations: OrgWithRole[] = (userOrgs as UserOrgJoin[] | null)
+    ?.filter((uo) => uo.app_organizations)
+    .map((uo) => {
+      const org = Array.isArray(uo.app_organizations)
+        ? uo.app_organizations[0]
+        : uo.app_organizations
+      return {
+        id: org?.id ?? "",
+        name: org?.name ?? "",
+        email: org?.email ?? "",
+        phone: org?.phone ?? null,
+        address: org?.address ?? null,
+        gst_number: org?.gst_number ?? null,
+        pan_number: org?.pan_number ?? null,
+        owner_id: org?.owner_id ?? "",
+        userRole: uo.role,
+        isActive: uo.is_active,
+        membershipId: uo.id,
+      }
+    }) ?? []
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
@@ -75,7 +120,7 @@ export default async function OrganizationsPage() {
 
       {organizations && organizations.length > 0 ? (
         <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {organizations.map((org: any) => (
+          {organizations.map((org: OrgWithRole) => (
             <Card key={org.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">

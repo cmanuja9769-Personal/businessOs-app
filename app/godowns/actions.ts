@@ -124,24 +124,58 @@ export async function getWarehouseStockSummaries(): Promise<WarehouseStockSummar
 
   const warehouseIds = warehouses.map((w: Record<string, unknown>) => w.id as string)
 
-  const { data: stockRows } = await ctx.supabase
-    .from("item_warehouse_stock")
-    .select("warehouse_id, quantity, item_id, items:item_id (purchase_price, min_stock)")
-    .in("warehouse_id", warehouseIds)
-    .eq("organization_id", ctx.organizationId)
+  const allStockRows: Array<Record<string, unknown>> = []
+  const PAGE_SIZE = 1000
+  let offset = 0
+  while (true) {
+    const { data: page, error: pageErr } = await ctx.supabase
+      .from("item_warehouse_stock")
+      .select("warehouse_id, quantity, item_id")
+      .in("warehouse_id", warehouseIds)
+      .eq("organization_id", ctx.organizationId)
+      .range(offset, offset + PAGE_SIZE - 1)
+
+    if (pageErr || !page || page.length === 0) break
+    allStockRows.push(...(page as Array<Record<string, unknown>>))
+    if (page.length < PAGE_SIZE) break
+    offset += PAGE_SIZE
+  }
 
   const stockMap = new Map<string, { totalQty: number; totalValue: number; items: Set<string>; lowStock: number }>()
   for (const wid of warehouseIds) {
     stockMap.set(wid, { totalQty: 0, totalValue: 0, items: new Set(), lowStock: 0 })
   }
 
-  if (stockRows) {
-    for (const row of stockRows as Array<Record<string, unknown>>) {
+  if (allStockRows.length > 0) {
+    const itemIds = [...new Set(allStockRows.map(r => r.item_id as string))]
+
+    const priceMap = new Map<string, { purchasePrice: number; salePrice: number; minStock: number }>()
+    const BATCH = 50
+    for (let i = 0; i < itemIds.length; i += BATCH) {
+      const batch = itemIds.slice(i, i + BATCH)
+      const { data: itemsData } = await ctx.supabase
+        .from("items")
+        .select("id, purchase_price, sale_price, min_stock")
+        .in("id", batch)
+
+      if (!itemsData) continue
+      for (const item of itemsData as Array<Record<string, unknown>>) {
+        priceMap.set(item.id as string, {
+          purchasePrice: Number(item.purchase_price) || 0,
+          salePrice: Number(item.sale_price) || 0,
+          minStock: Number(item.min_stock) || 0,
+        })
+      }
+    }
+
+    for (const row of allStockRows) {
       const wid = row.warehouse_id as string
       const qty = Number(row.quantity) || 0
-      const itemData = row.items as Record<string, unknown> | null
-      const price = Number(itemData?.purchase_price) || 0
-      const minStock = Number(itemData?.min_stock) || 0
+      const itemPrices = priceMap.get(row.item_id as string)
+      const purchasePrice = itemPrices?.purchasePrice ?? 0
+      const salePrice = itemPrices?.salePrice ?? 0
+      const price = purchasePrice > 0 ? purchasePrice : salePrice
+      const minStock = itemPrices?.minStock ?? 0
       const entry = stockMap.get(wid)
       if (!entry) continue
       entry.totalQty += qty
@@ -433,7 +467,7 @@ export async function getDeadStockByWarehouse(warehouseId?: string, daysSinceMov
 
   let stockQuery = ctx.supabase
     .from("item_warehouse_stock")
-    .select("item_id, warehouse_id, quantity, items:item_id (name, item_code, purchase_price, unit), warehouses:warehouse_id (name)")
+    .select("item_id, warehouse_id, quantity, items:item_id (name, item_code, purchase_price, sale_price, unit), warehouses:warehouse_id (name)")
     .eq("organization_id", ctx.organizationId)
     .gt("quantity", 0)
 
@@ -481,7 +515,9 @@ export async function getDeadStockByWarehouse(warehouseId?: string, daysSinceMov
     const itemData = row.items as Record<string, unknown> | null
     const warehouseData = row.warehouses as Record<string, unknown> | null
     const qty = Number(row.quantity) || 0
-    const price = Number(itemData?.purchase_price) || 0
+    const purchasePrice = Number(itemData?.purchase_price) || 0
+    const salePrice = Number(itemData?.sale_price) || 0
+    const price = purchasePrice > 0 ? purchasePrice : salePrice
     deadStock.push({
       itemId: row.item_id as string,
       itemName: (itemData?.name as string) || "",

@@ -17,9 +17,16 @@ interface EInvoiceStatusCardProps {
   invoice: IInvoice
 }
 
+interface FilingStatus {
+  status: string
+  gstr1Status?: string
+  gstr3bStatus?: string
+  error?: string
+}
+
 export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
   const [loading, setLoading] = useState(false)
-  const [filingStatus, setFilingStatus] = useState<any>(null)
+  const [filingStatus, setFilingStatus] = useState<FilingStatus | null>(null)
 
   useEffect(() => {
     if (invoice.irn) {
@@ -126,13 +133,11 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
               <div className="flex items-center gap-2">
                 {getStatusIcon(filingStatus.status)}
                 <Badge
-                  variant={
-                    filingStatus.status === "filed"
-                      ? "default"
-                      : filingStatus.status === "failed"
-                        ? "destructive"
-                        : "secondary"
-                  }
+                  variant={(() => {
+                    if (filingStatus.status === "filed") return "default" as const
+                    if (filingStatus.status === "failed") return "destructive" as const
+                    return "secondary" as const
+                  })()}
                 >
                   {filingStatus.status.toUpperCase()}
                 </Badge>
@@ -169,7 +174,7 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
 
         {/* Information */}
         <div className="p-3 bg-blue-50 rounded border border-blue-200 text-xs text-blue-700 space-y-1">
-          <p className="font-medium">What's included?</p>
+          <p className="font-medium">What&apos;s included?</p>
           <ul className="list-disc list-inside space-y-0.5">
             <li>Digital IRN signature for authenticity</li>
             <li>Auto-filed to GST portal (GSTR-1)</li>

@@ -5,17 +5,23 @@ import { createClient } from "@/lib/supabase/server"
 import type { IItem, PackagingUnit } from "@/types"
 import { itemSchema } from "@/lib/schemas"
 
+function parseBigIntSafe(val: string): bigint | null {
+  try {
+    return BigInt(val)
+  } catch {
+    return null
+  }
+}
+
 async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
-  // Desired format: 13-digit numeric code starting with 200 (EAN-13-like internal range)
   const PREFIX = "200"
-  const FALLBACK_BASE = BigInt(2000000000000) // 13 digits
+  const FALLBACK_BASE = BigInt(2000000000000)
 
   try {
     const pageSize = 1000
     let offset = 0
     let maxBarcode = FALLBACK_BASE
 
-    // Paginate through matching barcode rows and compute numeric max using BigInt
     while (true) {
       const res = await supabase
         .from("items")
@@ -35,12 +41,8 @@ async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof cr
       for (const r of rows) {
         const val = String(r?.barcode_no ?? "").trim()
         if (!/^\d+$/.test(val)) continue
-        try {
-          const n = BigInt(val)
-          if (n > maxBarcode) maxBarcode = n
-        } catch {
-          // unparsable value
-        }
+        const n = parseBigIntSafe(val)
+        if (n !== null && n > maxBarcode) maxBarcode = n
       }
 
       if (rows.length < pageSize) break
@@ -138,6 +140,44 @@ export async function assignBarcodeToItem(id: string) {
   }
 }
 
+type WarehouseStock = { warehouseId: string; warehouseName: string; quantity: number }
+
+async function fetchWarehouseStockBatch(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  batchIds: string[],
+  organizationId: string,
+  godownNameById: Map<string, string>,
+  warehouseStocksByItemId: Map<string, WarehouseStock[]>
+): Promise<void> {
+  try {
+    const stockRes = await supabase
+      .from("item_warehouse_stock")
+      .select("item_id, warehouse_id, quantity")
+      .in("item_id", batchIds)
+      .eq("organization_id", organizationId)
+      .gt("quantity", 0)
+
+    if (stockRes.error) return
+
+    const stockData = (stockRes.data as Array<{ item_id: string; warehouse_id: string; quantity: number }>) || []
+
+    for (const stock of stockData) {
+      if (!stock.item_id || !stock.warehouse_id) continue
+
+      const itemStocks = warehouseStocksByItemId.get(stock.item_id) || []
+      const warehouseName = godownNameById.get(stock.warehouse_id) || ""
+      itemStocks.push({
+        warehouseId: stock.warehouse_id,
+        warehouseName,
+        quantity: Number(stock.quantity) || 0,
+      })
+      warehouseStocksByItemId.set(stock.item_id, itemStocks)
+    }
+  } catch {
+    // batch query failed
+  }
+}
+
 export async function getItems(): Promise<IItem[]> {
   const supabase = await createClient()
   // Supabase PostgREST enforces a 1000-row limit per request.
@@ -194,50 +234,17 @@ export async function getItems(): Promise<IItem[]> {
     // Fetch all item_warehouse_stock records where quantity > 0
     // to show all godowns where item has actual stock
     const itemIds = allData.map((item) => item.id).filter((id): id is string => typeof id === "string")
-    const warehouseStocksByItemId = new Map<string, Array<{ warehouseId: string; warehouseName: string; quantity: number }>>()
+    const warehouseStocksByItemId = new Map<string, WarehouseStock[]>()
     
     // Get organization ID from the first item (all items belong to same org due to RLS)
     const organizationId = allData[0]?.organization_id as string | undefined
     
     if (itemIds.length > 0 && organizationId) {
-      // Batch fetch in smaller chunks to avoid query limits and header overflow
       const stockPageSize = 50
       
       for (let i = 0; i < itemIds.length; i += stockPageSize) {
         const batchIds = itemIds.slice(i, i + stockPageSize)
-        
-        try {
-          const stockRes = await supabase
-            .from("item_warehouse_stock")
-            .select("item_id, warehouse_id, quantity")
-            .in("item_id", batchIds)
-            .eq("organization_id", organizationId)
-            .gt("quantity", 0)
-          
-          if (stockRes.error) {
-            // Table might not exist or RLS policy blocks access - this is non-fatal
-            // Just skip warehouse stock aggregation and use default godown from items table
-            continue
-          }
-          
-          const stockData = (stockRes.data as Array<{ item_id: string; warehouse_id: string; quantity: number }>) || []
-          
-          for (const stock of stockData) {
-            if (!stock.item_id || !stock.warehouse_id) continue
-            
-            const itemStocks = warehouseStocksByItemId.get(stock.item_id) || []
-            const warehouseName = godownNameById.get(stock.warehouse_id) || ""
-            itemStocks.push({
-              warehouseId: stock.warehouse_id,
-              warehouseName,
-              quantity: Number(stock.quantity) || 0,
-            })
-            warehouseStocksByItemId.set(stock.item_id, itemStocks)
-          }
-        } catch {
-          // Query failed - continue with next batch
-          continue
-        }
+        await fetchWarehouseStockBatch(supabase, batchIds, organizationId, godownNameById, warehouseStocksByItemId)
       }
     }
 

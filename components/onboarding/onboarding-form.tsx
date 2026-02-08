@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/hooks/use-auth"
 import { Loader2, Building2, CheckCircle2 } from "lucide-react"
 import { createOrganizationAction } from "@/app/organizations/actions"
 
@@ -31,7 +30,6 @@ export function OnboardingForm() {
   const [error, setError] = useState("")
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
 
   const handleCreateOrganization = async (e: React.FormEvent) => {
     e.preventDefault()

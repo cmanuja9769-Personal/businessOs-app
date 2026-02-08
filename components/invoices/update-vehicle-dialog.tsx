@@ -32,6 +32,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
 
+type VehicleCodeOption = "1" | "2" | "3" | "4"
+
 interface UpdateVehicleDialogProps {
   ewbNo: number
   currentVehicle?: string
@@ -45,9 +47,9 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
     vehicleNo: "",
     fromPlace: "",
     fromState: "",
-    reasonCode: "4" as "1" | "2" | "3" | "4",
+    reasonCode: "4" as VehicleCodeOption,
     reasonRem: "",
-    transMode: "1" as "1" | "2" | "3" | "4",
+    transMode: "1" as VehicleCodeOption,
     transDocNo: "",
     transDocDate: "",
   }
@@ -110,9 +112,9 @@ export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: Update
       toast.success("Vehicle updated successfully")
       setOpen(false)
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to update vehicle:", error)
-      toast.error(error.message || "Failed to update vehicle")
+      toast.error(error instanceof Error ? error.message : "Failed to update vehicle")
     } finally {
       setLoading(false)
     }

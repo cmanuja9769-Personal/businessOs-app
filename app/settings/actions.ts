@@ -85,7 +85,9 @@ export interface ISettings {
 export async function getSettings(): Promise<ISettings> {
   const supabase = await createClient()
 
-  let { data, error } = await supabase.from("settings").select("*").limit(1).single()
+  const result = await supabase.from("settings").select("*").limit(1).single()
+  let data = result.data
+  const { error } = result
 
   // If no settings exist, create default settings
   if (error || !data) {
@@ -175,91 +177,95 @@ export async function getSettings(): Promise<ISettings> {
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient()
 
-  // Build update object only with provided values
-  const data: any = {}
+  const getString = (key: string): string | null => {
+    const val = formData.get(key)
+    return typeof val === "string" ? val : null
+  }
+
+  const data: Record<string, string | boolean | number | null> = {}
   
-  const businessName = formData.get("businessName")
+  const businessName = getString("businessName")
   if (businessName) data.business_name = businessName
   
-  const businessAddress = formData.get("businessAddress")
+  const businessAddress = getString("businessAddress")
   if (businessAddress !== null) data.business_address = businessAddress || null
   
-  const businessPhone = formData.get("businessPhone")
+  const businessPhone = getString("businessPhone")
   if (businessPhone !== null) data.business_phone = businessPhone || null
   
-  const businessEmail = formData.get("businessEmail")
+  const businessEmail = getString("businessEmail")
   if (businessEmail !== null) data.business_email = businessEmail || null
   
-  const businessGst = formData.get("businessGst")
+  const businessGst = getString("businessGst")
   if (businessGst !== null) data.business_gst = businessGst || null
   
-  const businessLogoUrl = formData.get("businessLogoUrl")
+  const businessLogoUrl = getString("businessLogoUrl")
   if (businessLogoUrl !== null) data.business_logo_url = businessLogoUrl || null
   
-  const businessPan = formData.get("businessPan")
+  const businessPan = getString("businessPan")
   if (businessPan !== null) data.business_pan = businessPan || null
   
-  const signatureImageUrl = formData.get("signatureImageUrl")
+  const signatureImageUrl = getString("signatureImageUrl")
   if (signatureImageUrl !== null) data.signature_image_url = signatureImageUrl || null
   
-  const bankName = formData.get("bankName")
+  const bankName = getString("bankName")
   if (bankName !== null) data.bank_name = bankName || null
   
-  const bankAccountNo = formData.get("bankAccountNo")
+  const bankAccountNo = getString("bankAccountNo")
   if (bankAccountNo !== null) data.bank_account_no = bankAccountNo || null
   
-  const bankIfsc = formData.get("bankIfsc")
+  const bankIfsc = getString("bankIfsc")
   if (bankIfsc !== null) data.bank_ifsc = bankIfsc || null
   
-  const upiId = formData.get("upiId")
+  const upiId = getString("upiId")
   if (upiId !== null) data.upi_id = upiId || null
   
-  const invoiceTemplate = formData.get("invoiceTemplate")
+  const invoiceTemplate = getString("invoiceTemplate")
   if (invoiceTemplate) data.invoice_template = invoiceTemplate
   
-  const templateColor = formData.get("templateColor")
+  const templateColor = getString("templateColor")
   if (templateColor) data.template_color = templateColor
   
-  const customTerms = formData.get("customTerms")
+  const customTerms = getString("customTerms")
   if (customTerms !== null) data.custom_terms = customTerms || null
   
-  const invoiceFooter = formData.get("invoiceFooter")
+  const invoiceFooter = getString("invoiceFooter")
   if (invoiceFooter !== null) data.invoice_footer = invoiceFooter || null
   
-  const invoicePrefix = formData.get("invoicePrefix")
+  const invoicePrefix = getString("invoicePrefix")
   if (invoicePrefix) data.invoice_prefix = invoicePrefix
   
-  const purchasePrefix = formData.get("purchasePrefix")
+  const purchasePrefix = getString("purchasePrefix")
   if (purchasePrefix) data.purchase_prefix = purchasePrefix
   
-  const taxEnabled = formData.get("taxEnabled")
+  const taxEnabled = getString("taxEnabled")
   if (taxEnabled !== null) data.tax_enabled = taxEnabled === "true"
   
-  const defaultTaxRate = formData.get("defaultTaxRate")
+  const defaultTaxRate = getString("defaultTaxRate")
   if (defaultTaxRate) data.default_tax_rate = Number(defaultTaxRate)
   
-  const currencySymbol = formData.get("currencySymbol")
+  const currencySymbol = getString("currencySymbol")
   if (currencySymbol) data.currency_symbol = currencySymbol
   
-  const dateFormat = formData.get("dateFormat")
+  const dateFormat = getString("dateFormat")
   if (dateFormat) data.date_format = dateFormat
   
-  const financialYearStart = formData.get("financialYearStart")
+  const financialYearStart = getString("financialYearStart")
   if (financialYearStart) data.financial_year_start = Number(financialYearStart)
   
-  const lowStockAlert = formData.get("lowStockAlert")
+  const lowStockAlert = getString("lowStockAlert")
   if (lowStockAlert !== null) data.low_stock_alert = lowStockAlert === "true"
 
-  const customField1Enabled = formData.get("customField1Enabled")
+  const customField1Enabled = getString("customField1Enabled")
   if (customField1Enabled !== null) data.custom_field_1_enabled = customField1Enabled === "true"
   
-  const customField1Label = formData.get("customField1Label")
+  const customField1Label = getString("customField1Label")
   if (customField1Label) data.custom_field_1_label = customField1Label
   
-  const customField2Enabled = formData.get("customField2Enabled")
+  const customField2Enabled = getString("customField2Enabled")
   if (customField2Enabled !== null) data.custom_field_2_enabled = customField2Enabled === "true"
   
-  const customField2Label = formData.get("customField2Label")
+  const customField2Label = getString("customField2Label")
   if (customField2Label) data.custom_field_2_label = customField2Label
 
   // Get the first settings record

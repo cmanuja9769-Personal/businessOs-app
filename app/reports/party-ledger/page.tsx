@@ -61,28 +61,28 @@ export default function PartyLedgerPage() {
   })
 
   useEffect(() => {
+    const fetchParties = async () => {
+      try {
+        const [customersRes, suppliersRes] = await Promise.all([
+          fetch("/api/customers"),
+          fetch("/api/suppliers"),
+        ])
+
+        const customers = customersRes.ok ? await customersRes.json() : []
+        const suppliers = suppliersRes.ok ? await suppliersRes.json() : []
+
+        const allParties: Party[] = [
+          ...customers.map((c: Party) => ({ ...c, type: "customer" as const })),
+          ...suppliers.map((s: Party) => ({ ...s, type: "supplier" as const })),
+        ]
+        setParties(allParties)
+      } catch (error) {
+        console.error("Failed to fetch parties:", error)
+      }
+    }
+
     fetchParties()
   }, [])
-
-  const fetchParties = async () => {
-    try {
-      const [customersRes, suppliersRes] = await Promise.all([
-        fetch("/api/customers"),
-        fetch("/api/suppliers"),
-      ])
-
-      const customers = customersRes.ok ? await customersRes.json() : []
-      const suppliers = suppliersRes.ok ? await suppliersRes.json() : []
-
-      const allParties: Party[] = [
-        ...customers.map((c: Party) => ({ ...c, type: "customer" as const })),
-        ...suppliers.map((s: Party) => ({ ...s, type: "supplier" as const })),
-      ]
-      setParties(allParties)
-    } catch (error) {
-      console.error("Failed to fetch parties:", error)
-    }
-  }
 
   const fetchLedger = useCallback(async () => {
     setLoading(true)

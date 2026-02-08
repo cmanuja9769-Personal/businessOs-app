@@ -6,7 +6,7 @@
 interface QueueJob {
   id: string
   type: "send_email" | "generate_einvoice" | "send_sms" | "file_gst"
-  data: Record<string, any>
+  data: Record<string, unknown>
   status: "pending" | "processing" | "completed" | "failed"
   retries: number
   error?: string
@@ -27,8 +27,8 @@ const Deno = {
   },
 }
 
-export async function enqueueJob(type: QueueJob["type"], data: Record<string, any>): Promise<string> {
-  const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(7)}`
+export async function enqueueJob(type: QueueJob["type"], data: Record<string, unknown>): Promise<string> {
+  const jobId = `job_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
 
   const job: QueueJob = {
     id: jobId,
@@ -56,7 +56,7 @@ export async function processQueueJobs() {
   // In production: Process jobs from Upstash Redis queue
   // This would be a worker process that runs separately
 
-  for (const [jobId, job] of jobQueue.entries()) {
+  for (const [, job] of jobQueue.entries()) {
     if (job.status === "pending") {
       try {
         job.status = "processing"
@@ -125,12 +125,11 @@ async function processGenerateEInvoice(job: QueueJob) {
   }
 }
 
-async function processSendSMS(job: QueueJob) {
+async function processSendSMS(_job: QueueJob) {
   // Placeholder for SMS sending via Twilio or MSG91
-  console.log("[v0] SMS sending not yet implemented")
+  console.warn("[v0] SMS sending not yet implemented")
 }
 
-async function processFileGST(job: QueueJob) {
-  // Placeholder for GST filing
-  console.log("[v0] GST filing not yet implemented")
+async function processFileGST(_job: QueueJob) {
+  console.warn("[v0] GST filing not yet implemented")
 }

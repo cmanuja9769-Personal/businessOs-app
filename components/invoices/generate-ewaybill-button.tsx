@@ -12,7 +12,6 @@ import { eWayBillService, EWayBillUtils } from "@/lib/e-waybill-service"
 import { toast } from "sonner"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -57,12 +56,12 @@ export function GenerateEWayBillButton({
 
   const handleGenerate = async (e: React.MouseEvent) => {
     e.preventDefault() // Prevent default dialog close behavior
-    console.log('🚛 Generate E-Way Bill clicked for invoice:', invoiceId)
+    console.warn('🚛 Generate E-Way Bill clicked for invoice:', invoiceId)
     try {
       setLoading(true)
-      console.log('🔄 Calling eWayBillService.generateEWayBill...')
+      console.warn('🔄 Calling eWayBillService.generateEWayBill...')
       const response = await eWayBillService.generateEWayBill(invoiceId)
-      console.log('✅ E-Way Bill generated:', response)
+      console.warn('✅ E-Way Bill generated:', response)
       
       toast.success(
         <div>
@@ -75,11 +74,9 @@ export function GenerateEWayBillButton({
 
       setOpen(false)
       onSuccess?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Failed to generate E-Way Bill:", error)
-      
-      // Handle specific error codes
-      const errorMessage = error.message || "Failed to generate E-Way Bill"
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate E-Way Bill"
       
       if (errorMessage.includes("2003") || errorMessage.includes("threshold")) {
         toast.error("E-Way Bill not required for invoices below ₹50,000")

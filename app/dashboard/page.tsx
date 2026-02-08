@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -22,7 +22,6 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
-  Building2,
   Truck,
   IndianRupee,
   BarChart3,
@@ -389,7 +388,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="text-xl sm:text-2xl font-bold truncate text-green-700 dark:text-green-400">{formatCurrency(stats.totalSalesAmount)}</div>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-[0.625rem] text-muted-foreground truncate">
                   {stats.totalInvoices} invoice{stats.totalInvoices !== 1 ? "s" : ""}
                 </p>
               </>
@@ -412,7 +411,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="text-xl sm:text-2xl font-bold text-orange-600 truncate">{formatCurrency(stats.totalOutstanding)}</div>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-[0.625rem] text-muted-foreground truncate">
                   {stats.pendingInvoices} pending, {stats.overdueInvoices} overdue
                 </p>
               </>
@@ -435,7 +434,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400 truncate">{formatCurrency(stats.totalPurchaseAmount)}</div>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-[0.625rem] text-muted-foreground truncate">
                   {stats.totalPurchases} orders • Due: {formatCurrency(stats.purchasesDue)}
                 </p>
               </>
@@ -458,7 +457,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="text-xl sm:text-2xl font-bold text-purple-700 dark:text-purple-400 truncate">{stats.totalItems.toLocaleString()} items</div>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-[0.625rem] text-muted-foreground truncate">
                   Value: {formatCurrency(stats.totalStockValue)}
                 </p>
               </>
@@ -477,7 +476,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-lg font-bold text-green-700 dark:text-green-400">{loading ? "-" : stats.paidInvoices}</p>
-                <p className="text-[10px] text-green-600/80 dark:text-green-500 truncate">Paid Invoices</p>
+                <p className="text-[0.625rem] text-green-600/80 dark:text-green-500 truncate">Paid Invoices</p>
               </div>
             </div>
           </CardContent>
@@ -491,7 +490,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-lg font-bold text-yellow-700 dark:text-yellow-400">{loading ? "-" : stats.pendingInvoices}</p>
-                <p className="text-[10px] text-yellow-600/80 dark:text-yellow-500 truncate">Pending</p>
+                <p className="text-[0.625rem] text-yellow-600/80 dark:text-yellow-500 truncate">Pending</p>
               </div>
             </div>
           </CardContent>
@@ -505,7 +504,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-lg font-bold text-blue-700 dark:text-blue-400">{loading ? "-" : stats.totalCustomers}</p>
-                <p className="text-[10px] text-blue-600/80 dark:text-blue-500 truncate">Customers</p>
+                <p className="text-[0.625rem] text-blue-600/80 dark:text-blue-500 truncate">Customers</p>
               </div>
             </div>
           </CardContent>
@@ -519,7 +518,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-lg font-bold text-purple-700 dark:text-purple-400">{loading ? "-" : stats.totalSuppliers}</p>
-                <p className="text-[10px] text-purple-600/80 dark:text-purple-500 truncate">Suppliers</p>
+                <p className="text-[0.625rem] text-purple-600/80 dark:text-purple-500 truncate">Suppliers</p>
               </div>
             </div>
           </CardContent>
@@ -542,13 +541,14 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-0">
-            {loading ? (
+            {loading && (
               <div className="space-y-2">
                 {[...Array(3)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : stats.recentInvoices.length === 0 ? (
+            )}
+            {!loading && stats.recentInvoices.length === 0 && (
               <div className="text-center py-6">
                 <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-xs text-muted-foreground">No invoices yet</p>
@@ -558,7 +558,8 @@ export default function DashboardPage() {
                   </Button>
                 </Link>
               </div>
-            ) : (
+            )}
+            {!loading && stats.recentInvoices.length > 0 && (
               <div className="space-y-2">
                 {stats.recentInvoices.map((invoice) => (
                   <Link 
@@ -568,14 +569,14 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium text-xs truncate max-w-[120px]">{invoice.invoiceNo}</span>
+                        <span className="font-medium text-xs truncate max-w-[7.5rem]">{invoice.invoiceNo}</span>
                         {getStatusBadge(invoice.status)}
                       </div>
-                      <p className="text-[10px] text-muted-foreground truncate">{invoice.customerName}</p>
+                      <p className="text-[0.625rem] text-muted-foreground truncate">{invoice.customerName}</p>
                     </div>
                     <div className="text-right ml-2 flex-shrink-0">
                       <p className="font-semibold text-xs">{formatCurrency(invoice.total)}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatDate(invoice.date)}</p>
+                      <p className="text-[0.625rem] text-muted-foreground">{formatDate(invoice.date)}</p>
                     </div>
                   </Link>
                 ))}
@@ -598,13 +599,14 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-0">
-            {loading ? (
+            {loading && (
               <div className="space-y-2">
                 {[...Array(3)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : stats.recentPurchases.length === 0 ? (
+            )}
+            {!loading && stats.recentPurchases.length === 0 && (
               <div className="text-center py-6">
                 <ShoppingCart className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-xs text-muted-foreground">No purchases yet</p>
@@ -614,7 +616,8 @@ export default function DashboardPage() {
                   </Button>
                 </Link>
               </div>
-            ) : (
+            )}
+            {!loading && stats.recentPurchases.length > 0 && (
               <div className="space-y-2">
                 {stats.recentPurchases.map((purchase) => (
                   <Link 
@@ -624,14 +627,14 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium text-xs truncate max-w-[120px]">{purchase.purchaseNo}</span>
+                        <span className="font-medium text-xs truncate max-w-[7.5rem]">{purchase.purchaseNo}</span>
                         {getStatusBadge(purchase.status)}
                       </div>
-                      <p className="text-[10px] text-muted-foreground truncate">{purchase.supplierName}</p>
+                      <p className="text-[0.625rem] text-muted-foreground truncate">{purchase.supplierName}</p>
                     </div>
                     <div className="text-right ml-2 flex-shrink-0">
                       <p className="font-semibold text-xs">{formatCurrency(purchase.total)}</p>
-                      <p className="text-[10px] text-muted-foreground">{formatDate(purchase.date)}</p>
+                      <p className="text-[0.625rem] text-muted-foreground">{formatDate(purchase.date)}</p>
                     </div>
                   </Link>
                 ))}
@@ -646,7 +649,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1.5 min-w-0">
               <CardTitle className="text-sm font-semibold">Low Stock</CardTitle>
               {!loading && stats.lowStockItems > 0 && (
-                <Badge variant="destructive" className="text-[10px] h-5">
+                <Badge variant="destructive" className="text-[0.625rem] h-5">
                   {stats.lowStockItems}
                 </Badge>
               )}
@@ -659,18 +662,20 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent className="px-4 pb-4 pt-0">
-            {loading ? (
+            {loading && (
               <div className="space-y-2">
                 {[...Array(3)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : stats.lowStockItemsList.length === 0 ? (
+            )}
+            {!loading && stats.lowStockItemsList.length === 0 && (
               <div className="text-center py-6">
                 <CheckCircle2 className="h-8 w-8 mx-auto text-green-500 mb-2" />
                 <p className="text-xs text-muted-foreground">All items well-stocked!</p>
               </div>
-            ) : (
+            )}
+            {!loading && stats.lowStockItemsList.length > 0 && (
               <div className="space-y-2">
                 {stats.lowStockItemsList.map((item) => (
                   <Link 
@@ -684,7 +689,7 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-xs truncate">{item.name}</p>
-                      <p className={`text-[10px] ${item.stock === 0 ? "text-red-600 dark:text-red-400" : "text-orange-600 dark:text-orange-400"}`}>
+                      <p className={`text-[0.625rem] ${item.stock === 0 ? "text-red-600 dark:text-red-400" : "text-orange-600 dark:text-orange-400"}`}>
                         {item.stock === 0 ? "Out of stock" : `Min: ${item.minStock} ${item.unit}`}
                       </p>
                     </div>
@@ -703,7 +708,7 @@ export default function DashboardPage() {
                   </Link>
                 ))}
                 {stats.outOfStockItems > 0 && stats.lowStockItemsList.length < stats.lowStockItems && (
-                  <p className="text-[10px] text-center text-muted-foreground">
+                  <p className="text-[0.625rem] text-center text-muted-foreground">
                     +{stats.lowStockItems - stats.lowStockItemsList.length} more items need attention
                   </p>
                 )}

@@ -93,7 +93,7 @@ export function CustomerForm({ customer, trigger }: CustomerFormProps) {
       } else {
         toast.error(result.error || "Could not fetch GST details")
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch GST details. Please try again.")
     } finally {
       setIsFetchingGST(false)

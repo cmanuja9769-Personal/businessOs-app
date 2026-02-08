@@ -1,6 +1,7 @@
 import { getItems } from "./actions"
 import { ItemsContent } from "@/components/items/items-content"
-import { getGodowns } from "@/app/godowns/actions"
+import { getWarehouses } from "@/app/godowns/actions"
+import { getLatestPrintLogsForItems } from "@/app/barcode-logs/actions"
 
 type ItemsSearchParams = {
   q?: string | string[]
@@ -18,7 +19,8 @@ function spValue(v: string | string[] | undefined): string {
 
 export default async function ItemsPage({ searchParams }: { searchParams?: Promise<ItemsSearchParams> }) {
   const items = await getItems()
-  const godowns = await getGodowns()
+  const godowns = await getWarehouses()
+  const printLogs = await getLatestPrintLogsForItems(items.map((i) => i.id))
   const params = await searchParams
 
   const q = spValue(params?.q).trim()
@@ -33,6 +35,7 @@ export default async function ItemsPage({ searchParams }: { searchParams?: Promi
     <ItemsContent
       items={items}
       godowns={godowns}
+      printLogs={printLogs}
       initialFilters={{ q, unit, category, godown, stock, sort, dir }}
     />
   )

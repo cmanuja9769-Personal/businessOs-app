@@ -311,9 +311,13 @@
 
 /* Print styles - optimized for label sheets */
 @media print {
-  @page {
+  @page barcode-page {
     margin: 0;
     size: A4 portrait;
+  }
+
+  .barcode-label-page {
+    page: barcode-page;
   }
 
   /* Force page breaks between barcode pages */
@@ -413,10 +417,13 @@
    ======================================== */
 
 @media print {
-  /* Page Setup */
-  @page {
+  @page report-page {
     size: A4 portrait;
     margin: 15mm 10mm;
+  }
+
+  .report-print-container {
+    page: report-page;
   }
 
   /* Hide non-printable elements */

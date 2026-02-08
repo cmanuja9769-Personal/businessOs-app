@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,8 @@ type DbItem = {
   item_code?: string | null;
   category?: string | null;
   hsn?: string | null;
+  description?: string | null;
+  unit?: string | null;
   sale_price?: number | null;
   wholesale_price?: number | null;
   quantity_price?: number | null;
@@ -25,6 +27,7 @@ type DbItem = {
   tax_rate?: number | null;
   current_stock?: number | null;
   min_stock?: number | null;
+  max_stock?: number | null;
   item_location?: string | null;
   barcode_no?: string | null;
   inclusive_of_tax?: boolean | null;
@@ -41,6 +44,7 @@ export default function ItemDetailScreen() {
   const [item, setItem] = useState<DbItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const cancelledRef = useRef(false);
 
   const fetchItem = async () => {
     try {
@@ -56,19 +60,24 @@ export default function ItemDetailScreen() {
         .eq('id', itemId)
         .maybeSingle();
 
+      if (cancelledRef.current) return;
       if (error) throw error;
       setItem((data as any) ?? null);
     } catch (error) {
       console.error('[ITEM_DETAIL] fetchItem error:', error);
-      Alert.alert('Error', 'Failed to fetch item details');
+      if (!cancelledRef.current) Alert.alert('Error', 'Failed to fetch item details');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!cancelledRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchItem();
+    return () => { cancelledRef.current = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, itemId]);
 

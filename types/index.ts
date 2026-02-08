@@ -367,3 +367,16 @@ export const DOCUMENT_TYPE_CONFIG: Record<
     canBeEInvoiced: true, // Debit notes can also be e-invoiced
   },
 }
+
+export interface IBarcodePrintLog {
+  id: string
+  itemId: string
+  itemName: string
+  barcodeNo: string | null
+  stockAtPrint: number
+  labelsPrinted: number
+  printType: "individual" | "batch"
+  layoutId: string
+  printedAt: Date
+  createdAt: Date
+}

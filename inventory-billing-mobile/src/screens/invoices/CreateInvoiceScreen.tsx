@@ -327,7 +327,9 @@ export default function CreateInvoiceScreen() {
           rate: item.rate,
           amount: item.amount,
           gstRate: item.gst_rate || 0,
-          hsn: item.hsn || '',
+          cessRate: item.cess_rate || 0,
+          discount: item.discount || 0,
+          hsnCode: item.hsn || '',
         }));
         setInvoiceItems(mappedItems);
       } else {
@@ -374,25 +376,59 @@ export default function CreateInvoiceScreen() {
       }
       console.log('[ITEMS] Fetching items for org:', organizationId);
       
-      const { data, error, count } = await supabase
+      // First, get the total count
+      const { count, error: countError } = await supabase
         .from('items')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .order('name');
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
 
-      console.log('[ITEMS] Query result:', { count, error: error?.message || null });
-      
-      if (!error && data) {
-        console.log('[ITEMS] Loaded', data.length, 'items');
-        // Log first item structure for debugging
-        if (data.length > 0) {
-          console.log('[ITEMS] Sample item keys:', Object.keys(data[0]));
-          console.log('[ITEMS] Sample item:', JSON.stringify(data[0], null, 2));
-        }
-        setAvailableItems(data);
-      } else if (error) {
-        console.error('[ITEMS] Error:', error);
+      if (countError) {
+        console.error('[ITEMS] Count error:', countError);
+        return;
       }
+
+      console.log('[ITEMS] Total items:', count);
+
+      if (!count || count === 0) {
+        setAvailableItems([]);
+        return;
+      }
+
+      // Fetch all items in batches (Supabase default limit is 1000)
+      const PAGE_SIZE = 1000;
+      const totalPages = Math.ceil(count / PAGE_SIZE);
+      const allItems: Item[] = [];
+
+      for (let page = 0; page < totalPages; page++) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        console.log('[ITEMS] Fetching batch', page + 1, 'of', totalPages, `(${from}-${to})`);
+
+        const { data, error } = await supabase
+          .from('items')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .order('name')
+          .range(from, to);
+
+        if (error) {
+          console.error('[ITEMS] Batch error:', error);
+          break;
+        }
+
+        if (data) {
+          allItems.push(...data);
+        }
+      }
+
+      console.log('[ITEMS] Loaded', allItems.length, 'total items');
+      // Log first item structure for debugging
+      if (allItems.length > 0) {
+        console.log('[ITEMS] Sample item keys:', Object.keys(allItems[0]));
+        console.log('[ITEMS] Sample item:', JSON.stringify(allItems[0], null, 2));
+      }
+      setAvailableItems(allItems);
     } catch (error) {
       console.error('[ITEMS] Fetch error:', error);
     }
@@ -464,7 +500,7 @@ export default function CreateInvoiceScreen() {
         cessRate: 0,
         discount: 0,
         amount: price * initialQuantity,
-        hsn: hsnCode,
+        hsnCode: hsnCode,
       };
       setInvoiceItems([...invoiceItems, newItem]);
     }
@@ -606,8 +642,8 @@ export default function CreateInvoiceScreen() {
           const itemsToInsert = invoiceItems.map((item) => ({
             invoice_id: invoiceId,
             item_id: item.itemId || null,
-            item_name: item.itemName || item.name || 'Item',
-            hsn: item.hsn || null,
+            item_name: item.itemName || 'Item',
+            hsn: item.hsnCode || null,
             quantity: item.quantity || 1,
             unit: item.unit || 'pcs',
             rate: item.rate || 0,
@@ -641,8 +677,8 @@ export default function CreateInvoiceScreen() {
           const itemsToInsert = invoiceItems.map((item) => ({
             invoice_id: newInvoice.id,
             item_id: item.itemId || null,
-            item_name: item.itemName || item.name || 'Item',
-            hsn: item.hsn || null,
+            item_name: item.itemName || 'Item',
+            hsn: item.hsnCode || null,
             quantity: item.quantity || 1,
             unit: item.unit || 'pcs',
             rate: item.rate || 0,
@@ -700,9 +736,15 @@ export default function CreateInvoiceScreen() {
     (c.email || '').toLowerCase().includes(searchCustomer.toLowerCase())
   );
 
-  const filteredItems = availableItems.filter(i =>
-    i.name.toLowerCase().includes(searchItem.toLowerCase())
-  );
+  const filteredItems = availableItems.filter(i => {
+    const searchLower = searchItem.toLowerCase();
+    return (
+      i.name.toLowerCase().includes(searchLower) ||
+      (i.item_code || '').toLowerCase().includes(searchLower) ||
+      (i.barcode_no || '').toLowerCase().includes(searchLower) ||
+      (i.category || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   const totals = invoiceItems.length > 0 
     ? calculateInvoiceTotals(invoiceItems, 'gst', false)

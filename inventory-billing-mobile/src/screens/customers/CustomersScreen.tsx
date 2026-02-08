@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,18 +17,18 @@ import Card from '@components/ui/Card';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
+import OfflineBanner from '@components/ui/OfflineBanner';
+import ListFooterLoader from '@components/ui/ListFooterLoader';
+import { usePaginatedSearch } from '@hooks/usePaginatedSearch';
 import { spacing, fontSize } from '@theme/spacing';
-import { supabase } from '@lib/supabase';
 
 interface Customer {
   id: string;
   name: string;
   email?: string | null;
   phone?: string | null;
-  // preferred (web)
   gst_number?: string | null;
   address?: string | null;
-  // legacy (if present)
   gstin?: string | null;
   billing_address?: string | null;
 }
@@ -36,72 +37,46 @@ export default function CustomersScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [organizationId]);
+  const {
+    items: customers,
+    searchQuery,
+    setSearchQuery,
+    status,
+    error,
+    isOffline,
+    hasMore,
+    totalCount,
+    isLoadingMore,
+    loadMore,
+    refresh,
+    isRefreshing,
+  } = usePaginatedSearch<Customer>({
+    table: 'customers',
+    organizationId,
+    searchColumns: ['name', 'email', 'phone', 'gst_number'],
+    orderBy: 'name',
+    ascending: true,
+  });
 
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = customers.filter(
-        (customer) =>
-          customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          customer.phone?.includes(searchQuery)
-      );
-      setFilteredCustomers(filtered);
-    } else {
-      setFilteredCustomers(customers);
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && status !== 'loading') {
+      loadMore();
     }
-  }, [searchQuery, customers]);
+  }, [hasMore, isLoadingMore, status, loadMore]);
 
-  const fetchCustomers = async () => {
-    try {
-      console.log('[CUSTOMERS] Fetching customers for org:', organizationId);
-      if (!organizationId) {
-        console.warn('[CUSTOMERS] No organizationId available');
-        setCustomers([]);
-        setFilteredCustomers([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .order('name');
-
-      console.log('[CUSTOMERS] Query result:', { count: data?.length, error });
-
-      if (error) throw error;
-      setCustomers(data || []);
-      setFilteredCustomers(data || []);
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCustomers();
-  };
-
-  const renderItem = ({ item }: { item: Customer }) => (
+  const renderItem = useCallback(({ item }: { item: Customer }) => (
     <TouchableOpacity
       onPress={() => navigation.navigate('CustomerDetail', { customerId: item.id })}
+      activeOpacity={0.7}
     >
       <Card style={styles.customerCard}>
         <View style={styles.customerHeader}>
           <View style={styles.customerInfo}>
-            <Text style={[styles.customerName, { color: colors.text }]}>
+            <Text
+              style={[styles.customerName, { color: colors.text }]}
+              numberOfLines={2}
+            >
               {item.name}
             </Text>
             {item.email && (
@@ -124,14 +99,51 @@ export default function CustomersScreen() {
         </View>
       </Card>
     </TouchableOpacity>
-  );
+  ), [colors, navigation]);
 
-  if (loading) {
-    return <Loading fullScreen />;
+  const renderListFooter = useCallback(() => (
+    <ListFooterLoader
+      isLoading={isLoadingMore}
+      hasMore={hasMore}
+      itemCount={customers.length}
+      totalCount={totalCount}
+    />
+  ), [isLoadingMore, hasMore, customers.length, totalCount]);
+
+  const renderEmptyState = useCallback(() => {
+    if (status === 'loading') return null;
+
+    if (status === 'error' && error) {
+      return (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          description={error}
+          actionText="Try Again"
+          onAction={refresh}
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon="people-outline"
+        title={searchQuery ? 'No customers found' : 'No customers yet'}
+        description={searchQuery ? 'Try a different search term' : 'Add your first customer to get started'}
+        actionText={!searchQuery ? 'Add Customer' : undefined}
+        onAction={!searchQuery ? () => navigation.navigate('AddCustomer', {}) : undefined}
+      />
+    );
+  }, [status, error, searchQuery, refresh, navigation]);
+
+  if (status === 'loading' && customers.length === 0 && !searchQuery) {
+    return <Loading fullScreen text="Loading customers..." />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {isOffline && <OfflineBanner onRetry={refresh} />}
+
       <View style={styles.searchContainer}>
         <Input
           placeholder="Search customers..."
@@ -139,29 +151,58 @@ export default function CustomersScreen() {
           onChangeText={setSearchQuery}
           leftIcon="search"
           containerStyle={styles.searchInput}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
+        {status === 'loading' && customers.length > 0 && (
+          <View style={styles.searchIndicator}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
       </View>
+
+      {totalCount > 0 && (
+        <View style={styles.countContainer}>
+          <Text style={[styles.countText, { color: colors.textTertiary }]}>
+            {searchQuery
+              ? `${customers.length} result${customers.length !== 1 ? 's' : ''}`
+              : `${totalCount} customer${totalCount !== 1 ? 's' : ''} total`}
+          </Text>
+        </View>
+      )}
+
       <FlatList
-        data={filteredCustomers}
+        data={customers}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          customers.length === 0 && styles.listContentEmpty,
+        ]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            icon="people-outline"
-            title="No customers found"
-            description={searchQuery ? 'Try a different search term' : 'Add your first customer to get started'}
-            actionText={!searchQuery ? 'Add Customer' : undefined}
-            onAction={!searchQuery ? () => navigation.navigate('AddCustomer', {}) : undefined}
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderListFooter}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={15}
+        windowSize={10}
+        initialNumToRender={15}
+        keyboardShouldPersistTaps="handled"
       />
+
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={() => navigation.navigate('AddCustomer', {})}
+        activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
@@ -176,12 +217,29 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: spacing.md,
     paddingBottom: 0,
+    position: 'relative',
   },
   searchInput: {
     marginBottom: 0,
   },
+  searchIndicator: {
+    position: 'absolute',
+    right: spacing.md + 12,
+    top: spacing.md + 12,
+  },
+  countContainer: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  countText: {
+    fontSize: fontSize.xs,
+    fontWeight: '500',
+  },
   listContent: {
     padding: spacing.md,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
   },
   customerCard: {
     marginBottom: spacing.md,
@@ -193,11 +251,13 @@ const styles = StyleSheet.create({
   },
   customerInfo: {
     flex: 1,
+    flexShrink: 1,
   },
   customerName: {
     fontSize: fontSize.lg,
     fontWeight: '600',
     marginBottom: spacing.xs,
+    lineHeight: fontSize.lg * 1.3,
   },
   customerDetail: {
     fontSize: fontSize.sm,

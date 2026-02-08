@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import type { IItem } from "@/types"
+import type { IItem, PackagingUnit } from "@/types"
 import { itemSchema } from "@/lib/schemas"
 
 async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
@@ -29,7 +29,7 @@ async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof cr
         break
       }
 
-      const rows = (res.data as Array<any>) || []
+      const rows = (res.data as Array<Record<string, unknown>>) || []
       if (rows.length === 0) break
 
       for (const r of rows) {
@@ -38,8 +38,8 @@ async function generateNextNumericBarcode(supabase: Awaited<ReturnType<typeof cr
         try {
           const n = BigInt(val)
           if (n > maxBarcode) maxBarcode = n
-        } catch (e) {
-          // ignore unparsable values
+        } catch {
+          // unparsable value
         }
       }
 
@@ -100,7 +100,7 @@ export async function assignBarcodeToItem(id: string) {
       return { success: false, error: existingError.message || "DB error" }
     }
 
-    const existingBarcode = String((existing as any)?.barcode_no ?? "").trim()
+    const existingBarcode = String((existing as Record<string, unknown>)?.barcode_no ?? "").trim()
     if (existingBarcode) {
       return { success: true, barcode: existingBarcode }
     }
@@ -180,16 +180,7 @@ export async function getItems(): Promise<IItem[]> {
       return []
     }
 
-    // Batch lookup: get all unique godown IDs from items
-    const godownIds = Array.from(
-      new Set(
-        allData
-          .map((item) => item?.warehouse_id)
-          .filter((id): id is string => typeof id === "string" && id.length > 0)
-      )
-    )
-
-    // Fetch all warehouses (not just those referenced by items) so we can show names
+    // Fetch all warehouses so we can show names
     const godownNameById = new Map<string, string>()
     const allWarehousesRes = await supabase.from("warehouses").select("id, name")
     if (!allWarehousesRes.error && allWarehousesRes.data) {
@@ -286,7 +277,7 @@ export async function getItems(): Promise<IItem[]> {
           saleDiscount: Number(item.sale_discount) || 0,
           barcodeNo: item.barcode_no ? String(item.barcode_no) : "",
           unit: item.unit ? String(item.unit) : "PCS",
-          packagingUnit: item.packaging_unit ? String(item.packaging_unit) : "CTN",
+          packagingUnit: (item.packaging_unit as PackagingUnit) || "CTN",
           conversionRate: 1,
           alternateUnit: undefined,
           mrp: Number(item.sale_price) || 0,
@@ -339,7 +330,7 @@ export async function getItems(): Promise<IItem[]> {
     }
 
     return uniqueItems
-  } catch (error) {
+  } catch {
     return []
   }
 }
@@ -596,7 +587,7 @@ export async function updateItem(id: string, formData: FormData) {
       console.error("[Barcode] Failed to fetch existing barcode:", existingError.message || existingError)
     }
 
-    const existingBarcode = String((existing as any)?.barcode_no ?? "").trim()
+    const existingBarcode = String((existing as Record<string, unknown>)?.barcode_no ?? "").trim()
     if (!existingBarcode) {
       updatePayload.barcode_no = await generateNextNumericBarcode(supabase)
     }
@@ -710,13 +701,6 @@ export async function bulkImportItems(itemsData: IItem[]) {
 
   const organizationId = orgData.organization_id
 
-  // Helper to check if ID is a valid UUID (36 chars, contains hyphens in right places)
-  const isValidUUID = (id: string): boolean => {
-    if (!id || typeof id !== "string") return false
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-  }
-
-  // Match primarily by item name; use category and/or per-carton quantity only to disambiguate.
   const debugBlocks: string[] = []
 
   type DbMatchItem = {
@@ -798,19 +782,7 @@ export async function bulkImportItems(itemsData: IItem[]) {
     }
   }
 
-  // Process each item from upload and match by name+category
   const itemsToUpdateById = new Map<string, {id: string, itemCode: string | null, unit: string, description: string | null}>()
-  
-  const formatCandidate = (c: DbMatchItem) => {
-    return {
-      id: c.id,
-      name: String(c.name ?? ""),
-      nameKey: normalizeKey(c.name),
-      category: String(c.category ?? ""),
-      categoryKey: normalizeKey(c.category),
-      perCarton: c.per_carton_quantity ?? null,
-    }
-  }
 
   const resolveMatch = (item: IItem): { matches?: DbMatchItem[]; reason?: string; debug?: { nameKey: string; categoryKey: string; perCartonKey: string; candidates: DbMatchItem[]; keyType: "strict" | "relaxed" } } => {
     const strictNameKey = normalizeKey(item.name)
@@ -903,35 +875,13 @@ export async function bulkImportItems(itemsData: IItem[]) {
 
   const itemsToUpdate = Array.from(itemsToUpdateById.values())
 
-  // Perform updates - update ALL columns from the uploaded data
+  // Perform updates - update ONLY the reconciled fields (item_code, unit, description)
   for (const updateItem of itemsToUpdate) {
     try {
-      // You may need to map/validate fields as per your DB schema
       const updatePayload: Record<string, unknown> = {
         item_code: updateItem.itemCode,
-        name: updateItem.name,
-        description: updateItem.description,
-        category: updateItem.category,
-        hsn: updateItem.hsnCode,
-        barcode_no: updateItem.barcodeNo,
         unit: updateItem.unit,
-        conversion_rate: updateItem.conversionRate,
-        alternate_unit: updateItem.alternateUnit,
-        purchase_price: updateItem.purchasePrice,
-        sale_price: updateItem.salePrice,
-        wholesale_price: updateItem.wholesalePrice,
-        quantity_price: updateItem.quantityPrice,
-        mrp: updateItem.mrp,
-        stock: updateItem.stock,
-        min_stock: updateItem.minStock,
-        max_stock: updateItem.maxStock,
-        item_location: updateItem.itemLocation,
-        per_carton_quantity: updateItem.perCartonQuantity,
-        godown_id: updateItem.godownId,
-        gst_rate: updateItem.gstRate,
-        tax_rate: updateItem.taxRate,
-        cess_rate: updateItem.cessRate,
-        inclusive_of_tax: updateItem.inclusiveOfTax,
+        description: updateItem.description,
         updated_at: new Date().toISOString(),
       }
       // Remove undefined/null fields to avoid overwriting with null
@@ -982,7 +932,6 @@ export async function bulkImportItems(itemsData: IItem[]) {
         item_location: item.itemLocation || null,
         per_carton_quantity: item.perCartonQuantity || null,
         warehouse_id: item.godownId || null,
-        gst_rate: item.gstRate || 0,
         tax_rate: item.taxRate || item.gstRate || 0,
         cess_rate: item.cessRate || 0,
         inclusive_of_tax: item.inclusiveOfTax || false,
@@ -1090,7 +1039,7 @@ export async function getItemById(id: string) {
     saleDiscount: Number(item.sale_discount) || 0,
     barcodeNo: item.barcode_no ? String(item.barcode_no) : "",
     unit: item.unit ? String(item.unit) : "PCS",
-    packagingUnit: item.packaging_unit ? String(item.packaging_unit) : "CTN",
+    packagingUnit: (item.packaging_unit as PackagingUnit) || "CTN",
     conversionRate: 1,
     mrp: Number(item.sale_price) || 0,
     stock: Number(item.current_stock) || 0,
@@ -1171,13 +1120,13 @@ export async function getItemStockDistribution(itemId: string) {
   }
 
   return (warehouseStocks || []).map((ws: Record<string, unknown>) => ({
-    id: ws.id,
-    warehouseId: ws.warehouse_id,
-    warehouseName: (ws.warehouses as Record<string, unknown>)?.name || "Unknown",
-    quantity: ws.quantity || 0,
-    minQuantity: ws.min_quantity || 0,
-    maxQuantity: ws.max_quantity || 0,
-    location: ws.location || "",
+    id: String(ws.id || ""),
+    warehouseId: String(ws.warehouse_id || ""),
+    warehouseName: String((ws.warehouses as Record<string, unknown>)?.name || "Unknown"),
+    quantity: Number(ws.quantity) || 0,
+    minQuantity: Number(ws.min_quantity) || 0,
+    maxQuantity: Number(ws.max_quantity) || 0,
+    location: String(ws.location || ""),
   }))
 }
 
@@ -1204,23 +1153,23 @@ export async function getItemStockLedger(itemId: string, limit = 100) {
 
   if (!error && ledgerEntries && ledgerEntries.length > 0) {
     return ledgerEntries.map((entry: Record<string, unknown>) => ({
-      id: entry.id,
-      transactionType: entry.transaction_type,
+      id: String(entry.id || ""),
+      transactionType: String(entry.transaction_type || ""),
       transactionDate: new Date(entry.transaction_date as string),
-      quantityBefore: entry.quantity_before || 0,
-      quantityChange: entry.quantity_change || 0,
-      quantityAfter: entry.quantity_after || 0,
-      entryQuantity: entry.entry_quantity || 0,
-      entryUnit: entry.entry_unit || "PCS",
-      baseQuantity: entry.base_quantity || 0,
-      ratePerUnit: entry.rate_per_unit,
-      totalValue: entry.total_value,
-      referenceType: entry.reference_type,
-      referenceId: entry.reference_id,
-      referenceNo: entry.reference_no || "",
-      partyName: entry.party_name || "",
-      warehouseName: (entry.warehouses as Record<string, unknown>)?.name || "",
-      notes: entry.notes || "",
+      quantityBefore: Number(entry.quantity_before) || 0,
+      quantityChange: Number(entry.quantity_change) || 0,
+      quantityAfter: Number(entry.quantity_after) || 0,
+      entryQuantity: Number(entry.entry_quantity) || 0,
+      entryUnit: String(entry.entry_unit || "PCS"),
+      baseQuantity: Number(entry.base_quantity) || 0,
+      ratePerUnit: entry.rate_per_unit ? Number(entry.rate_per_unit) : undefined,
+      totalValue: entry.total_value ? Number(entry.total_value) : undefined,
+      referenceType: entry.reference_type ? String(entry.reference_type) : undefined,
+      referenceId: entry.reference_id ? String(entry.reference_id) : undefined,
+      referenceNo: String(entry.reference_no || ""),
+      partyName: String(entry.party_name || ""),
+      warehouseName: String((entry.warehouses as Record<string, unknown>)?.name || ""),
+      notes: String(entry.notes || ""),
     }))
   }
 
@@ -1234,20 +1183,20 @@ export async function getItemStockLedger(itemId: string, limit = 100) {
 
   if (!adjError && adjustments && adjustments.length > 0) {
     return adjustments.map((adj: Record<string, unknown>) => ({
-      id: adj.id,
+      id: String(adj.id || ""),
       transactionType: "ADJUSTMENT",
       transactionDate: new Date(adj.created_at as string),
       quantityBefore: 0,
       quantityChange: adj.adjustment_type === "increase" ? Number(adj.quantity) : -Number(adj.quantity),
       quantityAfter: 0,
-      entryQuantity: adj.quantity || 0,
+      entryQuantity: Number(adj.quantity) || 0,
       entryUnit: "PCS",
-      baseQuantity: adj.quantity || 0,
-      ratePerUnit: null,
-      totalValue: null,
+      baseQuantity: Number(adj.quantity) || 0,
+      ratePerUnit: undefined,
+      totalValue: undefined,
       referenceType: "adjustment",
-      referenceId: adj.id,
-      referenceNo: adj.adjustment_no || "",
+      referenceId: String(adj.id || ""),
+      referenceNo: String(adj.adjustment_no || ""),
       partyName: "",
       warehouseName: "",
       notes: `${adj.adjustment_type} - ${adj.reason}${adj.notes ? ": " + adj.notes : ""}`,
@@ -1294,24 +1243,22 @@ export async function getItemInvoiceUsage(itemId: string, limit = 50) {
     return []
   }
 
-  const usage = (invoiceItems || [])
-    .filter((item: Record<string, unknown>) => item.invoices) // Filter out items without invoice
+  return (invoiceItems || [])
+    .filter((item: Record<string, unknown>) => item.invoices)
     .map((item: Record<string, unknown>) => {
       const invoice = item.invoices as Record<string, unknown>
       return {
-        invoiceId: invoice.id,
-        invoiceNo: invoice.invoice_number,
-        documentType: invoice.document_type || "invoice",
+        invoiceId: String(invoice.id || ""),
+        invoiceNo: String(invoice.invoice_number || ""),
+        documentType: String(invoice.document_type || "invoice"),
         invoiceDate: new Date(invoice.invoice_date as string),
-        customerName: invoice.customer_name,
+        customerName: String(invoice.customer_name || ""),
         quantity: Number(item.quantity) || 0,
-        unit: item.unit || "PCS",
+        unit: String(item.unit || "PCS"),
         rate: Number(item.rate) || 0,
         amount: Number(item.amount) || 0,
       }
     })
-
-  return usage
 }
 
 // Add stock with ledger entry
@@ -1451,7 +1398,9 @@ export async function addStockWithLedger(
         created_by: user.id,
       })
     
-    // Silent failure for ledger - don't block the operation
+    if (ledgerError) {
+      console.error("[addStockWithLedger] ledger insert failed:", ledgerError.message)
+    }
   }
 
   revalidatePath("/items")
@@ -1476,7 +1425,7 @@ export async function modifyStockWithLedger(
   operationType: "ADD" | "REDUCE",
   reason: string,
   notes?: string
-): Promise<{ success: boolean; error?: string; newStock?: number }> {
+): Promise<{ success: boolean; error?: string; newStock?: number; quantityBefore?: number; quantityAfter?: number }> {
   const supabase = await createClient()
   
   // Get current user
@@ -1520,7 +1469,9 @@ export async function modifyStockWithLedger(
   const qtyChange = operationType === "ADD" ? Math.round(quantity) : -Math.round(quantity)
   
   // Determine transaction type for ledger
-  const transactionType = operationType === "ADD" ? "IN" : (reason === "correction" ? "CORRECTION" : "ADJUSTMENT")
+  let transactionType = "ADJUSTMENT"
+  if (operationType === "ADD") transactionType = "IN"
+  else if (reason === "correction") transactionType = "CORRECTION"
 
   // Get current warehouse stock
   const { data: existingWs, error: wsReadError } = await supabase
@@ -1579,13 +1530,21 @@ export async function modifyStockWithLedger(
     }
   }
 
-  // Calculate new total stock by adding the delta to current_stock
-  // DO NOT sum warehouse records - current_stock is the source of truth
-  // Warehouse records track per-warehouse distribution, not total
-  const currentStock = Number(item.current_stock) || 0
-  const newTotalStock = Math.max(0, currentStock + qtyChange)
+  // Recompute total stock from ALL warehouses (ensures consistency)
+  // This prevents drift between warehouse totals and item.current_stock
+  const { data: allWs, error: sumError } = await supabase
+    .from("item_warehouse_stock")
+    .select("quantity")
+    .eq("organization_id", item.organization_id)
+    .eq("item_id", itemId)
+
+  if (sumError) {
+    return { success: false, error: `Failed to calculate total stock: ${sumError.message}` }
+  }
+
+  const newTotalStock = (allWs || []).reduce((sum, row) => sum + (row.quantity || 0), 0)
   
-  // Update item's current_stock (this is the source of truth for total)
+  // Update item's current_stock with the verified total from all warehouses
   const { error: itemUpdateError } = await supabase
     .from("items")
     .update({ 
@@ -1685,12 +1644,17 @@ export async function getItemWarehouseStocks(
   const stocks = (warehouseStocks || []).map((ws: { 
     warehouse_id: string
     quantity: number
-    warehouses: { id: string; name: string } | null
-  }) => ({
-    warehouseId: ws.warehouse_id,
-    warehouseName: ws.warehouses?.name || "Unknown",
-    quantity: Number(ws.quantity) || 0
-  }))
+    warehouses: { id: string; name: string } | { id: string; name: string }[] | null
+  }) => {
+    const warehouseName = Array.isArray(ws.warehouses) 
+      ? (ws.warehouses[0]?.name || "Unknown")
+      : (ws.warehouses?.name || "Unknown")
+    return {
+      warehouseId: ws.warehouse_id,
+      warehouseName,
+      quantity: Number(ws.quantity) || 0
+    }
+  })
 
   return { 
     success: true, 
@@ -2043,5 +2007,85 @@ export async function addStockToMultipleWarehouses(
     success: true, 
     newStock: newTotalStock,
     additionResults
+  }
+}
+
+export async function searchItems(query: string, limit = 30): Promise<IItem[]> {
+  const supabase = await createClient()
+
+  try {
+    const { data: orgData } = await supabase
+      .from("app_user_organizations")
+      .select("organization_id")
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (!orgData?.organization_id) return []
+
+    const organizationId = orgData.organization_id as string
+
+    let itemsQuery = supabase
+      .from("items")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true })
+      .limit(limit)
+
+    if (query.trim()) {
+      itemsQuery = itemsQuery.or(
+        `name.ilike.%${query.trim()}%,item_code.ilike.%${query.trim()}%,barcode_no.ilike.%${query.trim()}%`
+      )
+    }
+
+    const { data, error } = await itemsQuery
+
+    if (error || !data) return []
+
+    const { data: allWarehouses } = await supabase
+      .from("warehouses")
+      .select("id, name")
+      .eq("organization_id", organizationId)
+
+    const godownNameById = new Map<string, string>()
+    if (allWarehouses) {
+      for (const wh of allWarehouses as Array<{ id: string; name: string }>) {
+        godownNameById.set(wh.id, wh.name)
+      }
+    }
+
+    return (data as Record<string, unknown>[]).map((item) => ({
+      id: item.id as string,
+      name: (item.name as string) || "",
+      itemCode: (item.item_code as string) || "",
+      barcodeNo: (item.barcode_no as string) || "",
+      hsnCode: (item.hsn as string) || "",
+      category: (item.category as string) || "",
+      unit: (item.unit as string) || "PCS",
+      packagingUnit: (item.packaging_unit as PackagingUnit) || undefined,
+      perCartonQuantity: Number(item.per_carton_quantity) || 0,
+      purchasePrice: Number(item.purchase_price) || 0,
+      salePrice: Number(item.sale_price) || 0,
+      conversionRate: 1,
+      alternateUnit: undefined,
+      wholesalePrice: Number(item.wholesale_price) || 0,
+      quantityPrice: Number(item.quantity_price) || 0,
+      mrp: Number(item.mrp) || Number(item.sale_price) || 0,
+      discountType: "percentage" as const,
+      saleDiscount: 0,
+      gstRate: Number(item.tax_rate) || 0,
+      taxRate: Number(item.tax_rate) || 0,
+      cessRate: 0,
+      inclusiveOfTax: false,
+      stock: Number(item.current_stock) || 0,
+      minStock: Number(item.min_stock) || 0,
+      maxStock: Number(item.max_stock) || 0,
+      itemLocation: (item.item_location as string) || undefined,
+      godownId: (item.warehouse_id as string) || null,
+      godownName: item.warehouse_id ? godownNameById.get(item.warehouse_id as string) || null : null,
+      createdAt: new Date(item.created_at as string || Date.now()),
+      updatedAt: new Date(item.updated_at as string || Date.now()),
+    }))
+  } catch {
+    return []
   }
 }

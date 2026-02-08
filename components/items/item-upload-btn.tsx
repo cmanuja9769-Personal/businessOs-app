@@ -9,7 +9,7 @@ import { parseExcelFile, downloadItemExcelTemplate } from "@/lib/excel-parser"
 import { itemSchema } from "@/lib/schemas"
 import { bulkImportItems } from "@/app/items/actions"
 import { toast } from "sonner"
-import type { IItem } from "@/types"
+import type { IItem, PackagingUnit } from "@/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
@@ -420,6 +420,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
             data: {
               id: isExistingItem ? itemId : `ITEM-${Date.now()}-${rowIndex}`,
               ...validated,
+              packagingUnit: validated.packagingUnit as PackagingUnit | undefined,
               godownName: matchedGodown?.name ?? (godownName || null),
               createdAt: new Date(),
               updatedAt: new Date(),

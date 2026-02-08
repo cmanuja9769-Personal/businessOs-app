@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  TextInput,
+  ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
@@ -17,8 +17,12 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
+import Input from '@components/ui/Input';
+import OfflineBanner from '@components/ui/OfflineBanner';
+import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
+import { NetworkService } from '@services/network';
 
 interface Purchase {
   id: string;
@@ -31,51 +35,175 @@ interface Purchase {
   status: 'paid' | 'unpaid' | 'partial';
 }
 
+const PAGE_SIZE = 50;
+const DEBOUNCE_MS = 300;
+
 export default function PurchasesScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const { colors, shadows } = useTheme();
   const { organizationId } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [isOffline, setIsOffline] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({ total: 0, paid: 0, pending: 0 });
 
-  useFocusEffect(
-    useCallback(() => {
-      loadPurchases();
-    }, [organizationId])
-  );
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const currentQueryRef = useRef('');
+  const totalCountRef = useRef(0);
 
-  const loadPurchases = async () => {
+  const fetchStats = useCallback(async () => {
     if (!organizationId) return;
+    try {
+      const { data } = await supabase
+        .from('purchases')
+        .select('total, paid_amount, balance')
+        .eq('organization_id', organizationId);
+
+      if (data) {
+        setStats({
+          total: data.reduce((sum: number, p: any) => sum + (p.total || 0), 0),
+          paid: data.reduce((sum: number, p: any) => sum + (p.paid_amount || 0), 0),
+          pending: data.reduce((sum: number, p: any) => sum + (p.balance || 0), 0),
+        });
+      }
+    } catch {}
+  }, [organizationId]);
+
+  const fetchPurchases = useCallback(async (
+    query: string,
+    pageNum: number,
+    isRefresh: boolean = false
+  ) => {
+    if (!organizationId) {
+      setPurchases([]);
+      setLoading(false);
+      return;
+    }
+
+    const isConnected = await NetworkService.checkConnection();
+    if (!isConnected) {
+      setIsOffline(true);
+      setError('You are offline. Please check your internet connection.');
+      setLoading(false);
+      return;
+    }
+    setIsOffline(false);
+
+    const isFirstPage = pageNum === 0;
+    if (isFirstPage && !isRefresh) setLoading(true);
+    if (!isFirstPage) setIsLoadingMore(true);
 
     try {
-      const { data, error } = await supabase
+      const from = pageNum * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let countQuery = supabase
+        .from('purchases')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
+
+      let dataQuery = supabase
         .from('purchases')
         .select('id, purchase_no, supplier_name, date, total, paid_amount, balance, status')
         .eq('organization_id', organizationId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(from, to);
 
-      if (error) throw error;
-      setPurchases(data || []);
-    } catch (error) {
-      console.error('Error loading purchases:', error);
+      if (query.trim()) {
+        const searchTerm = `%${query.trim()}%`;
+        countQuery = countQuery.or(
+          `purchase_no.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
+        );
+        dataQuery = dataQuery.or(
+          `purchase_no.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
+        );
+      }
+
+      const [countResult, dataResult] = await Promise.all([
+        isFirstPage ? countQuery : Promise.resolve({ count: totalCountRef.current, error: null }),
+        dataQuery,
+      ]);
+
+      if (currentQueryRef.current !== query) return;
+      if (dataResult.error) throw dataResult.error;
+
+      const items = (dataResult.data || []) as Purchase[];
+
+      if (isFirstPage) {
+        setPurchases(items);
+        if (countResult && 'count' in countResult && countResult.count !== null) {
+          setTotalCount(countResult.count);
+          totalCountRef.current = countResult.count;
+        }
+      } else {
+        setPurchases((prev) => [...prev, ...items]);
+      }
+
+      setHasMore(items.length === PAGE_SIZE);
+      setPage(pageNum);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load purchases');
     } finally {
       setLoading(false);
-      setRefreshing(false);
+      setIsLoadingMore(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [organizationId]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    loadPurchases();
-  };
+  useEffect(() => {
+    currentQueryRef.current = searchQuery;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
-  const filteredPurchases = purchases.filter(p =>
-    p.purchase_no.toLowerCase().includes(search.toLowerCase()) ||
-    p.supplier_name.toLowerCase().includes(search.toLowerCase())
-  );
+    if (!searchQuery.trim()) {
+      fetchPurchases('', 0);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      fetchPurchases(searchQuery, 0);
+    }, DEBOUNCE_MS);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [searchQuery, fetchPurchases]);
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchPurchases('', 0);
+      fetchStats();
+    }
+  }, [organizationId]);
+
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && !loading) {
+      fetchPurchases(searchQuery, page + 1);
+    }
+  }, [hasMore, isLoadingMore, loading, searchQuery, page, fetchPurchases]);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setPage(0);
+    fetchPurchases(searchQuery, 0, true);
+    fetchStats();
+  }, [searchQuery, fetchPurchases, fetchStats]);
+
+  useEffect(() => {
+    const unsubscribe = NetworkService.subscribeToNetworkChanges((connected) => {
+      setIsOffline(!connected);
+      if (connected && error) fetchPurchases(searchQuery, 0);
+    });
+    return () => unsubscribe();
+  }, [searchQuery, error, fetchPurchases]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -86,18 +214,73 @@ export default function PurchasesScreen() {
     }
   };
 
-  const totalStats = {
-    total: purchases.reduce((sum, p) => sum + p.total, 0),
-    paid: purchases.reduce((sum, p) => sum + p.paid_amount, 0),
-    pending: purchases.reduce((sum, p) => sum + p.balance, 0),
-  };
+  const renderPurchaseItem = useCallback(({ item }: { item: Purchase }) => (
+    <TouchableOpacity
+      style={[styles.purchaseCard, { backgroundColor: colors.card, ...shadows.sm }]}
+      onPress={() => navigation.navigate('PurchaseDetail', { purchaseId: item.id })}
+      activeOpacity={0.7}
+    >
+      <View style={styles.purchaseHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.purchaseNo, { color: colors.text }]} numberOfLines={1}>
+            {item.purchase_no}
+          </Text>
+          <Text style={[styles.supplierName, { color: colors.textSecondary }]} numberOfLines={1}>
+            {item.supplier_name}
+          </Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+        </View>
+      </View>
+      <View style={[styles.purchaseFooter, { borderTopColor: colors.border }]}>
+        <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.date)}</Text>
+        <Text style={[styles.purchaseAmount, { color: colors.primary }]}>{formatCurrency(item.total)}</Text>
+      </View>
+    </TouchableOpacity>
+  ), [colors, shadows, navigation]);
 
-  if (loading) {
-    return <Loading text="Loading purchases..." />;
+  const renderListFooter = useCallback(() => (
+    <ListFooterLoader
+      isLoading={isLoadingMore}
+      hasMore={hasMore}
+      itemCount={purchases.length}
+      totalCount={totalCount}
+    />
+  ), [isLoadingMore, hasMore, purchases.length, totalCount]);
+
+  const renderEmptyState = useCallback(() => {
+    if (loading) return null;
+    if (error) {
+      return (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          description={error}
+          actionText="Try Again"
+          onAction={handleRefresh}
+        />
+      );
+    }
+    return (
+      <EmptyState
+        icon="cart-outline"
+        title="No Purchases"
+        description={searchQuery ? `No purchases matching "${searchQuery}"` : 'Create your first purchase to get started'}
+        actionText="New Purchase"
+        onAction={() => navigation.navigate('CreatePurchase', {})}
+      />
+    );
+  }, [loading, error, searchQuery, handleRefresh, navigation]);
+
+  if (loading && purchases.length === 0 && !searchQuery) {
+    return <Loading fullScreen text="Loading purchases..." />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {isOffline && <OfflineBanner onRetry={handleRefresh} />}
+
       <LinearGradient colors={['#4F46E5', '#6366F1']} style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -114,67 +297,63 @@ export default function PurchasesScreen() {
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(totalStats.total)}</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.total)}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Paid</Text>
-          <Text style={[styles.statValue, { color: '#10B981' }]}>{formatCurrency(totalStats.paid)}</Text>
+          <Text style={[styles.statValue, { color: '#10B981' }]}>{formatCurrency(stats.paid)}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
-          <Text style={[styles.statValue, { color: '#EF4444' }]}>{formatCurrency(totalStats.pending)}</Text>
+          <Text style={[styles.statValue, { color: '#EF4444' }]}>{formatCurrency(stats.pending)}</Text>
         </View>
       </View>
 
-      <View style={[styles.searchContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Ionicons name="search" size={20} color={colors.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search purchases..."
-          placeholderTextColor={colors.textSecondary}
-          value={search}
-          onChangeText={setSearch}
+      <View style={styles.searchWrapper}>
+        <Input
+          placeholder="Search by purchase no or supplier..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          leftIcon="search"
+          containerStyle={styles.searchInput}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
+        {loading && purchases.length > 0 && (
+          <View style={styles.searchIndicator}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
       </View>
 
-      {filteredPurchases.length === 0 ? (
-        <EmptyState
-          icon="cart-outline"
-          title="No Purchases"
-          description={search ? 'No purchases match your search' : 'Create your first purchase to get started'}
-          actionText="New Purchase"
-          onAction={() => navigation.navigate('CreatePurchase', {})}
-        />
-      ) : (
-        <FlatList
-          data={filteredPurchases}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.purchaseCard, { backgroundColor: colors.card, ...shadows.sm }]}
-              onPress={() => navigation.navigate('PurchaseDetail', { purchaseId: item.id })}
-            >
-              <View style={styles.purchaseHeader}>
-                <View>
-                  <Text style={[styles.purchaseNo, { color: colors.text }]}>{item.purchase_no}</Text>
-                  <Text style={[styles.supplierName, { color: colors.textSecondary }]}>{item.supplier_name}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                  <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-                </View>
-              </View>
-              <View style={styles.purchaseFooter}>
-                <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.date)}</Text>
-                <Text style={[styles.purchaseAmount, { color: colors.primary }]}>{formatCurrency(item.total)}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} />
-          }
-        />
-      )}
+      <FlatList
+        data={purchases}
+        renderItem={renderPurchaseItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.listContent,
+          purchases.length === 0 && styles.listContentEmpty,
+        ]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderListFooter}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={15}
+        windowSize={10}
+        initialNumToRender={15}
+        keyboardShouldPersistTaps="handled"
+      />
     </View>
   );
 }
@@ -189,16 +368,18 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
   statLabel: { fontSize: 12, marginBottom: 4 },
   statValue: { fontSize: 14, fontWeight: '700' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 16 },
+  searchWrapper: { paddingHorizontal: 16, paddingBottom: 8, position: 'relative' },
+  searchInput: { marginBottom: 0 },
+  searchIndicator: { position: 'absolute', right: 28, top: 12 },
   listContent: { padding: 16, paddingTop: 8 },
+  listContentEmpty: { flexGrow: 1 },
   purchaseCard: { borderRadius: 12, padding: 16, marginBottom: 12 },
   purchaseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   purchaseNo: { fontSize: 16, fontWeight: '600' },
   supplierName: { fontSize: 14, marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 11, fontWeight: '600', color: '#fff' },
-  purchaseFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(0,0,0,0.1)' },
+  purchaseFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
   purchaseDate: { fontSize: 13 },
   purchaseAmount: { fontSize: 18, fontWeight: '700' },
 });

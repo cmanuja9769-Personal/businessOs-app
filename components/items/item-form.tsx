@@ -239,10 +239,13 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
     }
   }, [open]);
 
-  // Update HSN suggestions when search changes
+  // Update HSN suggestions when search changes (debounced)
   useEffect(() => {
-    const results = searchHSNCodes(hsnSearch, 15);
-    setHsnSuggestions(results);
+    const timer = setTimeout(() => {
+      const results = searchHSNCodes(hsnSearch, 30);
+      setHsnSuggestions(results);
+    }, hsnSearch.length > 0 ? 150 : 0);
+    return () => clearTimeout(timer);
   }, [hsnSearch]);
 
   // Filter categories based on search
@@ -480,17 +483,18 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                       <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="start">
+                  <PopoverContent className="w-[400px] p-0" align="start">
                     <Command shouldFilter={false}>
                       <CommandInput 
-                        placeholder="Search by code or description..." 
+                        placeholder="Type code (e.g. 8471) or product name..." 
                         value={hsnSearch}
                         onValueChange={setHsnSearch}
                       />
-                      <CommandList>
-                        <CommandEmpty>
-                          {hsnSearch ? (
+                      <CommandList className="max-h-[280px]">
+                        {hsnSuggestions.length === 0 && hsnSearch.length >= 2 ? (
+                          <CommandEmpty>
                             <div className="py-2 px-2">
+                              <p className="text-xs text-muted-foreground mb-2">No HSN codes found</p>
                               <Button
                                 variant="ghost"
                                 className="w-full justify-start text-sm"
@@ -501,15 +505,18 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                                 }}
                               >
                                 <Plus className="mr-2 h-4 w-4" />
-                                Use "{hsnSearch}"
+                                Use &quot;{hsnSearch}&quot; as custom code
                               </Button>
                             </div>
-                          ) : (
-                            "Type to search HSN codes..."
-                          )}
-                        </CommandEmpty>
-                        <CommandGroup heading="Suggested HSN Codes">
-                          {hsnSuggestions.map((hsn) => (
+                          </CommandEmpty>
+                        ) : hsnSuggestions.length === 0 ? (
+                          <CommandEmpty>
+                            Type a code or product name to search...
+                          </CommandEmpty>
+                        ) : null}
+                        {hsnSuggestions.length > 0 && (
+                          <CommandGroup heading={`${hsnSuggestions.length} HSN Codes`}>
+                            {hsnSuggestions.map((hsn) => (
                             <CommandItem
                               key={hsn.code}
                               value={hsn.code}
@@ -545,6 +552,7 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
                             </CommandItem>
                           ))}
                         </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>

@@ -11,4 +11,8 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# Suppress D8 Kotlin metadata warnings from react-native-pdf / pdfium
+-dontwarn io.legere.pdfiumandroid.**
+-keep class io.legere.pdfiumandroid.** { *; }
+
 # Add any project specific keep options here:

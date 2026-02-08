@@ -35,13 +35,13 @@ function BarcodeCanvas({ value, layout }: BarcodeCanvasProps) {
     const width = currentLayout?.labelWidth || 70
     
     if (width <= 40) {
-      return { width: 1.5, height: 30, margin: 3 }
+      return { width: 1.2, height: 22, margin: 1 }
     } else if (width <= 55) {
-      return { width: 1.8, height: 40, margin: 4 }
+      return { width: 1.4, height: 28, margin: 2 }
     } else if (width <= 75) {
-      return { width: 2, height: 50, margin: 5 }
+      return { width: 1.5, height: 32, margin: 2 }
     } else {
-      return { width: 2.5, height: 60, margin: 6 }
+      return { width: 1.8, height: 38, margin: 2 }
     }
   }
 

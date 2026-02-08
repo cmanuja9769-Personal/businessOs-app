@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,7 @@ type DbInvoice = {
   balance?: number | null;
   status?: string | null;
   items?: unknown;
+  created_at?: string | null;
 };
 
 export default function CustomerDetailScreen() {
@@ -59,6 +60,8 @@ export default function CustomerDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices'>('overview');
+
+  const cancelledRef = useRef(false);
 
   const fetchAll = async () => {
     try {
@@ -83,6 +86,8 @@ export default function CustomerDetailScreen() {
           .order('invoice_date', { ascending: false }),
       ]);
 
+      if (cancelledRef.current) return;
+
       if (customerRes.error) throw customerRes.error;
       if (invoicesRes.error) throw invoicesRes.error;
 
@@ -91,13 +96,18 @@ export default function CustomerDetailScreen() {
     } catch (error) {
       console.error('[CUSTOMER_DETAIL] fetchAll error:', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!cancelledRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchAll();
+    return () => { cancelledRef.current = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, customerId]);
 
   const onRefresh = () => {
@@ -160,7 +170,7 @@ export default function CustomerDetailScreen() {
     >
       <Text style={[
         styles.tabLabel,
-        { color: activeTab === id ? colors.primary : colors.textDim }
+        { color: activeTab === id ? colors.primary : colors.textMuted }
       ]}>
         {label}
       </Text>
@@ -219,13 +229,13 @@ export default function CustomerDetailScreen() {
             {/* Stats Cards */}
             <View style={styles.statsRow}>
               <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                <Text style={[styles.statLabel, { color: colors.textDim }]}>Total Spent</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total Spent</Text>
                 <Text style={[styles.statValue, { color: colors.success }]}>
                   {formatCurrency(summary.totalPaid)}
                 </Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                <Text style={[styles.statLabel, { color: colors.textDim }]}>Outstanding</Text>
+                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Outstanding</Text>
                 <Text style={[styles.statValue, { color: colors.warning }]}>
                   {formatCurrency(summary.totalBalance)}
                 </Text>
@@ -238,10 +248,10 @@ export default function CustomerDetailScreen() {
               
               <View style={styles.detailItem}>
                 <View style={styles.detailIcon}>
-                  <Ionicons name="location" size={20} color={colors.textDim} />
+                  <Ionicons name="location" size={20} color={colors.textMuted} />
                 </View>
                 <View style={styles.detailContent}>
-                  <Text style={[styles.detailLabel, { color: colors.textDim }]}>Address</Text>
+                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Address</Text>
                   <Text style={[styles.detailText, { color: colors.text }]}>
                     {customerAddress || 'No address provided'}
                   </Text>
@@ -250,10 +260,10 @@ export default function CustomerDetailScreen() {
 
               <View style={styles.detailItem}>
                 <View style={styles.detailIcon}>
-                  <Ionicons name="document-text" size={20} color={colors.textDim} />
+                  <Ionicons name="document-text" size={20} color={colors.textMuted} />
                 </View>
                 <View style={styles.detailContent}>
-                  <Text style={[styles.detailLabel, { color: colors.textDim }]}>GSTIN</Text>
+                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>GSTIN</Text>
                   <Text style={[styles.detailText, { color: colors.text }]}>
                     {customerGstin || 'Not registered'}
                   </Text>
@@ -287,7 +297,7 @@ export default function CustomerDetailScreen() {
                   <Text style={[styles.invoiceNumber, { color: colors.text }]}>
                     {inv.invoice_number || 'Draft'}
                   </Text>
-                  <Text style={[styles.invoiceDate, { color: colors.textDim }]}>
+                  <Text style={[styles.invoiceDate, { color: colors.textMuted }]}>
                     {formatDate(inv.invoice_date || inv.created_at || '')}
                   </Text>
                 </View>

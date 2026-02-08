@@ -1,28 +1,45 @@
 "use client"
 
-import type { IItem } from "@/types"
+import type { IItem, IBarcodePrintLog } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Edit, Plus, Barcode, AlertTriangle } from "lucide-react"
+import { Edit, Plus, Barcode, AlertTriangle, Printer } from "lucide-react"
 import Link from "next/link"
 import { ItemForm } from "@/components/items/item-form"
 import { AddStockDialog } from "@/components/items/add-stock-dialog"
 import { DeleteItemButton } from "@/components/items/delete-item-button"
 import { StockBadge } from "@/components/items/stock-badge"
 import { getStockStatus } from "@/lib/stock-utils"
+import { formatRelativeDate } from "@/lib/date-utils"
 
 interface ItemDesktopRowProps {
   item: IItem
   godowns: Array<{ id: string; name: string }>
+  lastPrint?: IBarcodePrintLog
+  selected?: boolean
+  onSelectChange?: (id: string) => void
 }
 
-export function ItemDesktopRow({ item, godowns }: ItemDesktopRowProps) {
+export function ItemDesktopRow({ item, godowns, lastPrint, selected, onSelectChange }: ItemDesktopRowProps) {
   const stockStatus = getStockStatus(item)
 
   return (
-    <TableRow>
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      className={selected ? "bg-muted/50" : undefined}
+    >
+      {onSelectChange && (
+        <TableCell className="pl-4">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onSelectChange(item.id)}
+            aria-label={`Select ${item.name}`}
+          />
+        </TableCell>
+      )}
       {/* Item Name */}
       <TableCell className="max-w-[11.25rem]">
         <Tooltip>
@@ -146,9 +163,32 @@ export function ItemDesktopRow({ item, godowns }: ItemDesktopRowProps) {
             }
           />
           <Link href={`/items/barcode/${item.id}`}>
-            <Button variant="ghost" size="icon" className="h-7 w-7" title="Print Barcode">
-              <Barcode className="w-3.5 h-3.5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 relative ${lastPrint ? "text-green-600 hover:text-green-700" : ""}`}
+                  title="Print Barcode"
+                >
+                  <Barcode className="w-3.5 h-3.5" />
+                  {lastPrint && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-500" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {lastPrint && (
+                <TooltipContent side="top" className="text-xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1">
+                      <Printer className="w-3 h-3" />
+                      Last printed: {formatRelativeDate(lastPrint.printedAt)}
+                    </div>
+                    <p>{lastPrint.labelsPrinted} labels ({lastPrint.printType})</p>
+                  </div>
+                </TooltipContent>
+              )}
+            </Tooltip>
           </Link>
           <ItemForm
             item={item}

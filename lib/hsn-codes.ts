@@ -77,47 +77,75 @@ export function getChapterGstRate(code: string): number {
   return CHAPTER_GST_RATES[chapter] ?? 18
 }
 
-// Search HSN codes by query (code or description)
+// Search HSN codes by query (code or description) with indexed approach
 export function searchHSNCodes(query: string, limit: number = 50): HSNCode[] {
-  if (!query || query.length < 2) return []
-  
   const searchTerm = query.toLowerCase().trim()
-  
-  // First, find exact code matches
-  const exactMatches = HSN_CODES.filter(hsn => 
-    hsn.code.toLowerCase() === searchTerm
-  )
-  
-  // Then find codes that start with the query
-  const startsWithMatches = HSN_CODES.filter(hsn => 
-    hsn.code.toLowerCase().startsWith(searchTerm) &&
-    !exactMatches.includes(hsn)
-  )
-  
-  // Then find codes that contain the query
-  const containsCodeMatches = HSN_CODES.filter(hsn =>
-    hsn.code.toLowerCase().includes(searchTerm) &&
-    !exactMatches.includes(hsn) &&
-    !startsWithMatches.includes(hsn)
-  )
-  
-  // Then find description matches
-  const descriptionMatches = HSN_CODES.filter(hsn =>
-    hsn.description.toLowerCase().includes(searchTerm) &&
-    !exactMatches.includes(hsn) &&
-    !startsWithMatches.includes(hsn) &&
-    !containsCodeMatches.includes(hsn)
-  )
-  
-  // Combine results with priority
-  const results = [
-    ...exactMatches,
-    ...startsWithMatches,
-    ...containsCodeMatches,
-    ...descriptionMatches
-  ]
-  
-  return results.slice(0, limit)
+
+  if (!searchTerm) {
+    return HSN_CODES.filter(h => h.code.length <= 4).slice(0, limit)
+  }
+
+  if (searchTerm.length < 2) {
+    return HSN_CODES.filter(h => h.code.startsWith(searchTerm)).slice(0, limit)
+  }
+
+  const isNumeric = /^\d+$/.test(searchTerm)
+  const results: HSNCode[] = []
+  const seen = new Set<string>()
+
+  const add = (h: HSNCode) => {
+    if (!seen.has(h.code)) {
+      seen.add(h.code)
+      results.push(h)
+    }
+  }
+
+  if (isNumeric) {
+    for (const h of HSN_CODES) {
+      if (h.code === searchTerm) add(h)
+      if (results.length >= limit) return results
+    }
+    for (const h of HSN_CODES) {
+      if (h.code.startsWith(searchTerm)) add(h)
+      if (results.length >= limit) return results
+    }
+    for (const h of HSN_CODES) {
+      if (h.code.includes(searchTerm)) add(h)
+      if (results.length >= limit) return results
+    }
+  } else {
+    const words = searchTerm.split(/\s+/).filter(w => w.length >= 2)
+    if (words.length === 0) return results
+
+    const scored: Array<{ hsn: HSNCode; score: number }> = []
+
+    for (const h of HSN_CODES) {
+      const desc = h.description.toLowerCase()
+      const cat = (h.category || "").toLowerCase()
+      const allMatch = words.every(w => desc.includes(w) || cat.includes(w))
+      if (!allMatch) continue
+
+      let score = 0
+      if (desc.startsWith(words[0])) score += 100
+      if (desc === searchTerm) score += 200
+      for (const w of words) {
+        const idx = desc.indexOf(w)
+        if (idx === 0) score += 50
+        else if (idx > 0) score += 20
+        if (cat.includes(w)) score += 10
+      }
+      score += Math.max(0, 20 - h.code.length)
+      scored.push({ hsn: h, score })
+    }
+
+    scored.sort((a, b) => b.score - a.score)
+    for (const s of scored) {
+      add(s.hsn)
+      if (results.length >= limit) break
+    }
+  }
+
+  return results
 }
 
 // Get all unique categories
@@ -151,33 +179,5 @@ export function getAllChapters(): { code: string; category: string; gstRate: num
 
 // Search with smart matching (handles partial codes and descriptions)
 export function smartSearchHSN(query: string, limit: number = 30): HSNCode[] {
-  if (!query || query.length < 2) return []
-  
-  const searchTerm = query.toLowerCase().trim()
-  const words = searchTerm.split(/\s+/).filter(w => w.length >= 2)
-  
-  // If it looks like an HSN code (numeric), prioritize code search
-  if (/^\d+$/.test(searchTerm)) {
-    return searchHSNCodes(searchTerm, limit)
-  }
-  
-  // For text searches, find items where all words appear in description
-  const matches = HSN_CODES.filter(hsn => {
-    const desc = hsn.description.toLowerCase()
-    return words.every(word => desc.includes(word))
-  })
-  
-  // Sort by relevance (shorter codes = more general = show first for browsing)
-  matches.sort((a, b) => {
-    // Prefer items where the search appears at the start
-    const aStartsWithWord = words.some(w => a.description.toLowerCase().startsWith(w))
-    const bStartsWithWord = words.some(w => b.description.toLowerCase().startsWith(w))
-    if (aStartsWithWord && !bStartsWithWord) return -1
-    if (!aStartsWithWord && bStartsWithWord) return 1
-    
-    // Then sort by code length (4-digit codes before 8-digit codes)
-    return a.code.length - b.code.length
-  })
-  
-  return matches.slice(0, limit)
+  return searchHSNCodes(query, limit)
 }

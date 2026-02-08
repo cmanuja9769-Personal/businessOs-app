@@ -11,12 +11,14 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: orgData } = await supabase
+    const { data: orgRows } = await supabase
       .from('app_user_organizations')
       .select('organization_id')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .maybeSingle()
+      .limit(1)
+
+    const orgData = orgRows?.[0]
 
     if (!orgData?.organization_id) {
       return NextResponse.json({ error: 'No organization found' }, { status: 400 })
@@ -42,12 +44,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: orgData } = await supabase
+    const { data: orgRows } = await supabase
       .from('app_user_organizations')
       .select('organization_id')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .maybeSingle()
+      .limit(1)
+
+    const orgData = orgRows?.[0]
 
     if (!orgData?.organization_id) {
       return NextResponse.json({ error: 'No organization found' }, { status: 400 })
@@ -84,12 +88,20 @@ export async function POST(request: NextRequest) {
 
     // Use the new modifyStockWithLedger function for atomic operations
     const { modifyStockWithLedger } = await import('@/app/items/actions')
+
+    // Look up the item's actual unit
+    const { data: itemDetails } = await supabase
+      .from('items')
+      .select('unit, packaging_unit')
+      .eq('id', itemId)
+      .single()
+    const entryUnit = itemDetails?.packaging_unit || itemDetails?.unit || 'PCS'
     
     const result = await modifyStockWithLedger(
       itemId,
       targetWarehouseId,
       Number(quantity),
-      'CTN', // Default to CTN, can be enhanced to accept from request
+      entryUnit,
       adjustmentType === 'increase' ? 'ADD' : 'REDUCE',
       reason,
       notes
@@ -99,7 +111,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    // Also create adjustment record for backward compatibility (optional)
+    // Create adjustment record with "approved" status since stock is already modified
     const adjustmentResult = await createAdjustment(
       orgData.organization_id,
       {

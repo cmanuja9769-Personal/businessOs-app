@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Info, Download, Printer } from "lucide-react";
+import { ArrowLeft, Loader2, Info, Download, Printer, Package } from "lucide-react";
 import Link from "next/link";
 import { BarcodeDisplay } from "@/components/items/barcode-display";
-import { getItems, assignBarcodeToItem } from "@/app/items/actions";
+import { getItemById, assignBarcodeToItem } from "@/app/items/actions";
 import type { IItem } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LABEL_LAYOUTS, getLayoutById, calculateSheetsNeeded, calculateWastedLabels } from "@/lib/label-layouts";
@@ -17,6 +17,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { translateToHindi } from "@/lib/translate";
 import { pdf } from "@react-pdf/renderer";
 import { BarcodePDFDocument } from "@/components/pdf/barcode-pdf-document";
+import { BarcodeQueueModal } from "@/components/items/barcode-queue-modal";
+import { useBarcodeQueueStore } from "@/store/use-barcode-queue-store";
+import { logBarcodePrint } from "@/app/barcode-logs/actions";
 
 export default function BarcodePage({
   params,
@@ -36,8 +39,11 @@ export default function BarcodePage({
   const [isAssigning, setIsAssigning] = useState(false);
   
   const selectedLayout = getLayoutById(layoutId);
-  const sheetsNeeded = calculateSheetsNeeded(quantity, selectedLayout);
-  const wastedLabels = calculateWastedLabels(quantity, selectedLayout);
+  const sheetsNeeded = calculateSheetsNeeded(quantity, selectedLayout, startPosition);
+  const wastedLabels = calculateWastedLabels(quantity, selectedLayout, startPosition);
+
+  const openQueueModal = useBarcodeQueueStore((s) => s.openModal);
+  const addToQueue = useBarcodeQueueStore((s) => s.addToQueue);
 
   useEffect(() => {
     params.then((p) => setId(p.id));
@@ -48,10 +54,8 @@ export default function BarcodePage({
 
     async function loadItem() {
       try {
-        const items = await getItems();
-        let foundItem = items.find((i) => i.id === id) || null;
+        let foundItem = await getItemById(id);
 
-        // If item exists and barcode is missing, assign one server-side
         if (foundItem && (!foundItem.barcodeNo || String(foundItem.barcodeNo).trim() === "")) {
           setIsAssigning(true);
           try {
@@ -126,6 +130,16 @@ export default function BarcodePage({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+
+      await logBarcodePrint([{
+        itemId: item.id,
+        itemName: item.name,
+        barcodeNo: item.barcodeNo ?? null,
+        stockAtPrint: item.stock ?? 0,
+        labelsPrinted: quantity,
+        printType: "individual",
+        layoutId,
+      }]);
     } catch (error) {
       console.error("PDF generation failed:", error);
     } finally {
@@ -151,6 +165,17 @@ export default function BarcodePage({
       
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      await logBarcodePrint([{
+        itemId: item.id,
+        itemName: item.name,
+        barcodeNo: item.barcodeNo ?? null,
+        stockAtPrint: item.stock ?? 0,
+        labelsPrinted: quantity,
+        printType: "individual",
+        layoutId,
+      }]);
     } catch (error) {
       console.error("PDF print failed:", error);
     } finally {
@@ -204,6 +229,19 @@ export default function BarcodePage({
         
         {/* Action Buttons - Full width on mobile */}
         <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (item) {
+                addToQueue({ item, quantity, hindiName });
+                openQueueModal();
+              }
+            }}
+            className="flex-1 sm:flex-initial text-xs sm:text-sm h-9 sm:h-10"
+          >
+            <Package className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+            Batch Print
+          </Button>
           <Button 
             onClick={handleDownloadPDF} 
             disabled={isGenerating}
@@ -403,6 +441,8 @@ export default function BarcodePage({
           hindiName={hindiName}
         />
       </div>
+
+      <BarcodeQueueModal />
     </div>
   );
 }

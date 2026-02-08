@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "node": "20.18.0",
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://rfolqjrbnbiiknstlyqe.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmb2xxanJibmJpaWtuc3RseXFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMzgyMDIsImV4cCI6MjA4NTcxNDIwMn0.-kQ2mp8SN8BGAm4PONP1fVvETwpS8i-QCYr2YVDndqw"
@@ -14,6 +15,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "node": "20.18.0",
       "android": {
         "buildType": "apk"
       },
@@ -23,6 +25,7 @@
       }
     },
     "production": {
+      "node": "20.18.0",
       "android": {
         "buildType": "app-bundle"
       },

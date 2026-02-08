@@ -1,139 +1,111 @@
-// Inventory Dashboard
-
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { GodownsManager } from "@/components/inventory/godowns-manager"
 import { StockAdjustmentForm } from "@/components/inventory/stock-adjustment-form"
-import { AlertCircle, Package, TrendingDown, Warehouse } from "lucide-react"
+import { WarehouseListManager } from "@/components/inventory/warehouse-list-manager"
+import { StockTransferManager } from "@/components/inventory/stock-transfer-manager"
+import { WarehouseDashboard } from "@/components/inventory/warehouse-dashboard"
+
+type AdjustmentRecord = {
+  id: string
+  adjustment_type: string
+  quantity: number
+  reason: string
+  status: string
+  created_at: string
+  items?: { name: string }
+}
+
+type ItemRecord = { id: string; name: string; current_stock: number; warehouse_id?: string; unit?: string }
+
+const TABS = ["dashboard", "warehouses", "transfers", "adjustments", "movements"] as const
+type TabValue = (typeof TABS)[number]
 
 export default function InventoryPage() {
-  const [stats, setStats] = useState({
-    totalItems: 0,
-    lowStockItems: 0,
-    expiringBatches: 0,
-    totalStockValue: 0,
-  })
-  const [items, setItems] = useState<Array<{ id: string; name: string; current_stock: number }>>([])
-  const [adjustments, setAdjustments] = useState<any[]>([])
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tabParam = searchParams.get("tab")
+  const activeTab: TabValue = TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : "dashboard"
 
-  const fetchItems = async () => {
+  const [items, setItems] = useState<ItemRecord[]>([])
+  const [adjustments, setAdjustments] = useState<AdjustmentRecord[]>([])
+
+  const fetchItems = useCallback(async () => {
     try {
-      const response = await fetch('/api/items?limit=1000')
-      if (response.ok) {
-        const data = await response.json()
-        setItems(data.items || [])
+      const response = await fetch("/api/items")
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        console.error("Items API error:", response.status, err)
+        return
       }
-    } catch (error) {
-      console.error('Error fetching items:', error)
+      const data = await response.json()
+      const itemsList = Array.isArray(data) ? data : (data.items || [])
+      setItems(itemsList)
+    } catch (err) {
+      console.error("Items fetch error:", err)
+      toast.error("Failed to load items")
     }
-  }
+  }, [])
 
-  const fetchAdjustments = async () => {
+  const fetchAdjustments = useCallback(async () => {
     try {
-      const response = await fetch('/api/inventory/adjustments')
+      const response = await fetch("/api/inventory/adjustments")
       if (response.ok) {
         const data = await response.json()
         setAdjustments(data.data || [])
       }
-    } catch (error) {
-      console.error('Error fetching adjustments:', error)
+    } catch {
+      toast.error("Failed to load adjustments")
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchItems()
-    fetchAdjustments()
-  }, [])
+    void fetchItems()
+    void fetchAdjustments()
+  }, [fetchItems, fetchAdjustments])
+
+  const handleTabChange = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === "dashboard") {
+      params.delete("tab")
+    } else {
+      params.set("tab", value)
+    }
+    router.replace(`/inventory?${params.toString()}`)
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold">Inventory Management</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Track stock, batches, serials, and adjustments</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Inventory & Warehouses</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
+          Manage warehouses, stock transfers, adjustments, and movement history
+        </p>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalItems}</div>
-            <p className="text-xs text-muted-foreground">items in catalog</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
-            <AlertCircle className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.lowStockItems}</div>
-            <p className="text-xs text-muted-foreground">below minimum level</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.expiringBatches}</div>
-            <p className="text-xs text-muted-foreground">within 30 days</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Value</CardTitle>
-            <Warehouse className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{stats.totalStockValue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">total inventory value</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Inventory Tabs */}
-      <Tabs defaultValue="batches" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="batches">Batch Tracking</TabsTrigger>
-          <TabsTrigger value="serials">Serial Numbers</TabsTrigger>
-          <TabsTrigger value="adjustments">Stock Adjustments</TabsTrigger>
-          <TabsTrigger value="movements">Stock Movements</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+        <TabsList className="flex flex-wrap">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+          <TabsTrigger value="transfers">Stock Transfers</TabsTrigger>
+          <TabsTrigger value="adjustments">Adjustments</TabsTrigger>
+          <TabsTrigger value="movements">Movements</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="batches">
-          <Card>
-            <CardHeader>
-              <CardTitle>Batch Tracking</CardTitle>
-              <CardDescription>Manage product batches with expiry dates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Batch tracking components will be added here</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="dashboard">
+          <WarehouseDashboard />
         </TabsContent>
 
-        <TabsContent value="serials">
-          <Card>
-            <CardHeader>
-              <CardTitle>Serial Number Tracking</CardTitle>
-              <CardDescription>Track individual units by serial number</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Serial tracking components will be added here</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="warehouses">
+          <WarehouseListManager />
+        </TabsContent>
+
+        <TabsContent value="transfers">
+          <StockTransferManager />
         </TabsContent>
 
         <TabsContent value="adjustments">
@@ -147,19 +119,26 @@ export default function InventoryPage() {
             </CardHeader>
             <CardContent>
               {adjustments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No adjustments yet. Create your first adjustment above.</p>
+                <p className="text-sm text-muted-foreground">
+                  No adjustments yet. Create your first adjustment above.
+                </p>
               ) : (
                 <div className="space-y-2">
-                  {adjustments.map((adj: any) => (
+                  {adjustments.map((adj) => (
                     <div key={adj.id} className="flex justify-between items-center p-3 border rounded-lg">
                       <div>
                         <p className="font-medium">{adj.items?.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {adj.adjustment_type === 'increase' ? '+' : '-'}{adj.quantity} - {adj.reason}
+                          {adj.adjustment_type === "increase" ? "+" : "-"}
+                          {adj.quantity} - {adj.reason}
                         </p>
-                        <p className="text-xs text-muted-foreground">{new Date(adj.created_at).toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(adj.created_at).toLocaleString()}
+                        </p>
                       </div>
-                      <span className={`text-sm font-medium ${adj.status === 'approved' ? 'text-green-600' : 'text-yellow-600'}`}>
+                      <span
+                        className={`text-sm font-medium ${adj.status === "approved" ? "text-green-600" : "text-yellow-600"}`}
+                      >
                         {adj.status}
                       </span>
                     </div>
@@ -179,18 +158,6 @@ export default function InventoryPage() {
             <CardContent>
               <p className="text-sm text-muted-foreground">Movement history will be displayed here</p>
             </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="warehouses">
-          <Card>
-            <CardHeader>
-              <CardTitle>Warehouse Management</CardTitle>
-              <CardDescription>Manage multiple warehouse locations</CardDescription>
-            </CardHeader>
-              <CardContent>
-                <GodownsManager />
-              </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

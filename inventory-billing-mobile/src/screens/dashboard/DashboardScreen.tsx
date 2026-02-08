@@ -272,10 +272,15 @@ export default function DashboardScreen() {
     totalCustomers: 0,
   });
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
+  const cancelledRef = useRef(false);
+  const fetchDashboardDataRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
+    cancelledRef.current = false;
     fetchDashboardData();
     fetchOrganizationName();
+    return () => { cancelledRef.current = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId]);
 
   const fetchOrganizationName = async () => {
@@ -298,6 +303,8 @@ export default function DashboardScreen() {
           .single();
         data = result.data;
       }
+
+      if (cancelledRef.current) return;
 
       if (data?.name) {
         setOrganizationName(data.name);
@@ -334,6 +341,8 @@ export default function DashboardScreen() {
         .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
 
+      if (cancelledRef.current) return;
+
       if (!invoiceError && invoices) {
         const totalInvoices = invoices.length;
         const pendingInvoices = invoices.filter(
@@ -352,8 +361,10 @@ export default function DashboardScreen() {
           totalRevenue,
         }));
         
-        // Set recent invoices (top 5)
-        setRecentInvoices(invoices.slice(0, 5) as RecentInvoice[]);
+        setRecentInvoices(invoices.slice(0, 5).map((inv) => ({
+          ...inv,
+          customer: Array.isArray(inv.customer) ? inv.customer[0] : inv.customer,
+        })) as RecentInvoice[]);
       }
 
       // Fetch low stock items
@@ -379,15 +390,19 @@ export default function DashboardScreen() {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!cancelledRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
+  fetchDashboardDataRef.current = fetchDashboardData;
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchDashboardData();
-  }, [organizationId]);
+    fetchDashboardDataRef.current?.();
+  }, []);
 
   const getGreeting = () => {
     const hour = new Date().getHours();

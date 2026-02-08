@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +19,12 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
+import Input from '@components/ui/Input';
+import OfflineBanner from '@components/ui/OfflineBanner';
+import ListFooterLoader from '@components/ui/ListFooterLoader';
+import { usePaginatedSearch } from '@hooks/usePaginatedSearch';
 import { supabase } from '@lib/supabase';
+import { spacing, fontSize } from '@theme/spacing';
 
 interface Supplier {
   id: string;
@@ -34,66 +40,37 @@ export default function SuppliersScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, [organizationId]);
+  const {
+    items: suppliers,
+    searchQuery,
+    setSearchQuery,
+    status,
+    error,
+    isOffline,
+    hasMore,
+    totalCount,
+    isLoadingMore,
+    loadMore,
+    refresh,
+    isRefreshing,
+  } = usePaginatedSearch<Supplier>({
+    table: 'suppliers',
+    organizationId,
+    searchColumns: ['name', 'email', 'phone', 'gst_number'],
+    orderBy: 'name',
+    ascending: true,
+  });
 
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = suppliers.filter(
-        (supplier) =>
-          supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          supplier.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          supplier.phone?.includes(searchQuery)
-      );
-      setFilteredSuppliers(filtered);
-    } else {
-      setFilteredSuppliers(suppliers);
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && status !== 'loading') {
+      loadMore();
     }
-  }, [searchQuery, suppliers]);
+  }, [hasMore, isLoadingMore, status, loadMore]);
 
-  const fetchSuppliers = async () => {
-    try {
-      console.log('[SUPPLIERS] Fetching suppliers for org:', organizationId);
-      if (!organizationId) {
-        console.warn('[SUPPLIERS] No organizationId available');
-        setSuppliers([]);
-        setFilteredSuppliers([]);
-        return;
-      }
+  const confirmDeleteRef = useRef<(supplier: Supplier) => void>(() => {});
 
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .order('name');
-
-      console.log('[SUPPLIERS] Query result:', { count: data?.length, error });
-
-      if (error) throw error;
-      setSuppliers(data || []);
-      setFilteredSuppliers(data || []);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      Alert.alert('Error', 'Failed to fetch suppliers');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchSuppliers();
-  }, [organizationId]);
-
-  const confirmDelete = (supplier: Supplier) => {
+  const confirmDelete = useCallback((supplier: Supplier) => {
     if (!organizationId) return;
     Alert.alert(
       'Delete Supplier',
@@ -105,13 +82,13 @@ export default function SuppliersScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase
+              const { error: delError } = await supabase
                 .from('suppliers')
                 .delete()
                 .eq('organization_id', organizationId)
                 .eq('id', supplier.id);
-              if (error) throw error;
-              fetchSuppliers();
+              if (delError) throw delError;
+              refresh();
             } catch (e: any) {
               Alert.alert('Error', e.message || 'Failed to delete supplier');
             }
@@ -119,7 +96,9 @@ export default function SuppliersScreen() {
         },
       ]
     );
-  };
+  }, [organizationId, refresh]);
+
+  confirmDeleteRef.current = confirmDelete;
 
   const getInitials = (name: string) => {
     return name
@@ -130,7 +109,7 @@ export default function SuppliersScreen() {
       .slice(0, 2);
   };
 
-  const renderItem = ({ item, index }: { item: Supplier; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: Supplier; index: number }) => {
     const gradientColors: [string, string][] = [
       ['#4F46E5', '#6366F1'],
       ['#059669', '#10B981'],
@@ -148,7 +127,7 @@ export default function SuppliersScreen() {
             { text: 'Cancel', style: 'cancel' },
             { text: 'View', onPress: () => navigation.navigate('SupplierDetail', { supplierId: item.id }) },
             { text: 'Edit', onPress: () => navigation.navigate('AddSupplier', { supplierId: item.id }) },
-            { text: 'Delete', style: 'destructive', onPress: () => confirmDelete(item) },
+            { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteRef.current(item) },
           ])
         }
         activeOpacity={0.7}
@@ -163,12 +142,12 @@ export default function SuppliersScreen() {
           >
             <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
           </LinearGradient>
-          
+
           <View style={styles.supplierInfo}>
-            <Text style={[styles.supplierName, { color: colors.text }]} numberOfLines={1}>
+            <Text style={[styles.supplierName, { color: colors.text }]} numberOfLines={2}>
               {item.name}
             </Text>
-            
+
             {item.email && (
               <View style={styles.detailRow}>
                 <Ionicons name="mail-outline" size={14} color={colors.textTertiary} />
@@ -177,7 +156,7 @@ export default function SuppliersScreen() {
                 </Text>
               </View>
             )}
-            
+
             {item.phone && (
               <View style={styles.detailRow}>
                 <Ionicons name="call-outline" size={14} color={colors.textTertiary} />
@@ -186,7 +165,7 @@ export default function SuppliersScreen() {
                 </Text>
               </View>
             )}
-            
+
             {(item.gst_number || item.gstin) && (
               <View style={[styles.gstBadge, { backgroundColor: colors.primaryLight }]}>
                 <Text style={[styles.gstText, { color: colors.primary }]}>
@@ -195,79 +174,120 @@ export default function SuppliersScreen() {
               </View>
             )}
           </View>
-          
+
           <View style={styles.chevronContainer}>
             <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
           </View>
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [colors, shadows, navigation]);
 
-  if (loading) {
-    return <Loading fullScreen />;
+  const renderListFooter = useCallback(() => (
+    <ListFooterLoader
+      isLoading={isLoadingMore}
+      hasMore={hasMore}
+      itemCount={suppliers.length}
+      totalCount={totalCount}
+    />
+  ), [isLoadingMore, hasMore, suppliers.length, totalCount]);
+
+  const renderEmptyState = useCallback(() => {
+    if (status === 'loading') return null;
+
+    if (status === 'error' && error) {
+      return (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          description={error}
+          actionText="Try Again"
+          onAction={refresh}
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon="business-outline"
+        title={searchQuery ? 'No suppliers found' : 'No suppliers yet'}
+        description={searchQuery ? 'Try a different search term' : 'Add your first supplier to get started'}
+        actionText={!searchQuery ? 'Add Supplier' : undefined}
+        onAction={!searchQuery ? () => navigation.navigate('AddSupplier', {}) : undefined}
+      />
+    );
+  }, [status, error, searchQuery, refresh, navigation]);
+
+  if (status === 'loading' && suppliers.length === 0 && !searchQuery) {
+    return <Loading fullScreen text="Loading suppliers..." />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar 
-        barStyle={isDark ? 'light-content' : 'dark-content'} 
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
       />
-      
-      {/* Search Header */}
+
+      {isOffline && <OfflineBanner onRetry={refresh} />}
+
       <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-        <View style={[styles.searchBox, { backgroundColor: colors.card, ...shadows.xs }]}>
-          <Ionicons name="search" size={20} color={colors.textTertiary} />
-          <TextInput
-            placeholder="Search suppliers..."
-            placeholderTextColor={colors.textTertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={[styles.searchInput, { color: colors.text }]}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
-            </TouchableOpacity>
-          )}
-        </View>
-        
-        {/* Results Count */}
-        <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
-          {filteredSuppliers.length} supplier{filteredSuppliers.length !== 1 ? 's' : ''}
-        </Text>
+        <Input
+          placeholder="Search suppliers..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          leftIcon="search"
+          containerStyle={styles.searchInputContainer}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {status === 'loading' && suppliers.length > 0 && (
+          <View style={styles.searchIndicator}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+
+        {totalCount > 0 && (
+          <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
+            {searchQuery
+              ? `${suppliers.length} result${suppliers.length !== 1 ? 's' : ''}`
+              : `${totalCount} supplier${totalCount !== 1 ? 's' : ''}`}
+          </Text>
+        )}
       </View>
-      
+
       <FlatList
-        data={filteredSuppliers}
+        data={suppliers}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          suppliers.length === 0 && styles.listContentEmpty,
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
         }
-        ListEmptyComponent={
-          <EmptyState
-            icon="business-outline"
-            title="No suppliers found"
-            description={searchQuery ? 'Try a different search term' : 'Add your first supplier to get started'}
-            actionText={!searchQuery ? 'Add Supplier' : undefined}
-            onAction={!searchQuery ? () => navigation.navigate('AddSupplier', {}) : undefined}
-          />
-        }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderListFooter}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={15}
+        windowSize={10}
+        initialNumToRender={15}
+        keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
       />
 
-      {/* Floating Action Button */}
       <TouchableOpacity
-        style={[styles.fab]}
+        style={styles.fab}
         onPress={() => navigation.navigate('AddSupplier', {})}
         activeOpacity={0.9}
       >
@@ -284,9 +304,6 @@ export default function SuppliersScreen() {
   );
 }
 
-// Import TextInput
-import { TextInput } from 'react-native';
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -295,29 +312,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 12 : 8,
     paddingBottom: 12,
+    position: 'relative',
   },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    marginBottom: 10,
+  searchInputContainer: {
+    marginBottom: 0,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    marginLeft: 10,
-    marginRight: 10,
-    padding: 0,
+  searchIndicator: {
+    position: 'absolute',
+    right: 32,
+    top: Platform.OS === 'android' ? 24 : 20,
   },
   resultsText: {
     fontSize: 13,
     fontWeight: '500',
+    marginTop: 8,
   },
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
   },
   supplierCard: {
     borderRadius: 16,
@@ -348,6 +363,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
     letterSpacing: -0.2,
+    lineHeight: 22,
   },
   detailRow: {
     flexDirection: 'row',

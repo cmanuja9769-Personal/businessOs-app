@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,42 +42,68 @@ export default function StockDetailPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [warehouseFilter, setWarehouseFilter] = useState("all")
 
-  useEffect(() => {
-    fetchStockMovements()
-  }, [dateFrom, dateTo, warehouseFilter])
-
-  const fetchStockMovements = async () => {
+  const fetchStockMovements = useCallback(async () => {
     setLoading(true)
     try {
-      // Fetch items and calculate stock movements
       const response = await fetch('/api/items')
       if (!response.ok) throw new Error('Failed to fetch')
-      
-      const items = await response.json()
-      
-      // Mock movement calculation - replace with actual API
-      const mockMovements: StockMovement[] = items.map((item: any) => ({
-        id: item.id,
-        itemId: item.id,
-        itemName: item.name,
-        sku: item.sku || '-',
-        openingQty: Math.floor(Math.random() * 50) + 10,
-        inwardQty: Math.floor(Math.random() * 30),
-        outwardQty: Math.floor(Math.random() * 25),
-        closingQty: 0,
-        unit: item.unit || 'pcs'
-      })).map((m: StockMovement) => ({
-        ...m,
-        closingQty: m.openingQty + m.inwardQty - m.outwardQty
-      }))
-      
-      setMovements(mockMovements)
+
+      const allItems = await response.json()
+      if (!Array.isArray(allItems) || allItems.length === 0) {
+        setMovements([])
+        return
+      }
+
+      const ledgerRes = await fetch(
+        `/api/reports/stock?dateFrom=${dateFrom}&dateTo=${dateTo}` +
+        (warehouseFilter !== "all" ? `&warehouseIds=${warehouseFilter}` : "")
+      )
+
+      let ledgerMap: Record<string, { inward: number; outward: number }> = {}
+      if (ledgerRes.ok) {
+        const report = await ledgerRes.json()
+        if (Array.isArray(report.data)) {
+          for (const row of report.data) {
+            ledgerMap[row.itemId] = {
+              inward: row.totalIn ?? 0,
+              outward: row.totalOut ?? 0,
+            }
+          }
+        }
+      }
+
+      const rows: StockMovement[] = allItems.map((item: Record<string, unknown>) => {
+        const currentStock = Number(item.current_stock) || 0
+        const ledger = ledgerMap[item.id as string]
+        const inward = ledger?.inward ?? 0
+        const outward = ledger?.outward ?? 0
+        const opening = currentStock - inward + outward
+
+        return {
+          id: item.id as string,
+          itemId: item.id as string,
+          itemName: (item.name as string) || "",
+          sku: (item.item_code as string) || "-",
+          openingQty: Math.max(opening, 0),
+          inwardQty: inward,
+          outwardQty: outward,
+          closingQty: currentStock,
+          unit: (item.unit as string) || "pcs",
+        }
+      })
+
+      setMovements(rows)
     } catch (error) {
       console.error('Failed to fetch stock movements:', error)
+      setMovements([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [dateFrom, dateTo, warehouseFilter])
+
+  useEffect(() => {
+    void fetchStockMovements()
+  }, [fetchStockMovements])
 
   const filteredMovements = movements.filter(m => {
     const searchMatch = m.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||

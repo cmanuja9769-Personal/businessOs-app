@@ -8,6 +8,10 @@ node_modules/
 dist/
 web-build/
 
+# Native - managed by Prebuild / CNG
+/android
+/ios
+
 # Native
 *.orig.*
 *.jks

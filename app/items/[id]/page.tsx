@@ -1,5 +1,5 @@
 import { getItemById, getItemStockDistribution, getItemStockLedger, getItemInvoiceUsage } from "../actions"
-import { getGodowns } from "@/app/godowns/actions"
+import { getWarehouses } from "@/app/godowns/actions"
 import { notFound } from "next/navigation"
 import { ItemDetailsClient } from "@/components/items/item-details-client"
 
@@ -12,7 +12,7 @@ export default async function ItemDetailsPage({ params }: ItemDetailsPageProps) 
   
   const [item, godowns, stockDistribution, stockLedger, invoiceUsage] = await Promise.all([
     getItemById(id),
-    getGodowns(),
+    getWarehouses(),
     getItemStockDistribution(id),
     getItemStockLedger(id),
     getItemInvoiceUsage(id),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StatusBar,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,10 +18,13 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
+import Input from '@components/ui/Input';
+import OfflineBanner from '@components/ui/OfflineBanner';
+import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
+import { NetworkService } from '@services/network';
 
-// Document types matching web app
 type DocumentType = 'invoice' | 'sales_order' | 'quotation' | 'proforma' | 'delivery_challan' | 'credit_note' | 'debit_note';
 
 interface DocumentTypeConfig {
@@ -50,46 +54,166 @@ interface Invoice {
   document_type?: string;
 }
 
+const PAGE_SIZE = 50;
+const DEBOUNCE_MS = 300;
+
 export default function InvoiceListScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
   const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectedType, setSelectedType] = useState<DocumentType | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [isOffline, setIsOffline] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchInvoices();
-  }, [organizationId]);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const currentQueryRef = useRef('');
+  const totalCountRef = useRef(0);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async (
+    query: string,
+    docType: DocumentType | 'all',
+    pageNum: number,
+    isRefresh: boolean = false
+  ) => {
+    if (!organizationId) {
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
+
+    const isConnected = await NetworkService.checkConnection();
+    if (!isConnected) {
+      setIsOffline(true);
+      setError('You are offline. Please check your internet connection.');
+      setLoading(false);
+      return;
+    }
+    setIsOffline(false);
+
+    const isFirstPage = pageNum === 0;
+    if (isFirstPage && !isRefresh) setLoading(true);
+    if (!isFirstPage) setIsLoadingMore(true);
+
     try {
-      if (!organizationId) {
-        setInvoices([]);
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .order('created_at', { ascending: false });
+      const from = pageNum * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
 
-      if (error) throw error;
-      setInvoices(data || []);
-    } catch (error) {
-      console.error('Error fetching invoices:', error);
+      let countQuery = supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
+
+      let dataQuery = supabase
+        .from('invoices')
+        .select('id, invoice_number, customer_name, total, status, invoice_date, document_type')
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (docType !== 'all') {
+        countQuery = countQuery.eq('document_type', docType);
+        dataQuery = dataQuery.eq('document_type', docType);
+      }
+
+      if (query.trim()) {
+        const searchTerm = `%${query.trim()}%`;
+        countQuery = countQuery.or(
+          `invoice_number.ilike.${searchTerm},customer_name.ilike.${searchTerm}`
+        );
+        dataQuery = dataQuery.or(
+          `invoice_number.ilike.${searchTerm},customer_name.ilike.${searchTerm}`
+        );
+      }
+
+      const [countResult, dataResult] = await Promise.all([
+        isFirstPage ? countQuery : Promise.resolve({ count: totalCountRef.current, error: null }),
+        dataQuery,
+      ]);
+
+      if (currentQueryRef.current !== query) return;
+
+      if (dataResult.error) throw dataResult.error;
+
+      const fetchedItems = (dataResult.data || []) as Invoice[];
+
+      if (isFirstPage) {
+        setInvoices(fetchedItems);
+        if (countResult && 'count' in countResult && countResult.count !== null) {
+          setTotalCount(countResult.count);
+          totalCountRef.current = countResult.count;
+        }
+      } else {
+        setInvoices((prev) => [...prev, ...fetchedItems]);
+      }
+
+      setHasMore(fetchedItems.length === PAGE_SIZE);
+      setPage(pageNum);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load invoices');
     } finally {
       setLoading(false);
-      setRefreshing(false);
+      setIsLoadingMore(false);
+      setIsRefreshing(false);
     }
+  }, [organizationId]);
+
+  useEffect(() => {
+    currentQueryRef.current = searchQuery;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    if (!searchQuery.trim()) {
+      fetchInvoices('', selectedType, 0);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      fetchInvoices(searchQuery, selectedType, 0);
+    }, DEBOUNCE_MS);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [searchQuery, selectedType, fetchInvoices]);
+
+  useEffect(() => {
+    if (organizationId) fetchInvoices('', selectedType, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizationId, fetchInvoices]);
+
+  const handleTypeChange = (type: DocumentType | 'all') => {
+    setSelectedType(type);
+    setPage(0);
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchInvoices();
-  }, [organizationId]);
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && !loading) {
+      fetchInvoices(searchQuery, selectedType, page + 1);
+    }
+  }, [hasMore, isLoadingMore, loading, searchQuery, selectedType, page, fetchInvoices]);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setPage(0);
+    fetchInvoices(searchQuery, selectedType, 0, true);
+  }, [searchQuery, selectedType, fetchInvoices]);
+
+  useEffect(() => {
+    const unsubscribe = NetworkService.subscribeToNetworkChanges((connected) => {
+      setIsOffline(!connected);
+      if (connected && error) fetchInvoices(searchQuery, selectedType, 0);
+    });
+    return () => unsubscribe();
+  }, [searchQuery, selectedType, error, fetchInvoices]);
 
   const getStatusStyle = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -109,14 +233,10 @@ export default function InvoiceListScreen() {
     }
   };
 
-  const filteredInvoices = selectedType === 'all' 
-    ? invoices 
-    : invoices.filter(inv => (inv.document_type || 'invoice') === selectedType);
-
   const renderDocTypeButton = (type: DocumentType | 'all', label: string, icon: keyof typeof Ionicons.glyphMap) => (
     <TouchableOpacity
       key={type}
-      onPress={() => setSelectedType(type)}
+      onPress={() => handleTypeChange(type)}
       style={[
         styles.filterButton,
         {
@@ -126,10 +246,10 @@ export default function InvoiceListScreen() {
       ]}
       activeOpacity={0.7}
     >
-      <Ionicons 
-        name={icon} 
-        size={18} 
-        color={selectedType === type ? '#FFFFFF' : colors.textSecondary} 
+      <Ionicons
+        name={icon}
+        size={18}
+        color={selectedType === type ? '#FFFFFF' : colors.textSecondary}
       />
       <Text style={[
         styles.filterButtonText,
@@ -140,7 +260,7 @@ export default function InvoiceListScreen() {
     </TouchableOpacity>
   );
 
-  const renderInvoiceItem = ({ item, index }: { item: Invoice; index: number }) => {
+  const renderInvoiceItem = useCallback(({ item }: { item: Invoice }) => {
     const docType = (item.document_type || 'invoice') as DocumentType;
     const config = DOCUMENT_TYPES[docType] || DOCUMENT_TYPES.invoice;
     const statusStyle = getStatusStyle(item.status);
@@ -160,7 +280,7 @@ export default function InvoiceListScreen() {
           >
             <Ionicons name={config.icon} size={20} color="#FFFFFF" />
           </LinearGradient>
-          
+
           <View style={styles.invoiceInfo}>
             <View style={styles.invoiceHeader}>
               <Text style={[styles.invoiceNumber, { color: colors.text }]} numberOfLines={1}>
@@ -172,11 +292,11 @@ export default function InvoiceListScreen() {
                 </Text>
               </View>
             </View>
-            
+
             <Text style={[styles.customerName, { color: colors.textSecondary }]} numberOfLines={1}>
               {item.customer_name || 'No customer'}
             </Text>
-            
+
             <View style={styles.invoiceFooter}>
               <Text style={[styles.invoiceDate, { color: colors.textTertiary }]}>
                 {formatDate(item.invoice_date)}
@@ -186,33 +306,92 @@ export default function InvoiceListScreen() {
               </Text>
             </View>
           </View>
-          
+
           <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [colors, shadows, isDark, navigation]);
 
-  if (loading) {
-    return <Loading fullScreen />;
+  const renderListFooter = useCallback(() => (
+    <ListFooterLoader
+      isLoading={isLoadingMore}
+      hasMore={hasMore}
+      itemCount={invoices.length}
+      totalCount={totalCount}
+    />
+  ), [isLoadingMore, hasMore, invoices.length, totalCount]);
+
+  const renderEmptyState = useCallback(() => {
+    if (loading) return null;
+
+    if (error) {
+      return (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          description={error}
+          actionText="Try Again"
+          onAction={handleRefresh}
+        />
+      );
+    }
+
+    return (
+      <EmptyState
+        icon="document-outline"
+        title="No invoices found"
+        description={
+          searchQuery
+            ? `No invoices matching "${searchQuery}"`
+            : selectedType === 'all'
+              ? 'Create your first invoice to get started'
+              : `No ${DOCUMENT_TYPES[selectedType]?.label.toLowerCase()}s yet`
+        }
+        actionText="Create Invoice"
+        onAction={() => navigation.navigate('CreateInvoice', {})}
+      />
+    );
+  }, [loading, error, searchQuery, selectedType, handleRefresh, navigation]);
+
+  if (loading && invoices.length === 0 && !searchQuery) {
+    return <Loading fullScreen text="Loading invoices..." />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar 
-        barStyle={isDark ? 'light-content' : 'dark-content'} 
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
       />
-      
-      {/* Header */}
+
+      {isOffline && <OfflineBanner onRetry={handleRefresh} />}
+
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Invoices</Text>
         <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-          {filteredInvoices.length} {selectedType === 'all' ? 'total' : DOCUMENT_TYPES[selectedType]?.label.toLowerCase() + 's'}
+          {totalCount} {selectedType === 'all' ? 'total' : DOCUMENT_TYPES[selectedType]?.label.toLowerCase() + 's'}
         </Text>
       </View>
 
-      {/* Document Type Filters */}
+      <View style={styles.searchContainer}>
+        <Input
+          placeholder="Search by invoice number or customer..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          leftIcon="search"
+          containerStyle={styles.searchInput}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {loading && invoices.length > 0 && (
+          <View style={styles.searchIndicator}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+      </View>
+
       <View style={styles.filtersContainer}>
         <FlatList
           horizontal
@@ -232,36 +411,35 @@ export default function InvoiceListScreen() {
         />
       </View>
 
-      {/* Invoice List */}
       <FlatList
-        data={filteredInvoices}
+        data={invoices}
         renderItem={renderInvoiceItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          invoices.length === 0 && styles.listContentEmpty,
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh}
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
         }
-        ListEmptyComponent={
-          <EmptyState
-            icon="document-outline"
-            title="No invoices found"
-            description={selectedType === 'all' 
-              ? 'Create your first invoice to get started' 
-              : `No ${DOCUMENT_TYPES[selectedType]?.label.toLowerCase()}s yet`}
-            actionText="Create Invoice"
-            onAction={() => navigation.navigate('CreateInvoice', {})}
-          />
-        }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderListFooter}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={15}
+        windowSize={10}
+        initialNumToRender={15}
+        keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
       />
 
-      {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate('CreateInvoice', {})}
@@ -287,7 +465,7 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   headerTitle: {
     fontSize: 28,
@@ -298,8 +476,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    position: 'relative',
+  },
+  searchInput: {
+    marginBottom: 0,
+  },
+  searchIndicator: {
+    position: 'absolute',
+    right: 32,
+    top: 12,
+  },
   filtersContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   filtersList: {
     paddingHorizontal: 20,
@@ -321,6 +512,9 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
   },
   invoiceCard: {
     borderRadius: 16,

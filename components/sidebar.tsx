@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -24,6 +24,10 @@ import {
   BoxesIcon,
   FileBarChart,
   Wallet,
+  Printer,
+  ArrowLeftRight,
+  ClipboardList,
+  Activity,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
@@ -40,10 +44,18 @@ const navigation = [
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Items", href: "/items", icon: Package },
-  { name: "Inventory", href: "/inventory", icon: Warehouse },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "E-Way Bills", href: "/ewaybills", icon: Truck },
   { name: "Purchases", href: "/purchases", icon: ShoppingCart },
+  { name: "Barcode Logs", href: "/barcode-logs", icon: Printer },
+]
+
+const inventorySubNav = [
+  { name: "Dashboard", href: "/inventory", icon: TrendingUp },
+  { name: "Warehouses", href: "/inventory?tab=warehouses", icon: Warehouse },
+  { name: "Stock Transfers", href: "/inventory?tab=transfers", icon: ArrowLeftRight },
+  { name: "Adjustments", href: "/inventory?tab=adjustments", icon: ClipboardList },
+  { name: "Movements", href: "/inventory?tab=movements", icon: Activity },
 ]
 
 // Reports sub-navigation
@@ -81,9 +93,9 @@ const reportsNavigation = [
     group: "GST/Statutory", 
     icon: FileBarChart,
     items: [
-      { name: "GSTR-1 (Sales)", href: "/reports/gstr1" },
-      { name: "GSTR-2 (Purchase)", href: "/reports/gstr2" },
-      { name: "GSTR-3B Summary", href: "/reports/gstr3b" },
+      { name: "GSTR-1 (Sales)", href: "/reports/gstr-1" },
+      { name: "GSTR-2 (Purchase)", href: "/reports/gstr-2" },
+      { name: "GSTR-3B Summary", href: "/reports/gstr-3b" },
     ]
   },
   { 
@@ -104,8 +116,10 @@ const bottomNavigation = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false)
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/reports"))
+  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"))
   const [expandedGroups, setExpandedGroups] = useState<string[]>(
     pathname.startsWith("/reports") 
       ? reportsNavigation.filter(g => g.items.some(i => pathname === i.href)).map(g => g.group)
@@ -121,6 +135,7 @@ export function Sidebar() {
   }
 
   const isReportsActive = pathname.startsWith("/reports")
+  const isInventoryActive = pathname.startsWith("/inventory")
 
   return (
     <>
@@ -185,6 +200,56 @@ export function Sidebar() {
                 </Link>
               )
             })}
+
+            {/* Inventory Section - Collapsible */}
+            <Collapsible open={inventoryOpen} onOpenChange={setInventoryOpen} suppressHydrationWarning>
+              <CollapsibleTrigger asChild>
+                <button
+                  className={cn(
+                    "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    isInventoryActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                  )}
+                  suppressHydrationWarning
+                >
+                  <div className="flex items-center gap-3">
+                    <BoxesIcon className="w-5 h-5 flex-shrink-0" />
+                    <span className="truncate">Inventory</span>
+                  </div>
+                  {inventoryOpen ? (
+                    <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                  )}
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pl-4 space-y-0.5 mt-1" suppressHydrationWarning>
+                {inventorySubNav.map((item) => {
+                  const currentSearch = searchParams.toString()
+                  const fullPath = currentSearch ? `${pathname}?${currentSearch}` : pathname
+                  const isActive = item.href === "/inventory"
+                    ? pathname === "/inventory" && !searchParams.has("tab")
+                    : fullPath === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setIsOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                        isActive
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                      )}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      <span>{item.name}</span>
+                    </Link>
+                  )
+                })}
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Reports Section - Collapsible */}
             <Collapsible open={reportsOpen} onOpenChange={setReportsOpen} suppressHydrationWarning>

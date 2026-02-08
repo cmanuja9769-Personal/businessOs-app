@@ -141,20 +141,20 @@ const reportGroups = [
     reports: [
       {
         name: "GSTR-1 (Sales)",
-        href: "/reports/gstr1",
+        href: "/reports/gstr-1",
         description: "Sales register for GST filing",
         icon: FileText,
         badge: "GST",
       },
       {
         name: "GSTR-2 (Purchase)",
-        href: "/reports/gstr2",
+        href: "/reports/gstr-2",
         description: "Purchase register format",
         icon: FileText,
       },
       {
         name: "GSTR-3B Summary",
-        href: "/reports/gstr3b",
+        href: "/reports/gstr-3b",
         description: "Monthly tax summary report",
         icon: FileBarChart,
         badge: "GST",

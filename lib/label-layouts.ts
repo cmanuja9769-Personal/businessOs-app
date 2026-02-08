@@ -56,7 +56,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   {
     id: 'standard',
     name: 'Standard (24 labels)',
-    description: 'Most items - 70×37mm - Recommended',
+    description: 'Most items - 70×37mm',
     columns: 3,
     rows: 8,
     totalLabels: 24,
@@ -67,7 +67,7 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
     marginTop: 5,
     marginLeft: 2,
     averyCode: 'L7159',
-    recommended: true,
+    recommended: false,
   },
   {
     id: 'large',
@@ -87,17 +87,17 @@ export const LABEL_LAYOUTS: LabelLayout[] = [
   },
   {
     id: 'xl',
-    name: 'Extra Large (12 labels)',
-    description: 'Large products - 100×44mm',
+    name: 'Extra Large (12 labels) ★ Recommended',
+    description: 'Best for retail - 100×44mm - 12 stickers/page',
     columns: 2,
     rows: 6,
     totalLabels: 12,
     labelWidth: 100,
     labelHeight: 44,
-    horizontalGap: 0,
-    verticalGap: 5,
-    marginTop: 3,
-    marginLeft: 0,
+    horizontalGap: 2,
+    verticalGap: 3,
+    marginTop: 5,
+    marginLeft: 3,
     recommended: true,
   },
   {
@@ -193,22 +193,24 @@ export function isValidLayout(layout: any): layout is LabelLayout {
  * @param layout - Label layout configuration
  * @returns number - Number of sheets (minimum 1)
  */
-export function calculateSheetsNeeded(quantity: number, layout: LabelLayout): number {
-  // Validate inputs
+export function calculateSheetsNeeded(quantity: number, layout: LabelLayout, startPosition: number = 1): number {
   if (!isValidLayout(layout)) {
-    console.error('[Label Layouts] Invalid layout provided to calculateSheetsNeeded')
     return 1
   }
   
   if (typeof quantity !== 'number' || isNaN(quantity) || quantity < 0) {
-    console.warn(`[Label Layouts] Invalid quantity: ${quantity}, defaulting to 1 sheet`)
     return 1
   }
   
   if (quantity === 0) return 0
   
-  const sheets = Math.ceil(quantity / layout.totalLabels)
-  return Math.max(1, sheets) // Ensure at least 1 sheet
+  const skippedOnFirstSheet = Math.max(0, Math.min(startPosition - 1, layout.totalLabels - 1))
+  const labelsOnFirstSheet = layout.totalLabels - skippedOnFirstSheet
+  
+  if (quantity <= labelsOnFirstSheet) return 1
+  
+  const remaining = quantity - labelsOnFirstSheet
+  return 1 + Math.ceil(remaining / layout.totalLabels)
 }
 
 /**
@@ -217,23 +219,21 @@ export function calculateSheetsNeeded(quantity: number, layout: LabelLayout): nu
  * @param layout - Label layout configuration
  * @returns number - Number of wasted labels (0 or positive)
  */
-export function calculateWastedLabels(quantity: number, layout: LabelLayout): number {
-  // Validate inputs
+export function calculateWastedLabels(quantity: number, layout: LabelLayout, startPosition: number = 1): number {
   if (!isValidLayout(layout)) {
-    console.error('[Label Layouts] Invalid layout provided to calculateWastedLabels')
     return 0
   }
   
   if (typeof quantity !== 'number' || isNaN(quantity) || quantity < 0) {
-    console.warn(`[Label Layouts] Invalid quantity: ${quantity}, returning 0 wasted labels`)
     return 0
   }
   
-  const sheetsNeeded = calculateSheetsNeeded(quantity, layout)
+  const skippedOnFirstSheet = Math.max(0, Math.min(startPosition - 1, layout.totalLabels - 1))
+  const sheetsNeeded = calculateSheetsNeeded(quantity, layout, startPosition)
   const totalLabelsAvailable = sheetsNeeded * layout.totalLabels
-  const wasted = totalLabelsAvailable - quantity
+  const wasted = totalLabelsAvailable - quantity - skippedOnFirstSheet
   
-  return Math.max(0, wasted) // Ensure non-negative
+  return Math.max(0, wasted)
 }
 
 /**

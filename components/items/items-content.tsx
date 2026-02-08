@@ -2,21 +2,28 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react"
 import type { IItem } from "@/types"
+import type { IBarcodePrintLog } from "@/types"
 import { ItemForm } from "@/components/items/item-form"
 import { ItemUploadBtn } from "@/components/items/item-upload-btn"
 import { ItemBulkExportBtn } from "@/components/items/item-bulk-export-btn"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Package } from "lucide-react"
+import { Package, Printer } from "lucide-react"
 import { ItemsFilters } from "@/components/items/items-filters"
 import { ItemMobileCard } from "@/components/items/item-mobile-card"
 import { ItemDesktopRow } from "@/components/items/item-desktop-row"
 import { PageHeader } from "@/components/ui/page-header"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { DataPagination } from "@/components/ui/data-pagination"
+import { BulkDeleteButton } from "@/components/ui/bulk-delete-button"
 import { usePagination } from "@/hooks/use-pagination"
 import { getStockStatus } from "@/lib/stock-utils"
+import { Button } from "@/components/ui/button"
+import { BarcodeQueueModal } from "@/components/items/barcode-queue-modal"
+import { useBarcodeQueueStore } from "@/store/use-barcode-queue-store"
+import { bulkDeleteItems } from "@/app/items/actions"
 
 const ITEMS_PER_PAGE = 50
 
@@ -33,23 +40,46 @@ type ItemsFilterState = {
 type ItemsContentProps = {
   items: IItem[]
   godowns: Array<{ id: string; name: string }>
+  printLogs?: Record<string, IBarcodePrintLog>
   initialFilters: ItemsFilterState
+}
+
+function scoreItemMatch(item: IItem, query: string): number {
+  if (!query) return 0
+
+  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const name = item.name.toLowerCase()
+  const code = (item.itemCode || "").toLowerCase()
+  const hsn = (item.hsnCode || "").toLowerCase()
+  const category = (item.category || "").toLowerCase()
+  const barcode = (item.barcodeNo || "").toLowerCase()
+  const fields = [name, code, hsn, category, barcode]
+
+  const allMatch = keywords.every((kw) =>
+    fields.some((f) => f.includes(kw))
+  )
+  if (!allMatch) return -1
+
+  let score = 0
+
+  for (const kw of keywords) {
+    if (name === kw) score += 1000
+    else if (name.startsWith(kw)) score += 500
+    else if (code === kw || hsn === kw || barcode === kw) score += 400
+    else if (name.startsWith(kw + " ") || name.includes(" " + kw)) score += 200
+    else if (name.includes(kw)) score += 100
+    else if (code.includes(kw) || hsn.includes(kw) || barcode.includes(kw)) score += 80
+    else if (category.includes(kw)) score += 30
+  }
+
+  if (name.startsWith(query.toLowerCase())) score += 300
+
+  return score
 }
 
 function matchesSearchQuery(item: IItem, query: string): boolean {
   if (!query) return true
-
-  const keywords = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const searchableFields = [
-    item.name.toLowerCase(),
-    (item.itemCode || "").toLowerCase(),
-    (item.hsnCode || "").toLowerCase(),
-    (item.category || "").toLowerCase(),
-  ]
-
-  return keywords.every((keyword) =>
-    searchableFields.some((field) => field.includes(keyword))
-  )
+  return scoreItemMatch(item, query) >= 0
 }
 
 function filterAndSortItems(items: IItem[], filters: ItemsFilterState): IItem[] {
@@ -65,6 +95,15 @@ function filterAndSortItems(items: IItem[], filters: ItemsFilterState): IItem[] 
   })
 
   const multiplier = dir === "asc" ? 1 : -1
+
+  if (q && sort === "updated") {
+    return filtered.sort((a, b) => {
+      const sa = scoreItemMatch(a, q)
+      const sb = scoreItemMatch(b, q)
+      if (sa !== sb) return sb - sa
+      return a.name.localeCompare(b.name)
+    })
+  }
 
   return filtered.sort((a, b) => {
     switch (sort) {
@@ -84,8 +123,19 @@ function filterAndSortItems(items: IItem[], filters: ItemsFilterState): IItem[] 
   })
 }
 
-export function ItemsContent({ items, godowns, initialFilters }: ItemsContentProps) {
+export function ItemsContent({ items, godowns, printLogs, initialFilters }: ItemsContentProps) {
+  const openQueueModal = useBarcodeQueueStore((s) => s.openModal)
   const [filters, setFilters] = useState<ItemsFilterState>(initialFilters)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   const unitOptions = useMemo(
     () => Array.from(new Set(items.map((i) => (i.unit || "").toUpperCase()).filter(Boolean))).sort(),
@@ -129,6 +179,21 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
     [filteredItems, startIndex, endIndex]
   )
 
+  const allSelected = paginatedItems.length > 0 && selectedIds.size === paginatedItems.length
+  const someSelected = selectedIds.size > 0 && selectedIds.size < paginatedItems.length
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === paginatedItems.length) return new Set()
+      return new Set(paginatedItems.map((i) => i.id))
+    })
+  }, [paginatedItems])
+
+  const handleBulkDeleteComplete = useCallback(() => {
+    setSelectedIds(new Set())
+    window.location.reload()
+  }, [])
+
   const handleFiltersChange = useCallback(
     (newFilters: Partial<ItemsFilterState>) => {
       setFilters((prev) => ({ ...prev, ...newFilters }))
@@ -143,6 +208,10 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
         description="Manage your product catalog and stock levels"
         actions={
           <>
+            <Button variant="outline" size="sm" onClick={openQueueModal} className="gap-1.5">
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">Batch Print</span>
+            </Button>
             <ItemBulkExportBtn items={items} godownNames={godowns.map((g) => g.name)} />
             <ItemUploadBtn godowns={godowns} />
             <ItemForm godowns={godowns} />
@@ -185,6 +254,19 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
             />
           ) : (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {selectedIds.size > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b shrink-0">
+                  <span className="text-sm font-medium">
+                    {selectedIds.size} {selectedIds.size === 1 ? "row" : "rows"} selected
+                  </span>
+                  <BulkDeleteButton
+                    selectedIds={Array.from(selectedIds)}
+                    entityName="items"
+                    deleteAction={bulkDeleteItems}
+                    onDeleteComplete={handleBulkDeleteComplete}
+                  />
+                </div>
+              )}
               <TooltipProvider delayDuration={300}>
                 {/* Mobile Card View */}
                 <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-2">
@@ -196,6 +278,13 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                 <Table containerClassName="hidden md:block flex-1 min-h-0 max-h-full" className="table-fixed w-full">
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[2.75rem] min-w-[2.75rem] pl-4">
+                        <Checkbox
+                          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all rows"
+                        />
+                      </TableHead>
                       <TableHead resizable className="w-[15.625rem] min-w-[11.25rem]">Item Name</TableHead>
                       <TableHead resizable className="w-[5.625rem] min-w-[4.375rem]">HSN Code</TableHead>
                       <TableHead resizable className="w-[3.125rem] min-w-[2.5rem]">Unit</TableHead>
@@ -210,7 +299,14 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
                   </TableHeader>
                   <TableBody>
                     {paginatedItems.map((item) => (
-                      <ItemDesktopRow key={item.id} item={item} godowns={godowns} />
+                      <ItemDesktopRow
+                        key={item.id}
+                        item={item}
+                        godowns={godowns}
+                        lastPrint={printLogs?.[item.id]}
+                        selected={selectedIds.has(item.id)}
+                        onSelectChange={toggleSelect}
+                      />
                     ))}
                   </TableBody>
                 </Table>
@@ -234,6 +330,8 @@ export function ItemsContent({ items, godowns, initialFilters }: ItemsContentPro
           )}
         </CardContent>
       </Card>
+
+      <BarcodeQueueModal />
     </div>
   )
 }

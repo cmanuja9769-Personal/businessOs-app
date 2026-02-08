@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -11,13 +11,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Minus } from "lucide-react"
+import { Plus, Minus, Warehouse } from "lucide-react"
 import { toast } from "sonner"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog"
+import { createClient } from "@/lib/supabase/client"
 
 const adjustmentSchema = z.object({
   itemId: z.string().min(1, "Item is required"),
+  warehouseId: z.string().min(1, "Warehouse is required"),
   quantity: z.coerce.number().positive("Quantity must be positive"),
   adjustmentType: z.enum(["increase", "decrease"]),
   reason: z.enum(["damage", "theft", "found", "correction", "opening_balance", "expired", "other"]),
@@ -26,8 +28,10 @@ const adjustmentSchema = z.object({
 
 type AdjustmentFormData = z.infer<typeof adjustmentSchema>
 
+type WarehouseOption = { id: string; name: string }
+
 interface StockAdjustmentFormProps {
-  items: Array<{ id: string; name: string; current_stock: number }>
+  items: Array<{ id: string; name: string; current_stock: number; warehouse_id?: string }>
   onSuccess?: () => void
 }
 
@@ -35,6 +39,7 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
 
   const form = useForm<AdjustmentFormData>({
     resolver: zodResolver(adjustmentSchema),
@@ -43,6 +48,35 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
       reason: "correction",
     },
   })
+
+  useEffect(() => {
+    if (!open) return
+    const fetchWarehouses = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: orgRows } = await supabase
+          .from("app_user_organizations")
+          .select("organization_id")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .limit(1)
+        const orgData = orgRows?.[0]
+        if (!orgData?.organization_id) return
+        const { data } = await supabase
+          .from("warehouses")
+          .select("id, name")
+          .eq("organization_id", orgData.organization_id)
+          .eq("is_active", true)
+          .order("name")
+        if (data) setWarehouses(data)
+      } catch {
+        console.error("Failed to fetch warehouses")
+      }
+    }
+    void fetchWarehouses()
+  }, [open])
 
   const handleCloseDialog = useCallback(() => {
     setOpen(false)
@@ -80,19 +114,16 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
 
       const result = await response.json()
       const action = data.adjustmentType === "increase" ? "increased" : "decreased"
-      
+
       toast.success(
-        `Stock ${action} successfully. New stock: ${result.newStock || 'updated'}`
+        `Stock ${action} successfully. New stock: ${result.newStock || "updated"}`
       )
-      
+
       setOpen(false)
       form.reset()
-      
-      // Refresh the page data to show updated stock
+
       router.refresh()
-      
-      // Call the onSuccess callback if providede)
-      form.reset()
+
       onSuccess?.()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create adjustment")
@@ -132,6 +163,34 @@ export function StockAdjustmentForm({ items, onSuccess }: StockAdjustmentFormPro
                       {items.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
                           {item.name} (Current: {item.current_stock})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="warehouseId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Warehouse</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select warehouse" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {warehouses.map((wh) => (
+                        <SelectItem key={wh.id} value={wh.id}>
+                          <div className="flex items-center gap-2">
+                            <Warehouse className="w-3.5 h-3.5 text-muted-foreground" />
+                            {wh.name}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>

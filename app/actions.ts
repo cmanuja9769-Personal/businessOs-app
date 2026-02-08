@@ -8,6 +8,12 @@ export async function globalSearch(query: string) {
   }
 
   const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { customers: [], items: [], invoices: [] }
+  }
+
   const searchTerm = `%${query.trim()}%`
 
   // Search customers
@@ -48,14 +54,14 @@ export async function globalSearch(query: string) {
 
   return {
     customers:
-      customers?.map((c: any) => ({
+      customers?.map((c: { id: string; name: string; phone: string; email: string }) => ({
       id: c.id,
       name: c.name,
       contactNo: c.phone,
       email: c.email,
     })) || [],
     items:
-      items?.map((i: any) => ({
+      items?.map((i: { id: string; name: string; item_code: string; hsn: string; sale_price: number }) => ({
       id: i.id,
       name: i.name,
       itemCode: i.item_code,
@@ -63,7 +69,7 @@ export async function globalSearch(query: string) {
       salePrice: Number(i.sale_price) || 0,
     })) || [],
     invoices:
-      invoices?.map((inv: any) => ({
+      invoices?.map((inv: { id: string; invoice_number: string; total: number; customer_name: string; created_at: string }) => ({
       id: inv.id,
       invoiceNo: inv.invoice_number,
       totalAmount: Number(inv.total) || 0,

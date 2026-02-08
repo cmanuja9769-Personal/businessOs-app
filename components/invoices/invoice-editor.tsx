@@ -11,7 +11,7 @@ import { updateInvoice } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
 import { getItems } from "@/app/items/actions"
 import { toast } from "sonner"
-import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode } from "@/types"
+import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types"
 import { calculateInvoiceTotals } from "@/lib/invoice-calculations"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -32,6 +32,7 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
   const [dueDate, setDueDate] = useState(invoice.dueDate.toISOString().split("T")[0])
   const [billingMode, setBillingMode] = useState<BillingMode>(invoice.billingMode)
   const [pricingMode, setPricingMode] = useState<PricingMode>("sale")
+  const [packingType, setPackingType] = useState<PackingType>("loose")
   const [invoiceItems, setInvoiceItems] = useState<IInvoiceItem[]>(invoice.items)
   const [notes, setNotes] = useState(invoice.notes || "")
 
@@ -122,6 +123,8 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
             onBillingModeChange={setBillingMode}
             pricingMode={pricingMode}
             onPricingModeChange={setPricingMode}
+            packingType={packingType}
+            onPackingTypeChange={setPackingType}
           />
         </CardContent>
       </Card>
@@ -137,6 +140,7 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
             onItemsChange={setInvoiceItems}
             billingMode={billingMode}
             pricingMode={pricingMode}
+            packingType={packingType}
           />
         </CardContent>
       </Card>

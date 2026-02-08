@@ -23,10 +23,13 @@ export async function GET(request: NextRequest) {
       },
     )
 
-    // Exchange code for session
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (error) {
+      const loginUrl = new URL("/auth/login", request.url)
+      loginUrl.searchParams.set("error", "auth_callback_failed")
+      return NextResponse.redirect(loginUrl)
+    }
   }
 
-  // Redirect to dashboard
   return NextResponse.redirect(new URL("/", request.url))
 }

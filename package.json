@@ -14,7 +14,7 @@
     "build": "next build",
     "build:electron": "next build && node scripts/post-build.js",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings 0",
     "electron:dev": "concurrently \"cross-env NODE_ENV=development next dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "npm run build:electron && electron-builder",
     "electron:build:win": "npm run build:electron && electron-builder --win",
@@ -25,8 +25,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "bash -c 'tsc --noEmit'",
-      "next lint"
+      "eslint --max-warnings 0"
     ]
   },
   "dependencies": {

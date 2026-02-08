@@ -1,3 +1,5 @@
+"use client"
+
 import { ReactNode } from "react"
 import { Search } from "lucide-react"
 import { CardTitle } from "@/components/ui/card"

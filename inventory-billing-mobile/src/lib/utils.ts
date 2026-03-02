@@ -15,7 +15,12 @@ function formatIndianNumber(num: number): string {
 
   const last3 = digits.slice(-3);
   const remaining = digits.slice(0, -3);
-  const grouped = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  let grouped = '';
+  for (let i = remaining.length; i > 0; i -= 2) {
+    const start = Math.max(0, i - 2);
+    const chunk = remaining.slice(start, i);
+    grouped = grouped ? `${chunk},${grouped}` : chunk;
+  }
   return `${isNegative ? '-' : ''}${grouped},${last3}.${decPart}`;
 }
 

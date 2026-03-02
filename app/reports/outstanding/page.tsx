@@ -23,6 +23,8 @@ import Link from "next/link"
 import { format, differenceInDays } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
 
+const SHORT_DATE = "dd/MM/yyyy"
+
 interface OutstandingEntry {
   id: string
   partyId: string
@@ -164,8 +166,8 @@ export default function OutstandingReportPage() {
       e.partyType === 'customer' ? 'Receivable' : 'Payable',
       e.partyName,
       e.documentNo,
-      format(new Date(e.documentDate), 'dd/MM/yyyy'),
-      format(new Date(e.dueDate), 'dd/MM/yyyy'),
+      format(new Date(e.documentDate), SHORT_DATE),
+      format(new Date(e.dueDate), SHORT_DATE),
       e.totalAmount.toFixed(2),
       e.paidAmount.toFixed(2),
       e.balance.toFixed(2),
@@ -233,7 +235,7 @@ export default function OutstandingReportPage() {
                 <td>{index + 1}</td>
                 <td>{entry.partyName}</td>
                 <td>{entry.documentNo}</td>
-                <td>{format(new Date(entry.documentDate), 'dd/MM/yyyy')}</td>
+                <td>{format(new Date(entry.documentDate), SHORT_DATE)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.totalAmount)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.paidAmount)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.balance)}</td>
@@ -270,7 +272,7 @@ export default function OutstandingReportPage() {
                 <td>{index + 1}</td>
                 <td>{entry.partyName}</td>
                 <td>{entry.documentNo}</td>
-                <td>{format(new Date(entry.documentDate), 'dd/MM/yyyy')}</td>
+                <td>{format(new Date(entry.documentDate), SHORT_DATE)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.totalAmount)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.paidAmount)}</td>
                 <td style={{ textAlign: 'right' }}>{formatCurrency(entry.balance)}</td>

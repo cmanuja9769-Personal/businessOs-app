@@ -322,26 +322,33 @@ export default function PartyProfitPage() {
       {/* Data Table */}
       <Card>
         <CardContent className="pt-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : fetchError ? (
-            <DataEmptyState
-              icon={<AlertCircle className="h-12 w-12" />}
-              title="Failed to load profit data"
-              description={fetchError}
-              action={
-                <Button variant="outline" size="sm" onClick={() => {
-                  setFetchError(null)
-                  setLoading(true)
-                  fetch('/api/invoices').then(r => r.json()).then(() => window.location.reload())
-                }}>
-                  Retry
-                </Button>
-              }
-            />
-          ) : (
+          {(() => {
+            if (loading) {
+              return (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              )
+            }
+            if (fetchError) {
+              return (
+                <DataEmptyState
+                  icon={<AlertCircle className="h-12 w-12" />}
+                  title="Failed to load profit data"
+                  description={fetchError}
+                  action={
+                    <Button variant="outline" size="sm" onClick={() => {
+                      setFetchError(null)
+                      setLoading(true)
+                      fetch('/api/invoices').then(r => r.json()).then(() => window.location.reload())
+                    }}>
+                      Retry
+                    </Button>
+                  }
+                />
+              )
+            }
+            return (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -391,7 +398,8 @@ export default function PartyProfitPage() {
                 </TableBody>
               </Table>
             </div>
-          )}
+          )
+          })()}
         </CardContent>
       </Card>
     </div>

@@ -34,6 +34,20 @@ interface UsePaginatedSearchReturn<T> {
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_DEBOUNCE_MS = 300;
 
+function classifyPaginatedError(err: unknown, tableName: string): { isNetwork: boolean; message: string } {
+  const message = err instanceof Error ? err.message : '';
+  const isNetwork = /network|fetch|Failed to fetch/i.test(message);
+  return { isNetwork, message: message || `Failed to load ${tableName}` };
+}
+
+function buildSearchOrFilter(query: string, columns: string[]): string | null {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (columns.length === 0) return null;
+  const searchTerm = `%${trimmed}%`;
+  return columns.map((col) => `${col}.ilike.${searchTerm}`).join(',');
+}
+
 export function usePaginatedSearch<T extends { id: string }>(
   options: UsePaginatedSearchOptions
 ): UsePaginatedSearchReturn<T> {
@@ -75,6 +89,39 @@ export function usePaginatedSearch<T extends { id: string }>(
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
 
+  const updateFetchLoadingState = useCallback((isFirstPage: boolean, isRefresh: boolean) => {
+    if (isFirstPage && !isRefresh) {
+      setStatus('loading');
+    }
+    if (!isFirstPage) {
+      setIsLoadingMore(true);
+    }
+  }, []);
+
+  const applyFetchResults = useCallback((fetchedItems: T[], countResult: { count: number | null } | null, isFirstPage: boolean) => {
+    if (!isFirstPage) {
+      setItems((prev) => [...prev, ...fetchedItems]);
+      return;
+    }
+    setItems(fetchedItems);
+    const count = countResult?.count ?? null;
+    if (count !== null) {
+      setTotalCount(count);
+      totalCountRef.current = count;
+    }
+  }, []);
+
+  const handleFetchError = useCallback((err: unknown) => {
+    const { isNetwork, message } = classifyPaginatedError(err, table);
+    if (isNetwork) {
+      setIsOffline(true);
+      setError('Network error. Please check your connection and try again.');
+    } else {
+      setError(message);
+    }
+    setStatus('error');
+  }, [table]);
+
   const fetchData = useCallback(
     async (query: string, pageNum: number, isRefresh: boolean = false) => {
       if (!organizationId) {
@@ -93,12 +140,7 @@ export function usePaginatedSearch<T extends { id: string }>(
       setIsOffline(false);
 
       const isFirstPage = pageNum === 0;
-      if (isFirstPage && !isRefresh) {
-        setStatus('loading');
-      }
-      if (!isFirstPage) {
-        setIsLoadingMore(true);
-      }
+      updateFetchLoadingState(isFirstPage, isRefresh);
 
       try {
         const from = pageNum * pageSize;
@@ -123,11 +165,8 @@ export function usePaginatedSearch<T extends { id: string }>(
           dataQuery = dataQuery.eq(key, value);
         });
 
-        if (query.trim() && stableSearchColumns.length > 0) {
-          const searchTerm = `%${query.trim()}%`;
-          const orFilter = stableSearchColumns
-            .map((col) => `${col}.ilike.${searchTerm}`)
-            .join(',');
+        const orFilter = buildSearchOrFilter(query, stableSearchColumns);
+        if (orFilter) {
           countQuery = countQuery.or(orFilter);
           dataQuery = dataQuery.or(orFilter);
         }
@@ -138,45 +177,22 @@ export function usePaginatedSearch<T extends { id: string }>(
         ]);
 
         if (currentQueryRef.current !== query) return;
-
         if (dataResult.error) throw dataResult.error;
 
         const fetchedItems = (dataResult.data || []) as unknown as T[];
-
-        if (isFirstPage) {
-          setItems(fetchedItems);
-          if (countResult && 'count' in countResult && countResult.count !== null) {
-            setTotalCount(countResult.count);
-            totalCountRef.current = countResult.count;
-          }
-        } else {
-          setItems((prev) => [...prev, ...fetchedItems]);
-        }
-
+        applyFetchResults(fetchedItems, countResult as { count: number | null }, isFirstPage);
         setHasMore(fetchedItems.length === pageSize);
         setPage(pageNum);
         setStatus('success');
         setError(null);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : '';
-        const isNetworkError =
-          message.includes('network') ||
-          message.includes('fetch') ||
-          message.includes('Failed to fetch');
-
-        if (isNetworkError) {
-          setIsOffline(true);
-          setError('Network error. Please check your connection and try again.');
-        } else {
-          setError(message || `Failed to load ${table}`);
-        }
-        setStatus('error');
+        handleFetchError(err);
       } finally {
         setIsLoadingMore(false);
         setIsRefreshing(false);
       }
     },
-    [organizationId, table, selectColumns, orderBy, ascending, pageSize, stableSearchColumns, stableAdditionalFilters]
+    [organizationId, table, selectColumns, orderBy, ascending, pageSize, stableSearchColumns, stableAdditionalFilters, updateFetchLoadingState, applyFetchResults, handleFetchError]
   );
 
   useEffect(() => {
@@ -206,7 +222,7 @@ export function usePaginatedSearch<T extends { id: string }>(
     if (organizationId) {
       fetchData('', 0);
     }
-  }, [organizationId]);
+  }, [organizationId, fetchData]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || isLoadingMore || status === 'loading') return;

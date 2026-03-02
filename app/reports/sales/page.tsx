@@ -24,6 +24,9 @@ import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
+const SHORT_DATE = "dd/MM/yyyy"
+const DISPLAY_DATE = "dd MMM yyyy"
+
 interface InvoiceItem {
   id: string
   itemName: string
@@ -133,7 +136,7 @@ export default function SalesReportPage() {
       for (const item of inv.items || []) {
         rows.push({
           invoiceNo: inv.invoiceNo,
-          date: format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
+          date: format(new Date(inv.invoiceDate), SHORT_DATE),
           customerName: inv.customerName,
           gstin: inv.customerGstin || inv.customerGst || "-",
           itemName: item.itemName,
@@ -202,7 +205,7 @@ export default function SalesReportPage() {
   const handleDownloadPDF = async () => {
     setPdfGenerating(true)
     try {
-      const dateRange = `${format(new Date(filters.dateFrom), "dd MMM yyyy")} - ${format(new Date(filters.dateTo), "dd MMM yyyy")}`
+      const dateRange = `${format(new Date(filters.dateFrom), DISPLAY_DATE)} - ${format(new Date(filters.dateTo), DISPLAY_DATE)}`
       const isItemWise = viewMode === "itemwise"
       const columns = isItemWise ? itemWisePdfColumns : summaryPdfColumns
 
@@ -210,7 +213,7 @@ export default function SalesReportPage() {
         ? itemWiseData
         : activeInvoices.map((inv) => ({
             invoiceNo: inv.invoiceNo,
-            date: format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
+            date: format(new Date(inv.invoiceDate), SHORT_DATE),
             customerName: inv.customerName,
             gstin: inv.customerGstin || inv.customerGst || "-",
             taxable: inv.taxableAmount || inv.total - (inv.cgst || 0) - (inv.sgst || 0) - (inv.igst || 0),
@@ -273,7 +276,7 @@ export default function SalesReportPage() {
       inv.invoiceNo,
       inv.customerName,
       inv.customerGstin || inv.customerGst || "",
-      format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
+      format(new Date(inv.invoiceDate), SHORT_DATE),
       (inv.taxableAmount || inv.total - (inv.cgst || 0) - (inv.sgst || 0) - (inv.igst || 0)).toFixed(2),
       (inv.cgst || 0).toFixed(2),
       (inv.sgst || 0).toFixed(2),
@@ -491,7 +494,7 @@ export default function SalesReportPage() {
                           <TableCell className={`font-mono ${isCancelled ? "line-through" : ""}`}>{inv.invoiceNo}</TableCell>
                           <TableCell className={isCancelled ? "line-through" : ""}>{inv.customerName}</TableCell>
                           <TableCell className="text-xs font-mono">{inv.customerGstin || inv.customerGst || "-"}</TableCell>
-                          <TableCell>{format(new Date(inv.invoiceDate), "dd MMM yyyy")}</TableCell>
+                          <TableCell>{format(new Date(inv.invoiceDate), DISPLAY_DATE)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(taxable)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(gst)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(inv.total)}</TableCell>

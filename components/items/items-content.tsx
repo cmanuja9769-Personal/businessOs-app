@@ -43,37 +43,45 @@ type ItemsContentProps = {
   initialFilters: ItemsFilterState
 }
 
+type SearchFields = {
+  readonly name: string
+  readonly code: string
+  readonly hsn: string
+  readonly category: string
+  readonly barcode: string
+}
+
+function scoreKeyword(kw: string, f: SearchFields): number {
+  const rules: ReadonlyArray<readonly [boolean, number]> = [
+    [f.name === kw, 1000],
+    [f.name.startsWith(kw), 500],
+    [f.code === kw || f.hsn === kw || f.barcode === kw, 400],
+    [f.name.startsWith(kw + " ") || f.name.includes(" " + kw), 200],
+    [f.name.includes(kw), 100],
+    [f.code.includes(kw) || f.hsn.includes(kw) || f.barcode.includes(kw), 80],
+    [f.category.includes(kw), 30],
+  ]
+  return rules.find(([match]) => match)?.[1] ?? 0
+}
+
 function scoreItemMatch(item: IItem, query: string): number {
   if (!query) return 0
 
   const keywords = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const name = item.name.toLowerCase()
-  const code = (item.itemCode || "").toLowerCase()
-  const hsn = (item.hsnCode || "").toLowerCase()
-  const category = (item.category || "").toLowerCase()
-  const barcode = (item.barcodeNo || "").toLowerCase()
-  const fields = [name, code, hsn, category, barcode]
+  const f: SearchFields = {
+    name: item.name.toLowerCase(),
+    code: (item.itemCode || "").toLowerCase(),
+    hsn: (item.hsnCode || "").toLowerCase(),
+    category: (item.category || "").toLowerCase(),
+    barcode: (item.barcodeNo || "").toLowerCase(),
+  }
+  const allFields = [f.name, f.code, f.hsn, f.category, f.barcode]
 
-  const allMatch = keywords.every((kw) =>
-    fields.some((f) => f.includes(kw))
-  )
+  const allMatch = keywords.every((kw) => allFields.some((field) => field.includes(kw)))
   if (!allMatch) return -1
 
-  let score = 0
-
-  for (const kw of keywords) {
-    if (name === kw) score += 1000
-    else if (name.startsWith(kw)) score += 500
-    else if (code === kw || hsn === kw || barcode === kw) score += 400
-    else if (name.startsWith(kw + " ") || name.includes(" " + kw)) score += 200
-    else if (name.includes(kw)) score += 100
-    else if (code.includes(kw) || hsn.includes(kw) || barcode.includes(kw)) score += 80
-    else if (category.includes(kw)) score += 30
-  }
-
-  if (name.startsWith(query.toLowerCase())) score += 300
-
-  return score
+  const score = keywords.reduce((acc, kw) => acc + scoreKeyword(kw, f), 0)
+  return f.name.startsWith(query.toLowerCase()) ? score + 300 : score
 }
 
 function matchesSearchQuery(item: IItem, query: string): boolean {

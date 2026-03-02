@@ -67,38 +67,37 @@ export default function SupplierDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const loadSupplierData = async () => {
+      if (!supplierId || !organizationId) return;
+      setLoading(true);
+
+      try {
+        const [supplierRes, purchasesRes] = await Promise.all([
+          supabase.from('suppliers').select('*').eq('id', supplierId).eq('organization_id', organizationId).is('deleted_at', null).single(),
+          supabase.from('purchases').select('*').eq('supplier_id', supplierId).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
+        ]);
+
+        if (supplierRes.error) throw supplierRes.error;
+        setSupplier(supplierRes.data);
+
+        const purchaseData = purchasesRes.data || [];
+        setPurchases(purchaseData);
+
+        setStats({
+          totalPurchases: purchaseData.length,
+          totalAmount: purchaseData.reduce((sum, p) => sum + (p.total || 0), 0),
+          pendingAmount: purchaseData.reduce((sum, p) => sum + (p.balance || 0), 0),
+          purchaseCount: purchaseData.length,
+        });
+      } catch (error) {
+        console.error('Error loading supplier:', error);
+        Alert.alert('Error', 'Failed to load supplier details');
+      } finally {
+        setLoading(false);
+      }
+    };
     loadSupplierData();
-  }, [supplierId]);
-
-  const loadSupplierData = async () => {
-    if (!supplierId || !organizationId) return;
-    setLoading(true);
-
-    try {
-      const [supplierRes, purchasesRes] = await Promise.all([
-        supabase.from('suppliers').select('*').eq('id', supplierId).eq('organization_id', organizationId).is('deleted_at', null).single(),
-        supabase.from('purchases').select('*').eq('supplier_id', supplierId).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
-      ]);
-
-      if (supplierRes.error) throw supplierRes.error;
-      setSupplier(supplierRes.data);
-
-      const purchaseData = purchasesRes.data || [];
-      setPurchases(purchaseData);
-
-      setStats({
-        totalPurchases: purchaseData.length,
-        totalAmount: purchaseData.reduce((sum, p) => sum + (p.total || 0), 0),
-        pendingAmount: purchaseData.reduce((sum, p) => sum + (p.balance || 0), 0),
-        purchaseCount: purchaseData.length,
-      });
-    } catch (error) {
-      console.error('Error loading supplier:', error);
-      Alert.alert('Error', 'Failed to load supplier details');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [supplierId, organizationId]);
 
   const handleCall = () => {
     if (supplier?.phone) {

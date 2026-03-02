@@ -50,50 +50,50 @@ export default function AccountingScreen() {
   });
 
   useEffect(() => {
+    const loadFinancialData = async () => {
+      if (!organizationId) return;
+      setLoading(true);
+
+      try {
+        const [invoicesRes, purchasesRes, itemsRes, paymentsRes] = await Promise.all([
+          supabase.from('invoices').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
+          supabase.from('purchases').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
+          supabase.from('items').select('current_stock, purchase_price').eq('organization_id', organizationId).is('deleted_at', null),
+          supabase.from('payments').select('amount, payment_mode').eq('organization_id', organizationId).is('deleted_at', null),
+        ]);
+
+        const invoices = invoicesRes.data || [];
+        const purchases = purchasesRes.data || [];
+        const items = itemsRes.data || [];
+        const payments = paymentsRes.data || [];
+
+        const revenue = invoices.reduce((sum, i) => sum + (i.total || 0), 0);
+        const expenses = purchases.reduce((sum, p) => sum + (p.total || 0), 0);
+        const receivables = invoices.reduce((sum, i) => sum + (i.balance || 0), 0);
+        const payables = purchases.reduce((sum, p) => sum + (p.balance || 0), 0);
+        const inventory = items.reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
+
+        const cashPayments = payments.filter(p => p.payment_mode === 'cash').reduce((sum, p) => sum + (p.amount || 0), 0);
+        const bankPayments = payments.filter(p => ['bank', 'upi'].includes(p.payment_mode)).reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        setData({
+          revenue,
+          expenses,
+          receivables,
+          payables,
+          cashInHand: cashPayments,
+          bankBalance: bankPayments,
+          inventory,
+        });
+      } catch (error) {
+        console.error('Error loading financial data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadFinancialData();
   }, [organizationId]);
-
-  const loadFinancialData = async () => {
-    if (!organizationId) return;
-    setLoading(true);
-
-    try {
-      const [invoicesRes, purchasesRes, itemsRes, paymentsRes] = await Promise.all([
-        supabase.from('invoices').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
-        supabase.from('purchases').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
-        supabase.from('items').select('current_stock, purchase_price').eq('organization_id', organizationId).is('deleted_at', null),
-        supabase.from('payments').select('amount, payment_mode').eq('organization_id', organizationId).is('deleted_at', null),
-      ]);
-
-      const invoices = invoicesRes.data || [];
-      const purchases = purchasesRes.data || [];
-      const items = itemsRes.data || [];
-      const payments = paymentsRes.data || [];
-
-      const revenue = invoices.reduce((sum, i) => sum + (i.total || 0), 0);
-      const expenses = purchases.reduce((sum, p) => sum + (p.total || 0), 0);
-      const receivables = invoices.reduce((sum, i) => sum + (i.balance || 0), 0);
-      const payables = purchases.reduce((sum, p) => sum + (p.balance || 0), 0);
-      const inventory = items.reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
-
-      const cashPayments = payments.filter(p => p.payment_mode === 'cash').reduce((sum, p) => sum + (p.amount || 0), 0);
-      const bankPayments = payments.filter(p => ['bank', 'upi'].includes(p.payment_mode)).reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      setData({
-        revenue,
-        expenses,
-        receivables,
-        payables,
-        cashInHand: cashPayments,
-        bankBalance: bankPayments,
-        inventory,
-      });
-    } catch (error) {
-      console.error('Error loading financial data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const tabs: { key: TabType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'summary', label: 'Summary', icon: 'pie-chart-outline' },

@@ -11,14 +11,125 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, Barcode } from "lucide-react";
-import type { IItem, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types";
+import type { IItem, IInvoiceItem, BillingMode, PricingMode, PackingType, PackagingUnit } from "@/types";
 import type { LightweightItem } from "@/app/items/lightweight-actions";
 import { calculateItemAmount } from "@/lib/invoice-calculations";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ItemSelect } from "@/components/items/item-select";
 import { toast } from "sonner";
 
 type InvoiceItem = IItem | LightweightItem;
+
+const AMOUNT_FIELDS = new Set<string>(["quantity", "rate", "gstRate", "cessRate", "discount"]);
+
+function getPriceByMode(item: InvoiceItem, mode: PricingMode): number {
+  switch (mode) {
+    case "wholesale":
+      return item.wholesalePrice || item.salePrice;
+    case "quantity":
+      return item.quantityPrice || item.salePrice;
+    case "sale":
+    default:
+      return item.salePrice;
+  }
+}
+
+function getPackingQuantity(packingType: PackingType, perCartonQuantity: number | undefined | null): number {
+  if (packingType === "carton") return Math.floor(perCartonQuantity || 1);
+  return 1;
+}
+
+function recalculateAmount(item: IInvoiceItem, billingMode: BillingMode): number {
+  return calculateItemAmount(
+    item.quantity,
+    item.rate,
+    item.gstRate,
+    item.cessRate,
+    item.discount,
+    billingMode
+  );
+}
+
+function buildNewInvoiceItem(
+  item: InvoiceItem,
+  rate: number,
+  quantity: number,
+  billingMode: BillingMode,
+  packingType: PackingType
+): IInvoiceItem {
+  return {
+    itemId: item.id,
+    itemName: item.name,
+    hsnCode: item.hsnCode,
+    quantity,
+    unit: item.unit,
+    rate,
+    gstRate: item.gstRate,
+    cessRate: item.cessRate || 0,
+    discount: 0,
+    amount: calculateItemAmount(quantity, rate, item.gstRate, item.cessRate, 0, billingMode),
+    packagingUnit: item.packagingUnit as PackagingUnit | undefined,
+    perCartonQuantity: item.perCartonQuantity,
+    displayAsPackaging: packingType === "carton",
+  };
+}
+
+function applyItemSelection(
+  updated: IInvoiceItem,
+  selectedItem: InvoiceItem,
+  rate: number,
+  packingType: PackingType,
+  billingMode: BillingMode
+): IInvoiceItem {
+  const quantity = getPackingQuantity(packingType, selectedItem.perCartonQuantity);
+  return {
+    ...updated,
+    itemName: selectedItem.name,
+    unit: selectedItem.unit,
+    rate,
+    gstRate: selectedItem.gstRate,
+    cessRate: selectedItem.cessRate,
+    packagingUnit: (selectedItem.packagingUnit ?? undefined) as PackagingUnit | undefined,
+    perCartonQuantity: selectedItem.perCartonQuantity,
+    displayAsPackaging: packingType === "carton",
+    quantity,
+    amount: calculateItemAmount(quantity, rate, selectedItem.gstRate, selectedItem.cessRate, updated.discount, billingMode),
+  };
+}
+
+function processRowUpdate(
+  item: IInvoiceItem,
+  field: keyof IInvoiceItem,
+  value: unknown,
+  allItems: InvoiceItem[],
+  billingMode: BillingMode,
+  pricingMode: PricingMode,
+  packingType: PackingType
+): { updated: IInvoiceItem; cacheUpdate: { id: string; qty: number } | null } {
+  const updated = { ...item, [field]: value };
+  let cacheUpdate: { id: string; qty: number } | null = null;
+
+  if (field === "quantity" && packingType === "loose" && updated.itemId) {
+    cacheUpdate = { id: updated.itemId, qty: value as number };
+  }
+
+  if (AMOUNT_FIELDS.has(field as string)) {
+    updated.amount = recalculateAmount(updated, billingMode);
+  }
+
+  if (field !== "itemId" || !value) return { updated, cacheUpdate };
+
+  const selectedItem = allItems.find((si) => si.id === value);
+  if (!selectedItem) return { updated, cacheUpdate };
+
+  const rate = getPriceByMode(selectedItem, pricingMode);
+  const applied = applyItemSelection(updated, selectedItem, rate, packingType, billingMode);
+  if (packingType === "loose") {
+    cacheUpdate = { id: selectedItem.id, qty: applied.quantity };
+  }
+
+  return { updated: applied, cacheUpdate };
+}
 
 interface InvoiceTableProps {
   items: InvoiceItem[];
@@ -49,18 +160,6 @@ export function InvoiceTable({
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   
   const looseQuantityCacheRef = useRef<Record<string, number>>({});
-
-  const getPriceByMode = useCallback((item: InvoiceItem, mode: PricingMode): number => {
-    switch (mode) {
-      case "wholesale":
-        return item.wholesalePrice || item.salePrice;
-      case "quantity":
-        return item.quantityPrice || item.salePrice;
-      case "sale":
-      default:
-        return item.salePrice;
-    }
-  }, []);
 
   const prevPricingModeRef = useRef(pricingMode);
   useEffect(() => {
@@ -94,7 +193,7 @@ export function InvoiceTable({
     });
 
     onItemsChange(updatedItems);
-  }, [pricingMode, invoiceItems, items, billingMode, getPriceByMode, onItemsChange]);
+  }, [pricingMode, invoiceItems, items, billingMode, onItemsChange]);
 
   const prevPackingTypeRef = useRef(packingType);
   useEffect(() => {
@@ -140,11 +239,50 @@ export function InvoiceTable({
     onItemsChange(updatedItems);
   }, [packingType, invoiceItems, items, billingMode, onItemsChange]);
 
+  const updateExistingBarcodeItem = (item: InvoiceItem, existingItemIndex: number) => {
+    const updatedItems = [...invoiceItems];
+    const existingItem = updatedItems[existingItemIndex];
+    const increment = getPackingQuantity(packingType, item.perCartonQuantity);
+    const newQuantity = existingItem.quantity + increment;
+
+    if (packingType === "loose") {
+      looseQuantityCacheRef.current[item.id] = newQuantity;
+    }
+
+    updatedItems[existingItemIndex] = {
+      ...existingItem,
+      quantity: newQuantity,
+      amount: calculateItemAmount(
+        newQuantity,
+        existingItem.rate,
+        existingItem.gstRate,
+        existingItem.cessRate,
+        existingItem.discount,
+        billingMode
+      ),
+    };
+
+    onItemsChange(updatedItems);
+    toast.success(`Updated quantity for ${item.name}`);
+  };
+
+  const addNewBarcodeItem = (item: InvoiceItem) => {
+    const rate = getPriceByMode(item, pricingMode);
+    const initialQuantity = getPackingQuantity(packingType, item.perCartonQuantity);
+
+    if (packingType === "loose") {
+      looseQuantityCacheRef.current[item.id] = initialQuantity;
+    }
+
+    const newItem = buildNewInvoiceItem(item, rate, initialQuantity, billingMode, packingType);
+    onItemsChange([...invoiceItems, newItem]);
+    toast.success(`Added ${item.name} to invoice`);
+  };
+
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
 
-    // Find item by barcode
     const item = items.find(
       (i) => i.barcodeNo === barcodeInput.trim() || i.itemCode === barcodeInput.trim()
     );
@@ -155,84 +293,14 @@ export function InvoiceTable({
       return;
     }
 
-    // Check if item already exists in invoice
     const existingItemIndex = invoiceItems.findIndex(
       (invItem) => invItem.itemId === item.id
     );
 
     if (existingItemIndex >= 0) {
-      // Increase quantity of existing item
-      const updatedItems = [...invoiceItems];
-      const existingItem = updatedItems[existingItemIndex];
-      
-      // Determine increment based on packing type (always integer)
-      const increment = packingType === "carton" 
-        ? Math.floor(item.perCartonQuantity || 1)
-        : 1;
-      
-      const newQuantity = existingItem.quantity + increment;
-      
-      // Update cache if in loose mode
-      if (packingType === "loose") {
-        looseQuantityCacheRef.current[item.id] = newQuantity;
-      }
-      
-      updatedItems[existingItemIndex] = {
-        ...existingItem,
-        quantity: newQuantity,
-        amount: calculateItemAmount(
-          newQuantity,
-          existingItem.rate,
-          existingItem.gstRate,
-          existingItem.cessRate,
-          existingItem.discount,
-          billingMode
-        ),
-      };
-      
-      onItemsChange(updatedItems);
-      toast.success(`Updated quantity for ${item.name}`);
+      updateExistingBarcodeItem(item, existingItemIndex);
     } else {
-      // Add new item to invoice with initial quantity based on packing type
-      const rate = getPriceByMode(item, pricingMode);
-      const initialQuantity = packingType === "carton" 
-        ? Math.floor(item.perCartonQuantity || 1)
-        : 1;
-      
-      if (packingType === "loose") {
-        looseQuantityCacheRef.current[item.id] = initialQuantity;
-      }
-      
-      const amount = calculateItemAmount(
-        initialQuantity,
-        rate,
-        item.gstRate,
-        item.cessRate,
-        0,
-        billingMode
-      );
-
-      onItemsChange([
-        ...invoiceItems,
-        {
-          itemId: item.id,
-          itemName: item.name,
-          hsnCode: item.hsnCode,
-          quantity: initialQuantity,
-          unit: item.unit,
-          rate,
-          gstRate: item.gstRate,
-          cessRate: item.cessRate || 0,
-          discount: 0,
-          amount,
-          // Store packaging info for PDF display
-          packagingUnit: item.packagingUnit,
-          perCartonQuantity: item.perCartonQuantity,
-          displayAsPackaging: packingType === "carton",
-        },
-      ]);
-      
-      toast.success(`Added ${item.name} to invoice`);
+      addNewBarcodeItem(item);
     }
 
     setBarcodeInput("");
@@ -265,67 +333,18 @@ export function InvoiceTable({
     field: keyof IInvoiceItem,
     value: unknown
   ) => {
-    let cacheUpdate: { id: string; qty: number } | null = null as { id: string; qty: number } | null;
+    let cacheUpdate: { id: string; qty: number } | null = null;
 
     const updatedItems = invoiceItems.map((item, i) => {
       if (i !== index) return item;
-      const updated = { ...item, [field]: value };
-
-      if (field === "quantity" && packingType === "loose" && updated.itemId) {
-        cacheUpdate = { id: updated.itemId, qty: value as number };
-      }
-
-      if (
-        ["quantity", "rate", "gstRate", "cessRate", "discount"].includes(field)
-      ) {
-        updated.amount = calculateItemAmount(
-          updated.quantity,
-          updated.rate,
-          updated.gstRate,
-          updated.cessRate,
-          updated.discount,
-          billingMode
-        );
-      }
-
-      if (field === "itemId" && value) {
-        const selectedItem = items.find((si) => si.id === value);
-        if (selectedItem) {
-          updated.itemName = selectedItem.name;
-          updated.unit = selectedItem.unit;
-          updated.rate = getPriceByMode(selectedItem, pricingMode);
-          updated.gstRate = selectedItem.gstRate;
-          updated.cessRate = selectedItem.cessRate;
-          updated.packagingUnit = selectedItem.packagingUnit;
-          updated.perCartonQuantity = selectedItem.perCartonQuantity;
-          updated.displayAsPackaging = packingType === "carton";
-
-          const initialQuantity = packingType === "carton"
-            ? Math.floor(selectedItem.perCartonQuantity || 1)
-            : 1;
-          updated.quantity = initialQuantity;
-
-          if (packingType === "loose") {
-            cacheUpdate = { id: selectedItem.id, qty: initialQuantity };
-          }
-
-          updated.amount = calculateItemAmount(
-            updated.quantity,
-            getPriceByMode(selectedItem, pricingMode),
-            selectedItem.gstRate,
-            selectedItem.cessRate,
-            updated.discount,
-            billingMode
-          );
-        }
-      }
-
-      return updated;
+      const result = processRowUpdate(item, field, value, items, billingMode, pricingMode, packingType);
+      if (result.cacheUpdate) cacheUpdate = result.cacheUpdate;
+      return result.updated;
     });
 
-    const resolvedCache = cacheUpdate;
-    if (resolvedCache) {
-      looseQuantityCacheRef.current[resolvedCache.id] = resolvedCache.qty;
+    if (cacheUpdate) {
+      const resolved = cacheUpdate as { id: string; qty: number };
+      looseQuantityCacheRef.current[resolved.id] = resolved.qty;
     }
 
     onItemsChange(updatedItems);

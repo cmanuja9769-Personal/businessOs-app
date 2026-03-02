@@ -52,41 +52,33 @@ export async function getJobStatus(jobId: string): Promise<QueueJob | null> {
   return jobQueue.get(jobId) || null
 }
 
+const jobHandlers: Record<QueueJob["type"], (job: QueueJob) => Promise<void>> = {
+  send_email: processSendEmail,
+  generate_einvoice: processGenerateEInvoice,
+  send_sms: processSendSMS,
+  file_gst: processFileGST,
+}
+
+function handleJobFailure(job: QueueJob, error: unknown) {
+  job.retries++
+  if (job.retries < 3) {
+    job.status = "pending"
+  } else {
+    job.status = "failed"
+    job.error = String(error)
+  }
+}
+
 export async function processQueueJobs() {
-  // In production: Process jobs from Upstash Redis queue
-  // This would be a worker process that runs separately
-
   for (const [, job] of jobQueue.entries()) {
-    if (job.status === "pending") {
-      try {
-        job.status = "processing"
-
-        switch (job.type) {
-          case "send_email":
-            await processSendEmail(job)
-            break
-          case "generate_einvoice":
-            await processGenerateEInvoice(job)
-            break
-          case "send_sms":
-            await processSendSMS(job)
-            break
-          case "file_gst":
-            await processFileGST(job)
-            break
-        }
-
-        job.status = "completed"
-        job.completedAt = new Date()
-      } catch (error) {
-        job.retries++
-        if (job.retries < 3) {
-          job.status = "pending" // Retry
-        } else {
-          job.status = "failed"
-          job.error = String(error)
-        }
-      }
+    if (job.status !== "pending") continue
+    try {
+      job.status = "processing"
+      await jobHandlers[job.type](job)
+      job.status = "completed"
+      job.completedAt = new Date()
+    } catch (error) {
+      handleJobFailure(job, error)
     }
   }
 }

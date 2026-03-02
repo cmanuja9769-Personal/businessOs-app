@@ -410,8 +410,8 @@ function buildInvoiceItemRows(
   }))
 }
 
-function extractErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Failed to create invoice"
+function extractErrorMessage(error: unknown, fallback = "Failed to create invoice"): string {
+  return error instanceof Error ? error.message : fallback
 }
 
 async function handlePostInvoiceCreation(
@@ -496,6 +496,19 @@ export async function createInvoice(data: unknown) {
     console.error("[v0] Error in createInvoice:", error)
     return { success: false, error: extractErrorMessage(error) }
   }
+}
+
+async function restoreInvoiceItems(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  existingItems: Record<string, unknown>[] | null,
+  invoiceId: string,
+) {
+  if (!existingItems || existingItems.length === 0) return
+  const restoreRows = existingItems.map((row) => {
+    const filtered = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "id"))
+    return { ...filtered, invoice_id: invoiceId }
+  })
+  await supabase.from("invoice_items").insert(restoreRows)
 }
 
 export async function updateInvoice(id: string, data: unknown) {
@@ -603,13 +616,7 @@ export async function updateInvoice(id: string, data: unknown) {
 
     if (itemsError) {
       console.error("[v0] Error updating invoice items:", itemsError)
-      if (existingItems && existingItems.length > 0) {
-        const restoreRows = existingItems.map((row: Record<string, unknown>) => {
-          const filtered = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "id"))
-          return { ...filtered, invoice_id: id }
-        })
-        await supabase.from("invoice_items").insert(restoreRows)
-      }
+      await restoreInvoiceItems(supabase, existingItems, id)
       return { success: false, error: itemsError.message }
     }
 
@@ -618,10 +625,7 @@ export async function updateInvoice(id: string, data: unknown) {
     return { success: true }
   } catch (error) {
     console.error("[v0] Error in updateInvoice:", error)
-    if (error instanceof Error) {
-      return { success: false, error: error.message }
-    }
-    return { success: false, error: "Failed to update invoice" }
+    return { success: false, error: extractErrorMessage(error, "Failed to update invoice") }
   }
 }
 
@@ -663,6 +667,31 @@ async function reverseStockForDeletedInvoice(
       console.error("[v0] Error reversing stock for item:", item.item_id, stockError)
     }
   }
+}
+
+async function adjustCustomerOutstandingOnDelete(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  customerId: string,
+  balance: number | string,
+) {
+  const balanceReduction = -Number(balance)
+  const { error: rpcError } = await supabase.rpc("update_customer_outstanding", {
+    p_customer_id: customerId,
+    p_amount: balanceReduction,
+  })
+  if (!rpcError) return
+
+  const { data: cust } = await supabase
+    .from("customers")
+    .select("outstanding_balance")
+    .eq("id", customerId)
+    .single()
+  if (!cust) return
+
+  await supabase
+    .from("customers")
+    .update({ outstanding_balance: Math.max(0, (cust.outstanding_balance || 0) + balanceReduction) })
+    .eq("id", customerId)
 }
 
 export async function deleteInvoice(id: string) {
@@ -709,30 +738,13 @@ export async function deleteInvoice(id: string) {
     }
 
     if (invoice.customer_id && isSaleDoc && invoice.balance) {
-      const balanceReduction = -Number(invoice.balance)
-      const { error: rpcError } = await supabase.rpc("update_customer_outstanding", {
-        p_customer_id: invoice.customer_id,
-        p_amount: balanceReduction,
-      })
-      if (rpcError) {
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("outstanding_balance")
-          .eq("id", invoice.customer_id)
-          .single()
-        if (cust) {
-          await supabase
-            .from("customers")
-            .update({ outstanding_balance: Math.max(0, (cust.outstanding_balance || 0) + balanceReduction) })
-            .eq("id", invoice.customer_id)
-        }
-      }
+      await adjustCustomerOutstandingOnDelete(supabase, invoice.customer_id, invoice.balance)
     }
 
     revalidatePath("/invoices")
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Failed to delete invoice" }
+    return { success: false, error: extractErrorMessage(error, "Failed to delete invoice") }
   }
 }
 

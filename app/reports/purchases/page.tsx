@@ -22,6 +22,9 @@ import {
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns"
 
+const ISO_DATE = "yyyy-MM-dd"
+const DISPLAY_DATE = "dd MMM yyyy"
+
 interface Purchase {
   id: string
   purchaseNo: string
@@ -42,8 +45,8 @@ interface Purchase {
 export default function PurchaseReportPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), ISO_DATE))
+  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), ISO_DATE))
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
 
@@ -140,17 +143,17 @@ export default function PurchaseReportPage() {
     const now = new Date()
     switch (period) {
       case 'thisMonth':
-        setDateFrom(format(startOfMonth(now), 'yyyy-MM-dd'))
-        setDateTo(format(endOfMonth(now), 'yyyy-MM-dd'))
+        setDateFrom(format(startOfMonth(now), ISO_DATE))
+        setDateTo(format(endOfMonth(now), ISO_DATE))
         break
       case 'lastMonth':
         const lastMonth = subMonths(now, 1)
-        setDateFrom(format(startOfMonth(lastMonth), 'yyyy-MM-dd'))
-        setDateTo(format(endOfMonth(lastMonth), 'yyyy-MM-dd'))
+        setDateFrom(format(startOfMonth(lastMonth), ISO_DATE))
+        setDateTo(format(endOfMonth(lastMonth), ISO_DATE))
         break
       case 'last3Months':
-        setDateFrom(format(startOfMonth(subMonths(now, 2)), 'yyyy-MM-dd'))
-        setDateTo(format(endOfMonth(now), 'yyyy-MM-dd'))
+        setDateFrom(format(startOfMonth(subMonths(now, 2)), ISO_DATE))
+        setDateTo(format(endOfMonth(now), ISO_DATE))
         break
     }
   }
@@ -160,7 +163,7 @@ export default function PurchaseReportPage() {
       {/* Print Header - Only visible when printing */}
       <div className="hidden print:block report-header">
         <h1>Purchase Report</h1>
-        <div className="date-range">{format(new Date(dateFrom), 'dd MMM yyyy')} - {format(new Date(dateTo), 'dd MMM yyyy')}</div>
+        <div className="date-range">{format(new Date(dateFrom), DISPLAY_DATE)} - {format(new Date(dateTo), DISPLAY_DATE)}</div>
         {statusFilter !== 'all' && <div className="text-sm">Status: {statusFilter}</div>}
       </div>
 
@@ -412,7 +415,7 @@ export default function PurchaseReportPage() {
                       <TableRow key={pur.id}>
                         <TableCell className="font-mono">{pur.purchaseNo}</TableCell>
                         <TableCell>{pur.supplierName}</TableCell>
-                        <TableCell>{format(new Date(pur.date), 'dd MMM yyyy')}</TableCell>
+                        <TableCell>{format(new Date(pur.date), DISPLAY_DATE)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0))}</TableCell>
                         <TableCell className="text-right">{formatCurrency((pur.cgst || 0) + (pur.sgst || 0) + (pur.igst || 0))}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(pur.total)}</TableCell>

@@ -67,6 +67,22 @@ export function getChapterGstRate(code: string): number {
   return CHAPTER_GST_RATES[chapter] ?? 18
 }
 
+function collectMatches(
+  hsnData: HSNCode[],
+  predicate: (h: HSNCode) => boolean,
+  seen: Set<string>,
+  results: HSNCode[],
+  limit: number
+): void {
+  for (const h of hsnData) {
+    if (results.length >= limit) return
+    if (!predicate(h)) continue
+    if (seen.has(h.code)) continue
+    seen.add(h.code)
+    results.push(h)
+  }
+}
+
 function searchByNumericCode(
   hsnData: HSNCode[],
   searchTerm: string,
@@ -74,25 +90,46 @@ function searchByNumericCode(
 ): HSNCode[] {
   const results: HSNCode[] = []
   const seen = new Set<string>()
+  collectMatches(hsnData, h => h.code === searchTerm, seen, results, limit)
+  collectMatches(hsnData, h => h.code.startsWith(searchTerm), seen, results, limit)
+  collectMatches(hsnData, h => h.code.includes(searchTerm), seen, results, limit)
+  return results
+}
 
-  const add = (h: HSNCode) => {
-    if (!seen.has(h.code)) {
-      seen.add(h.code)
-      results.push(h)
-    }
-  }
+function matchesAllWords(desc: string, cat: string, words: string[]): boolean {
+  return words.every(w => desc.includes(w) || cat.includes(w))
+}
 
-  for (const h of hsnData) {
-    if (h.code === searchTerm) add(h)
-    if (results.length >= limit) return results
+function calculateDescriptionScore(
+  desc: string,
+  cat: string,
+  words: string[],
+  searchTerm: string,
+  codeLength: number
+): number {
+  let score = 0
+  if (desc.startsWith(words[0])) score += 100
+  if (desc === searchTerm) score += 200
+  for (const w of words) {
+    const idx = desc.indexOf(w)
+    if (idx === 0) score += 50
+    else if (idx > 0) score += 20
+    if (cat.includes(w)) score += 10
   }
-  for (const h of hsnData) {
-    if (h.code.startsWith(searchTerm)) add(h)
-    if (results.length >= limit) return results
-  }
-  for (const h of hsnData) {
-    if (h.code.includes(searchTerm)) add(h)
-    if (results.length >= limit) return results
+  return score + Math.max(0, 20 - codeLength)
+}
+
+function deduplicateByCode(
+  scored: Array<{ hsn: HSNCode; score: number }>,
+  limit: number
+): HSNCode[] {
+  const results: HSNCode[] = []
+  const seen = new Set<string>()
+  for (const s of scored) {
+    if (seen.has(s.hsn.code)) continue
+    seen.add(s.hsn.code)
+    results.push(s.hsn)
+    if (results.length >= limit) break
   }
   return results
 }
@@ -109,35 +146,15 @@ function searchByDescription(
 
   for (const h of hsnData) {
     const desc = h.description.toLowerCase()
-    const cat = (h.category || "").toLowerCase()
-    const allMatch = words.every(w => desc.includes(w) || cat.includes(w))
-    if (!allMatch) continue
+    const cat = (h.category ?? "").toLowerCase()
+    if (!matchesAllWords(desc, cat, words)) continue
 
-    let score = 0
-    if (desc.startsWith(words[0])) score += 100
-    if (desc === searchTerm) score += 200
-    for (const w of words) {
-      const idx = desc.indexOf(w)
-      if (idx === 0) score += 50
-      else if (idx > 0) score += 20
-      if (cat.includes(w)) score += 10
-    }
-    score += Math.max(0, 20 - h.code.length)
+    const score = calculateDescriptionScore(desc, cat, words, searchTerm, h.code.length)
     scored.push({ hsn: h, score })
   }
 
   scored.sort((a, b) => b.score - a.score)
-
-  const results: HSNCode[] = []
-  const seen = new Set<string>()
-  for (const s of scored) {
-    if (!seen.has(s.hsn.code)) {
-      seen.add(s.hsn.code)
-      results.push(s.hsn)
-    }
-    if (results.length >= limit) break
-  }
-  return results
+  return deduplicateByCode(scored, limit)
 }
 
 export async function searchHSNCodes(query: string, limit: number = 50): Promise<HSNCode[]> {

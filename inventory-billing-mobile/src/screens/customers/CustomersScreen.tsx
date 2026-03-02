@@ -15,7 +15,6 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Card from '@components/ui/Card';
-import Loading from '@components/ui/Loading';
 import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';

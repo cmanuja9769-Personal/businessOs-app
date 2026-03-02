@@ -15,6 +15,8 @@ import type { LabelLayout } from "@/lib/label-layouts"
 import type { BarcodeQueueEntry } from "@/store/use-barcode-queue-store"
 import JsBarcode from "jsbarcode"
 
+const JUSTIFY_BETWEEN = "space-between" as const
+
 Font.register({
   family: "NotoSans",
   fonts: [
@@ -333,7 +335,7 @@ export function BarcodePDFDocument(props: BarcodePDFDocumentProps) {
       backgroundColor: "#ffffff",
       display: "flex",
       flexDirection: "column",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       paddingBottom: mmToPt(1),
       overflow: "hidden",
     },
@@ -343,7 +345,7 @@ export function BarcodePDFDocument(props: BarcodePDFDocumentProps) {
     },
     labelHeader: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       alignItems: "center",
       marginBottom: mmToPt(0.5),
     },
@@ -397,7 +399,7 @@ export function BarcodePDFDocument(props: BarcodePDFDocumentProps) {
     },
     footer: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       alignItems: "center",
       borderTopWidth: 0.3,
       borderTopColor: "#d1d5db",

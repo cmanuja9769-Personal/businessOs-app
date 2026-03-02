@@ -5,7 +5,7 @@
 
 "use client"
 
-import { useEffect, useState } from "react"
+import { type ReactNode, useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,30 +22,55 @@ interface EWayBillStatusCardProps {
   onUpdate?: () => void
 }
 
+type EWayBillStatus = "active" | "cancelled" | "expired" | "expiring"
+type EWayBillVisualKey = "expired" | "expiring" | "cancelled" | "default"
+
+function resolveStatus(isExpired: boolean, isExpiringSoon: boolean, detailsStatus?: string): EWayBillStatus {
+  if (isExpired) return "expired"
+  if (isExpiringSoon) return "expiring"
+  return (detailsStatus as EWayBillStatus) || "active"
+}
+
+function resolveVisualKey(isExpired: boolean, isExpiringSoon: boolean, detailsStatus?: string): EWayBillVisualKey {
+  if (isExpired) return "expired"
+  if (isExpiringSoon) return "expiring"
+  if (detailsStatus === "cancelled") return "cancelled"
+  return "default"
+}
+
+function resolveValidityTextClass(isExpired: boolean, isExpiringSoon: boolean): string {
+  if (isExpired) return "text-red-600"
+  if (isExpiringSoon) return "text-orange-600"
+  return "text-green-600"
+}
+
+const STATUS_COLOR_MAP: Record<EWayBillVisualKey, string> = {
+  expired: "border-red-200 bg-red-50",
+  expiring: "border-orange-200 bg-orange-50",
+  cancelled: "border-gray-200 bg-gray-50",
+  default: "border-blue-200 bg-blue-50",
+}
+
+const STATUS_LABEL_MAP: Record<EWayBillVisualKey, string> = {
+  expired: "Expired",
+  expiring: "Expiring Soon",
+  cancelled: "Cancelled",
+  default: "Active",
+}
+
+const STATUS_ICON_MAP: Record<EWayBillVisualKey, ReactNode> = {
+  expired: <AlertCircle className="w-5 h-5 text-red-600" />,
+  expiring: <Clock className="w-5 h-5 text-orange-600" />,
+  cancelled: <AlertCircle className="w-5 h-5 text-gray-600" />,
+  default: <CheckCircle2 className="w-5 h-5 text-blue-600" />,
+}
+
 export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProps) {
   const [loading, setLoading] = useState(false)
   const [details, setDetails] = useState<EWayBillData | null>(null)
   const [timeRemaining, setTimeRemaining] = useState<string>("")
 
-  useEffect(() => {
-    if (invoice.ewaybillNo) {
-      loadDetails()
-    }
-  }, [invoice.id, invoice.ewaybillNo])
-
-  useEffect(() => {
-    if (details?.validUpto) {
-      // Update time remaining every minute
-      const updateTimer = () => {
-        setTimeRemaining(EWayBillUtils.getTimeRemaining(details.validUpto))
-      }
-      updateTimer()
-      const interval = setInterval(updateTimer, 60000) // Update every minute
-      return () => clearInterval(interval)
-    }
-  }, [details])
-
-  const loadDetails = async () => {
+  const loadDetails = useCallback(async () => {
     if (!invoice.ewaybillNo) return
 
     try {
@@ -58,7 +83,24 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
     } finally {
       setLoading(false)
     }
-  }
+  }, [invoice.ewaybillNo])
+
+  useEffect(() => {
+    if (invoice.ewaybillNo) {
+      loadDetails()
+    }
+  }, [invoice.ewaybillNo, loadDetails])
+
+  useEffect(() => {
+    if (details?.validUpto) {
+      const updateTimer = () => {
+        setTimeRemaining(EWayBillUtils.getTimeRemaining(details.validUpto))
+      }
+      updateTimer()
+      const interval = setInterval(updateTimer, 60000)
+      return () => clearInterval(interval)
+    }
+  }, [details])
 
   const handleCopyEWB = () => {
     if (invoice.ewaybillNo) {
@@ -111,43 +153,12 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
 
   const isExpiringSoon = details?.validUpto ? EWayBillUtils.isExpiringSoon(details.validUpto) : false
   const isExpired = details?.validUpto ? EWayBillUtils.isExpired(details.validUpto) : false
-  type EWayBillStatus = "active" | "cancelled" | "expired" | "expiring"
-  let status: EWayBillStatus
-  if (isExpired) {
-    status = "expired"
-  } else if (isExpiringSoon) {
-    status = "expiring"
-  } else {
-    status = (details?.status as EWayBillStatus) || "active"
-  }
-
-  let validityTextClass = "text-green-600"
-  if (isExpired) validityTextClass = "text-red-600"
-  else if (isExpiringSoon) validityTextClass = "text-orange-600"
-
-  const getStatusColor = () => {
-    if (isExpired) return "border-red-200 bg-red-50"
-    if (isExpiringSoon) return "border-orange-200 bg-orange-50"
-    if (details?.status === "cancelled") return "border-gray-200 bg-gray-50"
-    return "border-blue-200 bg-blue-50"
-  }
-
-  const getStatusIcon = () => {
-    if (isExpired) return <AlertCircle className="w-5 h-5 text-red-600" />
-    if (isExpiringSoon) return <Clock className="w-5 h-5 text-orange-600" />
-    if (details?.status === "cancelled") return <AlertCircle className="w-5 h-5 text-gray-600" />
-    return <CheckCircle2 className="w-5 h-5 text-blue-600" />
-  }
-
-  const getStatusLabel = () => {
-    if (isExpired) return "Expired"
-    if (isExpiringSoon) return "Expiring Soon"
-    if (details?.status === "cancelled") return "Cancelled"
-    return "Active"
-  }
+  const status = resolveStatus(isExpired, isExpiringSoon, details?.status)
+  const visualKey = resolveVisualKey(isExpired, isExpiringSoon, details?.status)
+  const validityTextClass = resolveValidityTextClass(isExpired, isExpiringSoon)
 
   return (
-    <Card className={getStatusColor()}>
+    <Card className={STATUS_COLOR_MAP[visualKey]}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -155,8 +166,8 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
             <CardTitle>E-Way Bill</CardTitle>
           </div>
           <Badge variant={EWayBillUtils.getStatusBadgeVariant(status)}>
-            {getStatusIcon()}
-            <span className="ml-1">{getStatusLabel()}</span>
+            {STATUS_ICON_MAP[visualKey]}
+            <span className="ml-1">{STATUS_LABEL_MAP[visualKey]}</span>
           </Badge>
         </div>
         <CardDescription>Government-generated e-way bill for goods transportation</CardDescription>

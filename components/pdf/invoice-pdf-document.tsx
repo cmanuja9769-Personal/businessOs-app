@@ -14,6 +14,8 @@ import { format } from "date-fns"
 import type { IInvoice } from "@/types"
 import type { ISettings } from "@/app/settings/actions"
 
+const JUSTIFY_BETWEEN = "space-between" as const
+
 // Register a font that supports Hindi (Noto Sans supports Devanagari)
 Font.register({
   family: "NotoSans",
@@ -60,7 +62,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     // Header
     header: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       borderBottomWidth: 2,
       borderBottomColor: primaryColor,
       paddingBottom: 12,
@@ -216,7 +218,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     totalRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       marginBottom: 4,
     },
     totalLabel: {
@@ -233,7 +235,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     grandTotalRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       borderTopWidth: 2,
       borderTopColor: primaryColor,
       paddingTop: 6,
@@ -267,7 +269,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     },
     bankGrid: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
     },
     bankCol: {
       width: "48%",
@@ -335,7 +337,7 @@ export function InvoicePDFDocument({ invoice, settings }: InvoicePDFDocumentProp
     // Footer
     footer: {
       flexDirection: "row",
-      justifyContent: "space-between",
+      justifyContent: JUSTIFY_BETWEEN,
       alignItems: "flex-end",
       borderTopWidth: 1,
       borderTopColor: "#dddddd",

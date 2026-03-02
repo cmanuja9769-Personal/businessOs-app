@@ -1,5 +1,8 @@
 import type { IItem } from "@/types"
 
+const WORKBOOK_CREATOR = "businessOs-app"
+const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 async function getExcelJS() {
   const mod = await import("exceljs")
   return mod.default
@@ -179,7 +182,7 @@ export async function parseExcelFile(file: File): Promise<ParsedRow[]> {
 export async function downloadExcelTemplate(headers: string[], filename: string) {
   const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = "businessOs-app"
+  workbook.creator = WORKBOOK_CREATOR
   workbook.created = new Date()
 
   const itemsSheet = workbook.addWorksheet("Items")
@@ -268,7 +271,7 @@ export async function downloadExcelTemplate(headers: string[], filename: string)
   ])
 
   const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+  const blob = new Blob([buffer], { type: XLSX_MIME_TYPE })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -280,7 +283,7 @@ export async function downloadExcelTemplate(headers: string[], filename: string)
 export async function downloadItemExcelTemplate(filename = "item_template.xlsx", godownNames: string[] = []) {
   const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = "businessOs-app"
+  workbook.creator = WORKBOOK_CREATOR
   workbook.created = new Date()
 
   const sheet = workbook.addWorksheet("Items", {
@@ -459,7 +462,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
   // Helpful note row is already present; keep file simple/minimal
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    type: XLSX_MIME_TYPE,
   })
 
   const url = window.URL.createObjectURL(blob)
@@ -475,7 +478,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
 export async function exportItemsToExcel(items: IItem[], filename = "items_export.xlsx", godownNames: string[] = []) {
   const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = "businessOs-app"
+  workbook.creator = WORKBOOK_CREATOR
   workbook.created = new Date()
 
   const sheet = workbook.addWorksheet("Items", {
@@ -688,7 +691,7 @@ export async function exportItemsToExcel(items: IItem[], filename = "items_expor
 
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    type: XLSX_MIME_TYPE,
   })
 
   const url = window.URL.createObjectURL(blob)
@@ -704,7 +707,7 @@ export async function exportItemsToExcel(items: IItem[], filename = "items_expor
 export async function downloadCustomerExcelTemplate(filename = "customer_template.xlsx") {
   const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = "businessOs-app"
+  workbook.creator = WORKBOOK_CREATOR
   workbook.created = new Date()
 
   const sheet = workbook.addWorksheet("Customers", {
@@ -746,7 +749,7 @@ export async function downloadCustomerExcelTemplate(filename = "customer_templat
 
   const buffer = await workbook.xlsx.writeBuffer()
   const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    type: XLSX_MIME_TYPE,
   })
 
   const url = window.URL.createObjectURL(blob)

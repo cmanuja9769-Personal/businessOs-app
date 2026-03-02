@@ -132,7 +132,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
     }, 3100);
 
     return () => clearTimeout(fadeTimer);
-  }, []);
+  }, [logoScale, logoRotate, titleOpacity, titleTranslateY, subtitleOpacity, subtitleTranslateY, circleScale1, circleScale2, circleScale3, loaderOpacity, loaderWidth, fadeOut, onFinish]);
 
   const spin = logoRotate.interpolate({
     inputRange: [0, 1],

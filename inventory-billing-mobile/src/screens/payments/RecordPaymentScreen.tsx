@@ -21,7 +21,6 @@ import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
 
 type PaymentMethod = 'cash' | 'card' | 'upi' | 'bank_transfer' | 'cheque' | 'other';
-type PaymentType = 'receivable' | 'payable';
 
 interface PaymentMethodOption {
   value: PaymentMethod;
@@ -77,7 +76,6 @@ export default function RecordPaymentScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const paymentType: PaymentType = purchaseId ? 'payable' : 'receivable';
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [amount, setAmount] = useState('');
@@ -87,40 +85,39 @@ export default function RecordPaymentScreen() {
   const [paymentDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        if (invoiceId) {
+          const { data } = await supabase
+            .from('invoices')
+            .select('id, invoice_number, customer_name, total, paid_amount, balance')
+            .eq('id', invoiceId)
+            .single();
+
+          if (data) {
+            setInvoice(data);
+            setAmount(data.balance.toString());
+          }
+        } else if (purchaseId) {
+          const { data } = await supabase
+            .from('purchases')
+            .select('id, purchase_number, supplier_name, total, paid_amount, balance')
+            .eq('id', purchaseId)
+            .single();
+
+          if (data) {
+            setPurchase(data);
+            setAmount(data.balance.toString());
+          }
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadData();
   }, [invoiceId, purchaseId]);
-
-  const loadData = async () => {
-    try {
-      if (invoiceId) {
-        const { data } = await supabase
-          .from('invoices')
-          .select('id, invoice_number, customer_name, total, paid_amount, balance')
-          .eq('id', invoiceId)
-          .single();
-
-        if (data) {
-          setInvoice(data);
-          setAmount(data.balance.toString());
-        }
-      } else if (purchaseId) {
-        const { data } = await supabase
-          .from('purchases')
-          .select('id, purchase_number, supplier_name, total, paid_amount, balance')
-          .eq('id', purchaseId)
-          .single();
-
-        if (data) {
-          setPurchase(data);
-          setAmount(data.balance.toString());
-        }
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSave = async () => {
     const amountValue = parseFloat(amount);

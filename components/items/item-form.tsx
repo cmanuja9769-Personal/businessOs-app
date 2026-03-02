@@ -58,62 +58,28 @@ type GodownOption = {
   name: string;
 };
 
-// Generate item code from name
+const SKIP_WORDS = new Set([
+  "the", "a", "an", "of", "for", "and", "or",
+  "in", "on", "at", "to", "cm", "mm", "m", "kg", "g", "l", "ml",
+]);
+
+function truncateWord(word: string): string {
+  if (word.length <= 3) return word;
+  if (word.length <= 6) return word.slice(0, 4);
+  return word.slice(0, 5);
+}
+
+function wordToCodePart(word: string): string | null {
+  if (SKIP_WORDS.has(word.toLowerCase())) return null;
+  if (/^\d+$/.test(word)) return word;
+  const cleaned = word.replace(/[^a-zA-Z0-9]/g, "");
+  if (!cleaned) return null;
+  return truncateWord(cleaned);
+}
+
 function generateItemCode(name: string): string {
   if (!name) return "";
-
-  // Words to skip (common articles, prepositions, etc.)
-  const skipWords = new Set([
-    "the",
-    "a",
-    "an",
-    "of",
-    "for",
-    "and",
-    "or",
-    "in",
-    "on",
-    "at",
-    "to",
-    "cm",
-    "mm",
-    "m",
-    "kg",
-    "g",
-    "l",
-    "ml",
-  ]);
-
-  const words = name.trim().split(/\s+/);
-  const codeParts: string[] = [];
-
-  for (const word of words) {
-    const lowerWord = word.toLowerCase();
-
-    // Skip common words
-    if (skipWords.has(lowerWord)) continue;
-
-    // If it's a number, keep it as-is
-    if (/^\d+$/.test(word)) {
-      codeParts.push(word);
-      continue;
-    }
-
-    // Remove special characters
-    const cleanWord = word.replace(/[^a-zA-Z0-9]/g, "");
-    if (!cleanWord) continue;
-
-    // Take first 3-5 characters based on word length
-    if (cleanWord.length <= 3) {
-      codeParts.push(cleanWord);
-    } else if (cleanWord.length <= 6) {
-      codeParts.push(cleanWord.slice(0, 4));
-    } else {
-      codeParts.push(cleanWord.slice(0, 5));
-    }
-  }
-
-  return codeParts.join("").toUpperCase();
+  return name.trim().split(/\s+/).map(wordToCodePart).filter(Boolean).join("").toUpperCase();
 }
 
 interface ItemFormProps {

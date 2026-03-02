@@ -22,6 +22,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function safeParse<T>(json: string | null): T | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -42,15 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!isMounted) return;
         
-        // Restore cached user first for immediate access
-        if (cachedUserStr) {
-          try {
-            const cachedUser = JSON.parse(cachedUserStr);
-            console.warn('[AUTH] Restoring cached user:', cachedUser.email);
-            setUser(cachedUser);
-          } catch {
-            console.warn('[AUTH] Failed to parse cached user');
-          }
+        const cachedUser = safeParse<User>(cachedUserStr);
+        if (cachedUser) {
+          console.warn('[AUTH] Restoring cached user:', cachedUser.email);
+          setUser(cachedUser);
         }
 
         if (cachedOrgId) {
@@ -58,17 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setOrganizationId(cachedOrgId);
         }
 
-        if (cachedSessionStr) {
-          try {
-            const cachedSession = JSON.parse(cachedSessionStr);
-            console.warn('[AUTH] Restoring cached session');
-            setSession(cachedSession);
-          } catch {
-            console.warn('[AUTH] Failed to parse cached session');
-          }
+        const cachedSession = safeParse<Session>(cachedSessionStr);
+        if (cachedSession) {
+          console.warn('[AUTH] Restoring cached session');
+          setSession(cachedSession);
         }
 
-        if (cachedUserStr && cachedOrgId) {
+        if (cachedUser && cachedOrgId) {
           console.warn('[AUTH] Using cached auth state - app ready');
           setLoading(false);
         }

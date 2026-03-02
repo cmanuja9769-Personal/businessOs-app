@@ -6,6 +6,8 @@ import { DOCUMENT_TYPE_CONFIG } from "@/types";
 import type { ISettings } from "@/app/settings/actions";
 import { numberToWords } from "@/lib/number-to-words";
 
+const DISPLAY_DATE = "dd MMM yyyy";
+
 interface ModernTemplateProps {
   invoice: IInvoice;
   settings: ISettings;
@@ -80,20 +82,20 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
               <div>
                 <div className="text-xs text-gray-500">Invoice Date</div>
                 <div className="text-sm font-semibold text-gray-900">
-                  {format(invoice.invoiceDate, "dd MMM yyyy")}
+                  {format(invoice.invoiceDate, DISPLAY_DATE)}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-gray-500">Due Date</div>
                 <div className="text-sm font-semibold text-gray-900">
-                  {format(invoice.dueDate, "dd MMM yyyy")}
+                  {format(invoice.dueDate, DISPLAY_DATE)}
                 </div>
               </div>
               {invoice.validityDate && (
                 <div className="col-span-2">
                   <div className="text-xs text-gray-500">Validity</div>
                   <div className="text-sm font-semibold text-gray-900">
-                    {format(invoice.validityDate, "dd MMM yyyy")}
+                    {format(invoice.validityDate, DISPLAY_DATE)}
                   </div>
                 </div>
               )}
@@ -304,7 +306,13 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
         {invoice.total > 0 && (
           <div className="px-6 pt-3">
             <p className="text-xs text-gray-600">
-              <span className="font-semibold" style={{ color: 'var(--invoice-primary)' }}>Amount in Words:</span>{" "}{numberToWords(invoice.total)}
+              <span
+                className="font-semibold"
+                style={{ color: "var(--invoice-primary)" }}
+              >
+                Amount in Words:
+              </span>{" "}
+              {numberToWords(invoice.total)}
             </p>
           </div>
         )}

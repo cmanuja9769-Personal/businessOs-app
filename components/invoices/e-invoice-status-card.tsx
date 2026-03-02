@@ -31,18 +31,17 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
 
   useEffect(() => {
     if (invoice.irn) {
+      const loadFilingStatus = async () => {
+        try {
+          const status = await eInvoiceService.getFilingStatus(invoice.id)
+          setFilingStatus(status)
+        } catch (error) {
+          console.error("Failed to load filing status:", error)
+        }
+      }
       loadFilingStatus()
     }
   }, [invoice.id, invoice.irn])
-
-  const loadFilingStatus = async () => {
-    try {
-      const status = await eInvoiceService.getFilingStatus(invoice.id)
-      setFilingStatus(status)
-    } catch (error) {
-      console.error("Failed to load filing status:", error)
-    }
-  }
 
   const handleDownloadPDF = async () => {
     setLoading(true)

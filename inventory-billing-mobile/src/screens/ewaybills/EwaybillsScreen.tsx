@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -50,11 +50,7 @@ export default function EwaybillsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ total: 0, active: 0, expired: 0 });
 
-  useEffect(() => {
-    loadEwaybills();
-  }, [organizationId]);
-
-  const loadEwaybills = async () => {
+  const loadEwaybills = useCallback(async () => {
     if (!organizationId) return;
     setLoading(true);
 
@@ -85,7 +81,11 @@ export default function EwaybillsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    loadEwaybills();
+  }, [loadEwaybills]);
 
   const onRefresh = async () => {
     setRefreshing(true);

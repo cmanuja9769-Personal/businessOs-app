@@ -22,6 +22,9 @@ import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import type { ApiPaymentResponse } from "@/types/api-responses"
 
+const COLOR_POSITIVE = "text-green-600"
+const COLOR_NEGATIVE = "text-red-600"
+
 interface CashFlowCategory {
   name: string
   items: {
@@ -167,14 +170,14 @@ export default function CashFlowPage() {
                   )}
                   {item.description}
                 </TableCell>
-                <TableCell className={`text-right font-medium ${item.type === 'inflow' ? 'text-green-600' : 'text-red-600'}`}>
+                <TableCell className={`text-right font-medium ${item.type === 'inflow' ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                   {item.type === 'inflow' ? '+' : '-'}{formatCurrency(item.amount)}
                 </TableCell>
               </TableRow>
             ))}
             <TableRow className="font-bold bg-muted/50">
               <TableCell>Net Cash from {category.name}</TableCell>
-              <TableCell className={`text-right ${category.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <TableCell className={`text-right ${category.total >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                 {category.total >= 0 ? '+' : ''}{formatCurrency(category.total)}
               </TableCell>
             </TableRow>
@@ -339,7 +342,7 @@ export default function CashFlowPage() {
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Net Change in Cash</TableCell>
-                    <TableCell className={`text-right font-medium ${netChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <TableCell className={`text-right font-medium ${netChange >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                       {netChange >= 0 ? '+' : ''}{formatCurrency(netChange)}
                     </TableCell>
                   </TableRow>

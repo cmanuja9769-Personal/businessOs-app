@@ -22,6 +22,11 @@ import Link from "next/link"
 import { format, endOfMonth, startOfYear } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
 
+const DISPLAY_DATE = "dd MMM yyyy"
+const BOLD_HEADING = "text-2xl font-bold"
+const BORDER_TOTAL = '1px solid #333'
+const TEXT_DANGER = 'text-red-600'
+
 interface ProfitLossData {
   revenue: {
     sales: number
@@ -45,6 +50,119 @@ interface ProfitLossData {
   netProfit: number
 }
 
+function filterByDateRange<T>(
+  items: T[],
+  getDate: (item: T) => string,
+  from: Date,
+  to: Date,
+): T[] {
+  return items.filter((item) => {
+    const d = new Date(getDate(item))
+    return d >= from && d <= to
+  })
+}
+
+function calculateStockValues(
+  stockItems: Array<Record<string, number | null>>,
+  totalSales: number,
+  totalPurchases: number,
+): { openingStock: number; closingStock: number; cogs: number } {
+  const closingStock = stockItems.reduce((sum, item) => {
+    const qty = item.current_stock || 0
+    const price = item.purchase_price || 0
+    return sum + (qty * price)
+  }, 0)
+
+  const estimatedOpening = closingStock + totalSales - totalPurchases
+  const openingStock = estimatedOpening > 0 ? estimatedOpening : closingStock
+  const cogs = openingStock + totalPurchases - closingStock
+
+  return { openingStock, closingStock, cogs }
+}
+
+function buildProfitLossData(
+  totalSales: number,
+  totalPurchases: number,
+  stockValues: { openingStock: number; closingStock: number; cogs: number },
+): ProfitLossData {
+  const otherIncome = 0
+  const grossProfit = totalSales + otherIncome - stockValues.cogs
+  const expenses: { category: string; amount: number }[] = []
+  const totalExpenses = 0
+  const operatingProfit = grossProfit - totalExpenses
+  const taxesProvision = 0
+  const netProfit = operatingProfit - taxesProvision
+
+  return {
+    revenue: { sales: totalSales, otherIncome, total: totalSales + otherIncome },
+    costOfGoodsSold: {
+      openingStock: stockValues.openingStock,
+      purchases: totalPurchases,
+      closingStock: stockValues.closingStock,
+      total: stockValues.cogs,
+    },
+    grossProfit,
+    expenses,
+    totalExpenses,
+    operatingProfit,
+    taxesProvision,
+    netProfit,
+  }
+}
+
+async function loadProfitLossData(dateFrom: string, dateTo: string): Promise<ProfitLossData> {
+  const [invoicesRes, purchasesRes, stockRes] = await Promise.all([
+    fetch('/api/invoices'),
+    fetch('/api/purchases'),
+    fetch('/api/reports/stock')
+  ])
+
+  const invoices = invoicesRes.ok ? await invoicesRes.json() : []
+  const purchases = purchasesRes.ok ? await purchasesRes.json() : []
+  const stockData = stockRes.ok ? await stockRes.json() : { data: [] }
+
+  const fromDate = new Date(dateFrom)
+  const toDate = new Date(dateTo)
+  toDate.setHours(23, 59, 59, 999)
+
+  const periodInvoices = filterByDateRange(invoices, (inv: ApiInvoiceResponse) => inv.invoiceDate, fromDate, toDate)
+  const periodPurchases = filterByDateRange(purchases, (pur: ApiPurchaseResponse) => pur.date, fromDate, toDate)
+
+  const totalSales = periodInvoices.reduce((s: number, inv: ApiInvoiceResponse) => s + (inv.subtotal || 0), 0)
+  const totalPurchases = periodPurchases.reduce((s: number, pur: ApiPurchaseResponse) => s + (pur.subtotal || 0), 0)
+
+  const stockItems = stockData?.data || []
+  const stockValues = calculateStockValues(stockItems, totalSales, totalPurchases)
+
+  return buildProfitLossData(totalSales, totalPurchases, stockValues)
+}
+
+function computeMargin(profit: number, total: number): number {
+  if (total <= 0) return 0
+  return (profit / total) * 100
+}
+
+function getNetProfitStyles(netProfit: number) {
+  if (netProfit >= 0) {
+    return {
+      cardGradient: 'from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-200',
+      textClass: 'text-emerald-700',
+      label: 'Net Profit for the Period',
+      amountClass: 'text-emerald-600',
+      iconClass: 'text-emerald-500/30',
+      tableClass: 'text-emerald-700',
+    }
+  }
+  return {
+    cardGradient: 'from-red-50 to-pink-50 dark:from-red-950/20 dark:to-pink-950/20 border-red-200',
+    textClass: 'text-red-700',
+    label: 'Net Loss for the Period',
+    amountClass: TEXT_DANGER,
+    iconClass: 'text-red-500/30',
+    tableClass: 'text-red-700',
+  }
+}
+
 export default function ProfitLossPage() {
   const [data, setData] = useState<ProfitLossData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,84 +170,18 @@ export default function ProfitLossPage() {
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
 
   useEffect(() => {
-    async function fetchProfitLossData() {
-    setLoading(true)
-    try {
-      const [invoicesRes, purchasesRes, stockRes] = await Promise.all([
-        fetch('/api/invoices'),
-        fetch('/api/purchases'),
-        fetch('/api/reports/stock')
-      ])
-
-      const invoices = invoicesRes.ok ? await invoicesRes.json() : []
-      const purchases = purchasesRes.ok ? await purchasesRes.json() : []
-      const stockData = stockRes.ok ? await stockRes.json() : { data: [] }
-
-      const fromDate = new Date(dateFrom)
-      const toDate = new Date(dateTo)
-      toDate.setHours(23, 59, 59, 999)
-
-      const periodInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
-        const d = new Date(inv.invoiceDate)
-        return d >= fromDate && d <= toDate
-      })
-      const periodPurchases = purchases.filter((pur: ApiPurchaseResponse) => {
-        const d = new Date(pur.date)
-        return d >= fromDate && d <= toDate
-      })
-
-      const totalSales = periodInvoices.reduce((s: number, inv: ApiInvoiceResponse) => s + (inv.subtotal || 0), 0)
-      const otherIncome = 0
-
-      const totalPurchases = periodPurchases.reduce((s: number, pur: ApiPurchaseResponse) => s + (pur.subtotal || 0), 0)
-
-      const stockItems = stockData?.data || []
-      const closingStockValue = stockItems.reduce((sum: number, item: Record<string, number | null>) => {
-        const qty = item.current_stock || 0
-        const price = item.purchase_price || 0
-        return sum + (qty * price)
-      }, 0)
-
-      const openingStockValue = closingStockValue + totalSales - totalPurchases > 0
-        ? closingStockValue + totalSales - totalPurchases
-        : closingStockValue
-
-      const cogs = openingStockValue + totalPurchases - closingStockValue
-
-      const grossProfit = totalSales + otherIncome - cogs
-
-      const expenses: { category: string; amount: number }[] = []
-      const totalExpenses = 0
-      const operatingProfit = grossProfit - totalExpenses
-      const taxesProvision = 0
-      const netProfit = operatingProfit - taxesProvision
-
-      setData({
-        revenue: {
-          sales: totalSales,
-          otherIncome,
-          total: totalSales + otherIncome
-        },
-        costOfGoodsSold: {
-          openingStock: openingStockValue,
-          purchases: totalPurchases,
-          closingStock: closingStockValue,
-          total: cogs
-        },
-        grossProfit,
-        expenses,
-        totalExpenses,
-        operatingProfit,
-        taxesProvision,
-        netProfit
-      })
-    } catch (error) {
-      console.error('Failed to fetch P&L data:', error)
-    } finally {
-      setLoading(false)
+    async function fetchData() {
+      setLoading(true)
+      try {
+        const result = await loadProfitLossData(dateFrom, dateTo)
+        setData(result)
+      } catch (error) {
+        console.error('Failed to fetch P&L data:', error)
+      } finally {
+        setLoading(false)
+      }
     }
-  }
-    fetchProfitLossData()
+    fetchData()
   }, [dateFrom, dateTo])
 
   const formatCurrency = (value: number) => {
@@ -140,20 +192,18 @@ export default function ProfitLossPage() {
     }).format(value)
   }
 
-  const grossMargin = data && data.revenue.total > 0 
-    ? ((data.grossProfit / data.revenue.total) * 100) 
-    : 0
+  const grossMargin = data ? computeMargin(data.grossProfit, data.revenue.total) : 0
 
-  const netMargin = data && data.revenue.total > 0 
-    ? ((data.netProfit / data.revenue.total) * 100) 
-    : 0
+  const netMargin = data ? computeMargin(data.netProfit, data.revenue.total) : 0
+
+  const netProfitStyles = data ? getNetProfitStyles(data.netProfit) : null
 
   return (
     <div className="p-4 sm:p-6 space-y-6 report-container">
       {/* Print Header - Only visible when printing */}
       <div className="hidden print:block report-header">
         <h1>Profit & Loss Statement</h1>
-        <div className="date-range">{format(new Date(dateFrom), 'dd MMM yyyy')} - {format(new Date(dateTo), 'dd MMM yyyy')}</div>
+        <div className="date-range">{format(new Date(dateFrom), DISPLAY_DATE)} - {format(new Date(dateTo), DISPLAY_DATE)}</div>
       </div>
 
       {/* Print P&L Statement */}
@@ -177,7 +227,7 @@ export default function ProfitLossPage() {
               <td style={{ paddingLeft: '20px' }}>Other Income</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(data.revenue.otherIncome)}</td>
             </tr>
-            <tr style={{ fontWeight: 'bold', borderTop: '1px solid #333' }}>
+            <tr style={{ fontWeight: 'bold', borderTop: BORDER_TOTAL }}>
               <td>Total Revenue</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(data.revenue.total)}</td>
             </tr>
@@ -198,7 +248,7 @@ export default function ProfitLossPage() {
               <td style={{ paddingLeft: '20px' }}>Less: Closing Stock</td>
               <td style={{ textAlign: 'right' }}>({formatCurrency(data.costOfGoodsSold.closingStock)})</td>
             </tr>
-            <tr style={{ fontWeight: 'bold', borderTop: '1px solid #333' }}>
+            <tr style={{ fontWeight: 'bold', borderTop: BORDER_TOTAL }}>
               <td>Total COGS</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(data.costOfGoodsSold.total)}</td>
             </tr>
@@ -219,7 +269,7 @@ export default function ProfitLossPage() {
                 <td style={{ textAlign: 'right' }}>{formatCurrency(exp.amount)}</td>
               </tr>
             ))}
-            <tr style={{ fontWeight: 'bold', borderTop: '1px solid #333' }}>
+            <tr style={{ fontWeight: 'bold', borderTop: BORDER_TOTAL }}>
               <td>Total Operating Expenses</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(data.totalExpenses)}</td>
             </tr>
@@ -331,7 +381,7 @@ export default function ProfitLossPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Total Revenue</p>
-                    <p className="text-2xl font-bold">{formatCurrency(data.revenue.total)}</p>
+                    <p className={BOLD_HEADING}>{formatCurrency(data.revenue.total)}</p>
                   </div>
                   <div className="p-2 rounded-lg bg-blue-500/10">
                     <BarChart3 className="h-5 w-5 text-blue-600" />
@@ -344,7 +394,7 @@ export default function ProfitLossPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Gross Profit</p>
-                    <p className="text-2xl font-bold">{formatCurrency(data.grossProfit)}</p>
+                    <p className={BOLD_HEADING}>{formatCurrency(data.grossProfit)}</p>
                     <p className="text-xs text-muted-foreground">{grossMargin.toFixed(1)}% margin</p>
                   </div>
                   <div className="p-2 rounded-lg bg-green-500/10">
@@ -358,7 +408,7 @@ export default function ProfitLossPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Operating Profit</p>
-                    <p className={`text-2xl font-bold ${data.operatingProfit >= 0 ? '' : 'text-red-600'}`}>
+                    <p className={`${BOLD_HEADING} ${data.operatingProfit >= 0 ? '' : TEXT_DANGER}`}>
                       {formatCurrency(data.operatingProfit)}
                     </p>
                   </div>
@@ -373,7 +423,7 @@ export default function ProfitLossPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Net Profit</p>
-                    <p className={`text-2xl font-bold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    <p className={`${BOLD_HEADING} ${data.netProfit >= 0 ? 'text-emerald-600' : TEXT_DANGER}`}>
                       {formatCurrency(data.netProfit)}
                     </p>
                     <p className="text-xs text-muted-foreground">{netMargin.toFixed(1)}% margin</p>
@@ -392,7 +442,7 @@ export default function ProfitLossPage() {
               <CardTitle className="text-base">
                 Profit & Loss Statement
                 <span className="text-sm font-normal text-muted-foreground ml-2">
-                  {format(new Date(dateFrom), 'dd MMM yyyy')} to {format(new Date(dateTo), 'dd MMM yyyy')}
+                  {format(new Date(dateFrom), DISPLAY_DATE)} to {format(new Date(dateTo), DISPLAY_DATE)}
                 </span>
               </CardTitle>
             </CardHeader>
@@ -463,7 +513,7 @@ export default function ProfitLossPage() {
                   {/* Operating Profit */}
                   <TableRow className="font-bold text-lg">
                     <TableCell>Operating Profit (EBIT)</TableCell>
-                    <TableCell className={`text-right ${data.operatingProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <TableCell className={`text-right ${data.operatingProfit >= 0 ? 'text-green-600' : TEXT_DANGER}`}>
                       {formatCurrency(data.operatingProfit)}
                     </TableCell>
                   </TableRow>
@@ -477,7 +527,7 @@ export default function ProfitLossPage() {
                   {/* Net Profit */}
                   <TableRow className="font-bold text-xl bg-emerald-100 dark:bg-emerald-950/30">
                     <TableCell className="text-emerald-700">Net Profit</TableCell>
-                    <TableCell className={`text-right ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                    <TableCell className={`text-right ${getNetProfitStyles(data.netProfit).tableClass}`}>
                       {formatCurrency(data.netProfit)}
                     </TableCell>
                   </TableRow>
@@ -487,21 +537,21 @@ export default function ProfitLossPage() {
           </Card>
 
           {/* Net Profit Highlight */}
-          <Card className={`bg-gradient-to-br ${data.netProfit >= 0 ? 'from-emerald-50 to-green-50 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-200' : 'from-red-50 to-pink-50 dark:from-red-950/20 dark:to-pink-950/20 border-red-200'}`}>
+          <Card className={`bg-gradient-to-br ${netProfitStyles!.cardGradient}`}>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className={`text-sm font-medium ${data.netProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {data.netProfit >= 0 ? 'Net Profit for the Period' : 'Net Loss for the Period'}
+                  <p className={`text-sm font-medium ${netProfitStyles!.textClass}`}>
+                    {netProfitStyles!.label}
                   </p>
-                  <p className={`text-4xl font-bold ${data.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <p className={`text-4xl font-bold ${netProfitStyles!.amountClass}`}>
                     {formatCurrency(data.netProfit)}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Net margin: {netMargin.toFixed(1)}%
                   </p>
                 </div>
-                <CheckCircle2 className={`h-16 w-16 ${data.netProfit >= 0 ? 'text-emerald-500/30' : 'text-red-500/30'}`} />
+                <CheckCircle2 className={`h-16 w-16 ${netProfitStyles!.iconClass}`} />
               </div>
             </CardContent>
           </Card>

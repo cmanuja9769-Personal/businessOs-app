@@ -50,8 +50,13 @@ const navigation = [
   { name: "Barcode Logs", href: "/barcode-logs", icon: Printer },
 ]
 
+const INVENTORY_PATH = "/inventory"
+const NAV_LINK_BASE = "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]"
+const NAV_LINK_ACTIVE = "bg-sidebar-accent text-sidebar-accent-foreground"
+const NAV_LINK_INACTIVE = "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+
 const inventorySubNav = [
-  { name: "Dashboard", href: "/inventory", icon: TrendingUp },
+  { name: "Dashboard", href: INVENTORY_PATH, icon: TrendingUp },
   { name: "Warehouses", href: "/inventory?tab=warehouses", icon: Warehouse },
   { name: "Stock Transfers", href: "/inventory?tab=transfers", icon: ArrowLeftRight },
   { name: "Adjustments", href: "/inventory?tab=adjustments", icon: ClipboardList },
@@ -119,7 +124,7 @@ export function Sidebar() {
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false)
   const [reportsOpen, setReportsOpen] = useState(pathname.startsWith("/reports"))
-  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith("/inventory"))
+  const [inventoryOpen, setInventoryOpen] = useState(pathname.startsWith(INVENTORY_PATH))
   const [expandedGroups, setExpandedGroups] = useState<string[]>(
     pathname.startsWith("/reports") 
       ? reportsNavigation.filter(g => g.items.some(i => pathname === i.href)).map(g => g.group)
@@ -135,7 +140,7 @@ export function Sidebar() {
   }
 
   const isReportsActive = pathname.startsWith("/reports")
-  const isInventoryActive = pathname.startsWith("/inventory")
+  const isInventoryActive = pathname.startsWith(INVENTORY_PATH)
 
   return (
     <>
@@ -191,10 +196,10 @@ export function Sidebar() {
                   onClick={() => setIsOpen(false)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
+                    NAV_LINK_BASE,
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      ? NAV_LINK_ACTIVE
+                      : NAV_LINK_INACTIVE,
                   )}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -210,8 +215,8 @@ export function Sidebar() {
                   className={cn(
                     "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                     isInventoryActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      ? NAV_LINK_ACTIVE
+                      : NAV_LINK_INACTIVE,
                   )}
                   suppressHydrationWarning
                 >
@@ -230,8 +235,8 @@ export function Sidebar() {
                 {inventorySubNav.map((item) => {
                   const currentSearch = searchParams.toString()
                   const fullPath = currentSearch ? `${pathname}?${currentSearch}` : pathname
-                  const isActive = item.href === "/inventory"
-                    ? pathname === "/inventory" && !searchParams.has("tab")
+                  const isActive = item.href === INVENTORY_PATH
+                    ? pathname === INVENTORY_PATH && !searchParams.has("tab")
                     : fullPath === item.href
                   return (
                     <Link
@@ -261,8 +266,8 @@ export function Sidebar() {
                   className={cn(
                     "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                     isReportsActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      ? NAV_LINK_ACTIVE
+                      : NAV_LINK_INACTIVE,
                   )}
                   suppressHydrationWarning
                 >
@@ -284,7 +289,7 @@ export function Sidebar() {
                   onClick={() => setIsOpen(false)}
                   aria-current={pathname === "/reports" ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
+                    NAV_LINK_BASE,
                     pathname === "/reports"
                       ? "bg-primary/10 text-primary"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -360,10 +365,10 @@ export function Sidebar() {
                   onClick={() => setIsOpen(false)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
+                    NAV_LINK_BASE,
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                      ? NAV_LINK_ACTIVE
+                      : NAV_LINK_INACTIVE,
                   )}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />

@@ -18,7 +18,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { useFocusRefresh } from '@hooks/useFocusRefresh';
-import Loading from '@components/ui/Loading';
 import { SkeletonDashboard } from '@components/ui/Skeleton';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatCompactCurrency, formatDate } from '@lib/utils';
@@ -697,6 +696,8 @@ export default function DashboardScreen() {
   );
 }
 
+const SPACE_BETWEEN = 'space-between' as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -708,7 +709,7 @@ const styles = StyleSheet.create({
   },
   headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
   },
   headerTextContainer: {
@@ -745,7 +746,7 @@ const styles = StyleSheet.create({
   },
   revenueContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
   },
   revenueLabelRow: {
@@ -805,7 +806,7 @@ const styles = StyleSheet.create({
   // Section Headers
   sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 14,
@@ -892,7 +893,7 @@ const styles = StyleSheet.create({
   },
   invoiceItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
     padding: 14,
     borderRadius: 14,

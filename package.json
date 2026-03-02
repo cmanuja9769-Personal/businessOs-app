@@ -21,6 +21,8 @@
     "electron:build:mac": "npm run build:electron && electron-builder --mac",
     "electron:build:linux": "npm run build:electron && electron-builder --linux",
     "type-check": "tsc --noEmit",
+    "lint:html": "eslint . --format html --output-file report.html",
+    "lint:json": "eslint . -f json -o eslint_results.json",
     "demo": "cross-env NEXT_PUBLIC_DEMO_MODE=true next dev",
     "prepare": "husky install"
   },

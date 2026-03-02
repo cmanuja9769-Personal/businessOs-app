@@ -9,6 +9,37 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+function validatePasswords(password: string, confirmPassword: string): string | null {
+  if (password !== confirmPassword) return "Passwords do not match"
+  if (password.length < 6) return "Password must be at least 6 characters"
+  return null
+}
+
+async function assignDefaultRole(supabase: SupabaseClient, userId: string) {
+  const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
+  const isFirstUser = !existingRoles || existingRoles.length === 0
+  const defaultRole = isFirstUser ? "admin" : "user"
+
+  const { error: roleError } = await supabase.from("user_roles").insert({
+    user_id: userId,
+    role: defaultRole,
+    permissions: {},
+  })
+
+  if (roleError) {
+    console.error("[v0] Error creating user role:", roleError)
+  }
+}
+
+function needsEmailConfirmation(session: unknown, identities: unknown[] | undefined): boolean {
+  return session === null && (!identities || identities.length === 0)
+}
+
+function extractErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "An error occurred"
+}
 
 export function SignupForm() {
   const [email, setEmail] = useState("")
@@ -23,14 +54,9 @@ export function SignupForm() {
     e.preventDefault()
     setError("")
 
-    // Validate passwords match
-    if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters")
+    const validationError = validatePasswords(password, confirmPassword)
+    if (validationError) {
+      setError(validationError)
       return
     }
 
@@ -39,13 +65,11 @@ export function SignupForm() {
     try {
       const supabase = createClient()
 
-      // Sign up with auto-confirm for development or email confirmation for production
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
-          // Skip email confirmation in development - update this in Supabase dashboard for production
           data: {
             email_confirm: true,
           },
@@ -62,45 +86,27 @@ export function SignupForm() {
         return
       }
 
-      if (data.user) {
-        // Create default user role (admin for first user, user otherwise)
-        const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
-        const isFirstUser = !existingRoles || existingRoles.length === 0
-        const defaultRole = isFirstUser ? "admin" : "user"
+      if (!data.user) return
 
-        const { error: roleError } = await supabase.from("user_roles").insert({
-          user_id: data.user.id,
-          role: defaultRole,
-          permissions: {},
+      await assignDefaultRole(supabase, data.user.id)
+
+      if (needsEmailConfirmation(data.session, data.user.identities)) {
+        toast({
+          title: "Check your email!",
+          description: "We sent you a confirmation link. Click it to activate your account.",
         })
-
-        if (roleError) {
-          console.error("[v0] Error creating user role:", roleError)
-        }
-
-        // Check if email confirmation is required
-        const needsConfirmation = data.session === null && data.user.identities?.length === 0
-
-        if (needsConfirmation) {
-          toast({
-            title: "Check your email!",
-            description: "We sent you a confirmation link. Click it to activate your account.",
-          })
-          // Stay on signup page or redirect to a "check email" page
-          router.push("/auth/login?message=check-email")
-        } else {
-          // Email confirmation disabled or user is auto-confirmed
-          toast({
-            title: "Account created!",
-            description: "Redirecting to setup...",
-          })
-          // Redirect to onboarding
-          router.push("/onboarding")
-          router.refresh()
-        }
+        router.push("/auth/login?message=check-email")
+        return
       }
+
+      toast({
+        title: "Account created!",
+        description: "Redirecting to setup...",
+      })
+      router.push("/onboarding")
+      router.refresh()
     } catch (err) {
-      const message = err instanceof Error ? err.message : "An error occurred"
+      const message = extractErrorMessage(err)
       setError(message)
       toast({
         title: "Error",
@@ -114,7 +120,6 @@ export function SignupForm() {
 
   return (
     <form onSubmit={handleSignup} className="space-y-4">
-      {/* Email Input */}
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium text-foreground">
           Email address
@@ -131,7 +136,6 @@ export function SignupForm() {
         />
       </div>
 
-      {/* Password Input */}
       <div className="space-y-2">
         <label htmlFor="password" className="text-sm font-medium text-foreground">
           Password
@@ -148,7 +152,6 @@ export function SignupForm() {
         />
       </div>
 
-      {/* Confirm Password Input */}
       <div className="space-y-2">
         <label htmlFor="confirm-password" className="text-sm font-medium text-foreground">
           Confirm password
@@ -165,10 +168,8 @@ export function SignupForm() {
         />
       </div>
 
-      {/* Error Message */}
       {error && <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>}
 
-      {/* Submit Button */}
       <Button type="submit" disabled={loading} className="w-full" size="lg">
         {loading ? (
           <>
@@ -180,7 +181,6 @@ export function SignupForm() {
         )}
       </Button>
 
-      {/* Info Text */}
       <p className="text-xs text-muted-foreground text-center">Password must be at least 6 characters long</p>
     </form>
   )

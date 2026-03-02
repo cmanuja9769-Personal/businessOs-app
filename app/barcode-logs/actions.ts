@@ -163,13 +163,23 @@ export async function getItemLatestPrintLog(
   }
 }
 
+function buildLatestLogsMap(rows: Record<string, unknown>[]): Record<string, IBarcodePrintLog> {
+  const result: Record<string, IBarcodePrintLog> = {}
+  for (const row of rows) {
+    const itemId = row.item_id as string
+    if (result[itemId]) continue
+    result[itemId] = mapRow(row)
+  }
+  return result
+}
+
 export async function getLatestPrintLogsForItems(
   itemIds: string[]
 ): Promise<Record<string, IBarcodePrintLog>> {
   if (await isDemoMode()) {
-    const result: Record<string, IBarcodePrintLog> = {}
-    for (const id of itemIds) { if (demoBarcodeLogs[id]) result[id] = demoBarcodeLogs[id] }
-    return result
+    return Object.fromEntries(
+      itemIds.filter((id) => demoBarcodeLogs[id]).map((id) => [id, demoBarcodeLogs[id]])
+    )
   }
   if (itemIds.length === 0) return {}
   try {
@@ -183,14 +193,7 @@ export async function getLatestPrintLogsForItems(
 
     if (error || !data) return {}
 
-    const result: Record<string, IBarcodePrintLog> = {}
-    for (const row of data) {
-      const itemId = row.item_id as string
-      if (!result[itemId]) {
-        result[itemId] = mapRow(row)
-      }
-    }
-    return result
+    return buildLatestLogsMap(data)
   } catch {
     return {}
   }

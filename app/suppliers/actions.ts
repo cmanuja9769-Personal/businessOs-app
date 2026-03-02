@@ -7,6 +7,8 @@ import { authorize, orgScope } from "@/lib/authorize"
 import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
 import { demoSuppliers } from "@/app/demo/data"
 
+const SUPPLIERS_PATH = "/suppliers"
+
 export async function getSuppliers(): Promise<ISupplier[]> {
   if (await isDemoMode()) return demoSuppliers
   try {
@@ -66,7 +68,7 @@ export async function createSupplier(formData: FormData) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/suppliers")
+  revalidatePath(SUPPLIERS_PATH)
   return { success: true, supplier: newSupplier }
 }
 
@@ -100,7 +102,7 @@ export async function updateSupplier(id: string, formData: FormData) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/suppliers")
+  revalidatePath(SUPPLIERS_PATH)
   return { success: true }
 }
 
@@ -119,7 +121,7 @@ export async function deleteSupplier(id: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/suppliers")
+  revalidatePath(SUPPLIERS_PATH)
   return { success: true }
 }
 
@@ -142,7 +144,7 @@ export async function bulkDeleteSuppliers(ids: string[]) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/suppliers")
+  revalidatePath(SUPPLIERS_PATH)
   return { 
     success: true, 
     deleted: count || ids.length,
@@ -174,7 +176,7 @@ export async function deleteAllSuppliers() {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/suppliers")
+  revalidatePath(SUPPLIERS_PATH)
   return { 
     success: true, 
     deleted: count,

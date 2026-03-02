@@ -9,6 +9,8 @@ import { createJournalEntryForPurchase } from "@/lib/accounting/auto-journal"
 import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
 import { demoPurchases } from "@/app/demo/data"
 
+const PURCHASES_PATH = "/purchases"
+
 export async function getPurchases(): Promise<IPurchase[]> {
   if (await isDemoMode()) return demoPurchases
   try {
@@ -209,7 +211,7 @@ export async function createPurchase(data: unknown) {
       console.error("[auto-journal] Failed to create journal entry for purchase:", journalError)
     }
 
-    revalidatePath("/purchases")
+    revalidatePath(PURCHASES_PATH)
     return { success: true, purchase: newPurchase }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Failed to create purchase" }
@@ -302,7 +304,7 @@ export async function updatePurchase(id: string, data: unknown) {
       return { success: false, error: itemsError.message }
     }
 
-    revalidatePath("/purchases")
+    revalidatePath(PURCHASES_PATH)
     revalidatePath(`/purchases/${id}`)
     return { success: true }
   } catch (error) {
@@ -326,7 +328,7 @@ export async function deletePurchase(id: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/purchases")
+  revalidatePath(PURCHASES_PATH)
   return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Failed to delete purchase" }
@@ -353,7 +355,7 @@ export async function bulkDeletePurchases(ids: string[]) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/purchases")
+  revalidatePath(PURCHASES_PATH)
   return { 
     success: true, 
     deleted: count || ids.length,
@@ -389,7 +391,7 @@ export async function deleteAllPurchases() {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/purchases")
+  revalidatePath(PURCHASES_PATH)
   return { 
     success: true, 
     deleted: count,

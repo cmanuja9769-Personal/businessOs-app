@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+const ENTRY_DATE_RELATION = "journal_entries(entry_date)"
+
 export interface JournalLineItem {
   readonly accountId: string
   readonly accountCode: string
@@ -175,14 +177,14 @@ export async function getGeneralLedger(supabase: SupabaseClient, accountId: stri
     .from("journal_entry_lines")
     .select("*, journal_entries(entry_no, entry_date, description)")
     .eq("account_id", accountId)
-    .order("journal_entries(entry_date)", { ascending: false })
+    .order(ENTRY_DATE_RELATION, { ascending: false })
 
   if (startDate) {
-    query = query.gte("journal_entries(entry_date)", startDate.toISOString().split("T")[0])
+    query = query.gte(ENTRY_DATE_RELATION, startDate.toISOString().split("T")[0])
   }
 
   if (endDate) {
-    query = query.lte("journal_entries(entry_date)", endDate.toISOString().split("T")[0])
+    query = query.lte(ENTRY_DATE_RELATION, endDate.toISOString().split("T")[0])
   }
 
   const { data, error } = await query

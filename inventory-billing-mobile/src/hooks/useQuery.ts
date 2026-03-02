@@ -10,13 +10,17 @@ export function useQuery<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const filtersKey = JSON.stringify(filters);
+  const depsKey = JSON.stringify(dependencies);
+
   const fetchData = useCallback(async () => {
+    const parsedFilters = JSON.parse(filtersKey) as Record<string, unknown> | undefined;
     try {
       setLoading(true);
       let query = supabase.from(table).select('*');
 
-      if (filters) {
-        Object.entries(filters).forEach(([key, value]) => {
+      if (parsedFilters) {
+        Object.entries(parsedFilters).forEach(([key, value]) => {
           query = query.eq(key, value);
         });
       }
@@ -33,11 +37,11 @@ export function useQuery<T>(
     } finally {
       setLoading(false);
     }
-  }, [table, JSON.stringify(filters), ...dependencies]);
+  }, [table, filtersKey]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, depsKey]);
 
   return { data, loading, error, refetch: fetchData };
 }

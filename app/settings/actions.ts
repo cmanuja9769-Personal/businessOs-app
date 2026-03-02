@@ -5,6 +5,11 @@ import { getCurrentOrganization } from "@/lib/organizations"
 import { authorize } from "@/lib/authorize"
 import { isDemoMode, throwDemoMutationError, DEMO_ORG_ID, DEMO_ORG_NAME } from "@/app/demo/helpers"
 
+const DEFAULT_BUSINESS_NAME = "My Business"
+const DEFAULT_DATE_FORMAT = "dd/MM/yyyy"
+const DEFAULT_CUSTOM_FIELD_1 = "Custom Field 1"
+const DEFAULT_CUSTOM_FIELD_2 = "Custom Field 2"
+
 export interface IOrganization {
   id: string
   name: string
@@ -36,7 +41,7 @@ export async function getOrganizationDetails(): Promise<IOrganization | null> {
 
   return {
     id: resolved?.id || "",
-    name: resolved?.name || "My Business",
+    name: resolved?.name || DEFAULT_BUSINESS_NAME,
     email: resolved?.email || undefined,
     phone: resolved?.phone || undefined,
     gstNumber: resolved?.gst_number || undefined,
@@ -111,7 +116,7 @@ export async function getSettings(): Promise<ISettings> {
     invoiceTemplate: "modern", templateColor: "#3b82f6",
     invoicePrefix: "INV", purchasePrefix: "PUR", quotationPrefix: "QTN", proformaPrefix: "PI",
     salesOrderPrefix: "SO", deliveryChallanPrefix: "DC", creditNotePrefix: "CN", debitNotePrefix: "DN",
-    taxEnabled: true, defaultTaxRate: 18, currencySymbol: "₹", dateFormat: "dd/MM/yyyy",
+    taxEnabled: true, defaultTaxRate: 18, currencySymbol: "₹", dateFormat: DEFAULT_DATE_FORMAT,
     financialYearStart: 4, lowStockAlert: true, lowStockThreshold: 10,
     defaultPaymentTermsDays: 30, defaultBillingMode: "gst" as const, defaultPricingMode: "sale" as const,
     defaultPackingType: "loose" as const, showAmountInWords: true, roundOffTotal: true,
@@ -119,8 +124,8 @@ export async function getSettings(): Promise<ISettings> {
     multiCurrencyEnabled: false, secondaryCurrencies: "",
     emailNotificationsEnabled: false, emailOnInvoiceCreated: false,
     emailOnPaymentReceived: false, emailOnLowStock: false, notificationEmail: "",
-    customField1Enabled: false, customField1Label: "Custom Field 1",
-    customField2Enabled: false, customField2Label: "Custom Field 2",
+    customField1Enabled: false, customField1Label: DEFAULT_CUSTOM_FIELD_1,
+    customField2Enabled: false, customField2Label: DEFAULT_CUSTOM_FIELD_2,
     createdAt: new Date(), updatedAt: new Date(),
   }
   const { supabase, organizationId } = await authorize("settings", "read")
@@ -134,7 +139,7 @@ export async function getSettings(): Promise<ISettings> {
       .from("settings")
       .insert({
         organization_id: organizationId,
-        business_name: "My Business",
+        business_name: DEFAULT_BUSINESS_NAME,
         invoice_prefix: "INV",
         purchase_prefix: "PO",
         quotation_prefix: "QTN",
@@ -146,7 +151,7 @@ export async function getSettings(): Promise<ISettings> {
         tax_enabled: true,
         default_tax_rate: 18,
         currency_symbol: "₹",
-        date_format: "dd/MM/yyyy",
+        date_format: DEFAULT_DATE_FORMAT,
         financial_year_start: 4,
         low_stock_alert: true,
         low_stock_threshold: 10,
@@ -166,9 +171,9 @@ export async function getSettings(): Promise<ISettings> {
         email_on_low_stock: false,
         notification_email: "",
         custom_field_1_enabled: false,
-        custom_field_1_label: "Custom Field 1",
+        custom_field_1_label: DEFAULT_CUSTOM_FIELD_1,
         custom_field_2_enabled: false,
-        custom_field_2_label: "Custom Field 2",
+        custom_field_2_label: DEFAULT_CUSTOM_FIELD_2,
       })
       .select()
       .single()
@@ -177,7 +182,7 @@ export async function getSettings(): Promise<ISettings> {
       console.error("[v0] Error creating default settings:", createError)
       return {
         id: "",
-        businessName: "My Business",
+        businessName: DEFAULT_BUSINESS_NAME,
         invoicePrefix: "INV",
         purchasePrefix: "PO",
         quotationPrefix: "QTN",
@@ -191,7 +196,7 @@ export async function getSettings(): Promise<ISettings> {
         taxEnabled: true,
         defaultTaxRate: 18,
         currencySymbol: "₹",
-        dateFormat: "dd/MM/yyyy",
+        dateFormat: DEFAULT_DATE_FORMAT,
         financialYearStart: 4,
         lowStockAlert: true,
         lowStockThreshold: 10,
@@ -211,9 +216,9 @@ export async function getSettings(): Promise<ISettings> {
         emailOnLowStock: false,
         notificationEmail: "",
         customField1Enabled: false,
-        customField1Label: "Custom Field 1",
+        customField1Label: DEFAULT_CUSTOM_FIELD_1,
         customField2Enabled: false,
-        customField2Label: "Custom Field 2",
+        customField2Label: DEFAULT_CUSTOM_FIELD_2,
         createdAt: new Date(),
         updatedAt: new Date(),
       }
@@ -274,211 +279,141 @@ export async function getSettings(): Promise<ISettings> {
     emailOnLowStock: data.email_on_low_stock ?? false,
     notificationEmail: data.notification_email || "",
     customField1Enabled: data.custom_field_1_enabled ?? false,
-    customField1Label: data.custom_field_1_label || "Custom Field 1",
+    customField1Label: data.custom_field_1_label || DEFAULT_CUSTOM_FIELD_1,
     customField2Enabled: data.custom_field_2_enabled ?? false,
-    customField2Label: data.custom_field_2_label || "Custom Field 2",
+    customField2Label: data.custom_field_2_label || DEFAULT_CUSTOM_FIELD_2,
     createdAt: new Date(data.created_at),
     updatedAt: new Date(data.updated_at),
   }
+}
+
+type SettingsFieldType = "required-string" | "nullable-string" | "boolean" | "number" | "nullable-number" | "nullable-empty-string"
+
+const NULLABLE_STRING: SettingsFieldType = "nullable-string"
+const REQUIRED_STRING: SettingsFieldType = "required-string"
+
+type SettingsValue = string | boolean | number | null
+
+type FieldProcessor = (val: string | null) => { skip: boolean; value: SettingsValue }
+
+interface SettingsFieldMapping {
+  readonly formKey: string
+  readonly dbKey: string
+  readonly type: SettingsFieldType
+}
+
+const SETTINGS_FIELD_MAPPINGS: readonly SettingsFieldMapping[] = [
+  { formKey: "businessName", dbKey: "business_name", type: REQUIRED_STRING },
+  { formKey: "businessAddress", dbKey: "business_address", type: NULLABLE_STRING },
+  { formKey: "businessPhone", dbKey: "business_phone", type: NULLABLE_STRING },
+  { formKey: "businessEmail", dbKey: "business_email", type: NULLABLE_STRING },
+  { formKey: "businessGst", dbKey: "business_gst", type: NULLABLE_STRING },
+  { formKey: "businessLogoUrl", dbKey: "business_logo_url", type: NULLABLE_STRING },
+  { formKey: "businessPan", dbKey: "business_pan", type: NULLABLE_STRING },
+  { formKey: "signatureImageUrl", dbKey: "signature_image_url", type: NULLABLE_STRING },
+  { formKey: "bankName", dbKey: "bank_name", type: NULLABLE_STRING },
+  { formKey: "bankAccountNo", dbKey: "bank_account_no", type: NULLABLE_STRING },
+  { formKey: "bankIfsc", dbKey: "bank_ifsc", type: NULLABLE_STRING },
+  { formKey: "upiId", dbKey: "upi_id", type: NULLABLE_STRING },
+  { formKey: "bankAccountHolderName", dbKey: "bank_account_holder_name", type: NULLABLE_STRING },
+  { formKey: "bankBranchName", dbKey: "bank_branch_name", type: NULLABLE_STRING },
+  { formKey: "invoiceTemplate", dbKey: "invoice_template", type: REQUIRED_STRING },
+  { formKey: "templateColor", dbKey: "template_color", type: REQUIRED_STRING },
+  { formKey: "customTerms", dbKey: "custom_terms", type: NULLABLE_STRING },
+  { formKey: "invoiceFooter", dbKey: "invoice_footer", type: NULLABLE_STRING },
+  { formKey: "defaultNotes", dbKey: "default_notes", type: NULLABLE_STRING },
+  { formKey: "invoicePrefix", dbKey: "invoice_prefix", type: REQUIRED_STRING },
+  { formKey: "purchasePrefix", dbKey: "purchase_prefix", type: REQUIRED_STRING },
+  { formKey: "quotationPrefix", dbKey: "quotation_prefix", type: REQUIRED_STRING },
+  { formKey: "proformaPrefix", dbKey: "proforma_prefix", type: REQUIRED_STRING },
+  { formKey: "salesOrderPrefix", dbKey: "sales_order_prefix", type: REQUIRED_STRING },
+  { formKey: "deliveryChallanPrefix", dbKey: "delivery_challan_prefix", type: REQUIRED_STRING },
+  { formKey: "creditNotePrefix", dbKey: "credit_note_prefix", type: REQUIRED_STRING },
+  { formKey: "debitNotePrefix", dbKey: "debit_note_prefix", type: REQUIRED_STRING },
+  { formKey: "taxEnabled", dbKey: "tax_enabled", type: "boolean" },
+  { formKey: "defaultTaxRate", dbKey: "default_tax_rate", type: "number" },
+  { formKey: "currencySymbol", dbKey: "currency_symbol", type: REQUIRED_STRING },
+  { formKey: "dateFormat", dbKey: "date_format", type: REQUIRED_STRING },
+  { formKey: "financialYearStart", dbKey: "financial_year_start", type: "number" },
+  { formKey: "lowStockAlert", dbKey: "low_stock_alert", type: "boolean" },
+  { formKey: "lowStockThreshold", dbKey: "low_stock_threshold", type: "number" },
+  { formKey: "defaultPaymentTermsDays", dbKey: "default_payment_terms_days", type: "nullable-number" },
+  { formKey: "defaultBillingMode", dbKey: "default_billing_mode", type: REQUIRED_STRING },
+  { formKey: "defaultPricingMode", dbKey: "default_pricing_mode", type: REQUIRED_STRING },
+  { formKey: "defaultPackingType", dbKey: "default_packing_type", type: REQUIRED_STRING },
+  { formKey: "showAmountInWords", dbKey: "show_amount_in_words", type: "boolean" },
+  { formKey: "roundOffTotal", dbKey: "round_off_total", type: "boolean" },
+  { formKey: "customField1Enabled", dbKey: "custom_field_1_enabled", type: "boolean" },
+  { formKey: "customField1Label", dbKey: "custom_field_1_label", type: REQUIRED_STRING },
+  { formKey: "customField2Enabled", dbKey: "custom_field_2_enabled", type: "boolean" },
+  { formKey: "customField2Label", dbKey: "custom_field_2_label", type: REQUIRED_STRING },
+  { formKey: "invoiceNumberResetMode", dbKey: "invoice_number_reset_mode", type: REQUIRED_STRING },
+  { formKey: "nextInvoiceNumber", dbKey: "next_invoice_number", type: "number" },
+  { formKey: "multiCurrencyEnabled", dbKey: "multi_currency_enabled", type: "boolean" },
+  { formKey: "secondaryCurrencies", dbKey: "secondary_currencies", type: "nullable-empty-string" },
+  { formKey: "emailNotificationsEnabled", dbKey: "email_notifications_enabled", type: "boolean" },
+  { formKey: "emailOnInvoiceCreated", dbKey: "email_on_invoice_created", type: "boolean" },
+  { formKey: "emailOnPaymentReceived", dbKey: "email_on_payment_received", type: "boolean" },
+  { formKey: "emailOnLowStock", dbKey: "email_on_low_stock", type: "boolean" },
+  { formKey: "notificationEmail", dbKey: "notification_email", type: "nullable-empty-string" },
+]
+
+const FIELD_PROCESSORS: Record<SettingsFieldType, FieldProcessor> = {
+  "required-string": (val) => ({ skip: !val, value: val }),
+  "nullable-string": (val) => ({ skip: val === null, value: val || null }),
+  "boolean": (val) => ({ skip: val === null, value: val === "true" }),
+  "number": (val) => ({ skip: !val, value: Number(val) }),
+  "nullable-number": (val) => ({ skip: val === null, value: Number(val) }),
+  "nullable-empty-string": (val) => ({ skip: val === null, value: val || "" }),
+}
+
+function getFormString(formData: FormData, key: string): string | null {
+  const val = formData.get(key)
+  return typeof val === "string" ? val : null
+}
+
+function extractSettingsFromForm(formData: FormData): Record<string, SettingsValue> {
+  const data: Record<string, SettingsValue> = {}
+  for (const { formKey, dbKey, type } of SETTINGS_FIELD_MAPPINGS) {
+    const result = FIELD_PROCESSORS[type](getFormString(formData, formKey))
+    if (!result.skip) {
+      data[dbKey] = result.value
+    }
+  }
+  return data
+}
+
+function applyInsertDefaults(data: Record<string, SettingsValue>, organizationId: string) {
+  data.business_name = data.business_name || DEFAULT_BUSINESS_NAME
+  data.invoice_prefix = data.invoice_prefix || "INV"
+  data.purchase_prefix = data.purchase_prefix || "PO"
+  data.organization_id = organizationId
 }
 
 export async function updateSettings(formData: FormData) {
   if (await isDemoMode()) throwDemoMutationError()
   const { supabase, organizationId } = await authorize("settings", "update")
 
-  const getString = (key: string): string | null => {
-    const val = formData.get(key)
-    return typeof val === "string" ? val : null
+  const data = extractSettingsFromForm(formData)
+
+  const { data: existingSettings } = await supabase
+    .from("settings")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .limit(1)
+    .single()
+
+  if (!existingSettings) {
+    applyInsertDefaults(data, organizationId)
   }
 
-  const data: Record<string, string | boolean | number | null> = {}
-  
-  const businessName = getString("businessName")
-  if (businessName) data.business_name = businessName
-  
-  const businessAddress = getString("businessAddress")
-  if (businessAddress !== null) data.business_address = businessAddress || null
-  
-  const businessPhone = getString("businessPhone")
-  if (businessPhone !== null) data.business_phone = businessPhone || null
-  
-  const businessEmail = getString("businessEmail")
-  if (businessEmail !== null) data.business_email = businessEmail || null
-  
-  const businessGst = getString("businessGst")
-  if (businessGst !== null) data.business_gst = businessGst || null
-  
-  const businessLogoUrl = getString("businessLogoUrl")
-  if (businessLogoUrl !== null) data.business_logo_url = businessLogoUrl || null
-  
-  const businessPan = getString("businessPan")
-  if (businessPan !== null) data.business_pan = businessPan || null
-  
-  const signatureImageUrl = getString("signatureImageUrl")
-  if (signatureImageUrl !== null) data.signature_image_url = signatureImageUrl || null
-  
-  const bankName = getString("bankName")
-  if (bankName !== null) data.bank_name = bankName || null
-  
-  const bankAccountNo = getString("bankAccountNo")
-  if (bankAccountNo !== null) data.bank_account_no = bankAccountNo || null
-  
-  const bankIfsc = getString("bankIfsc")
-  if (bankIfsc !== null) data.bank_ifsc = bankIfsc || null
-  
-  const upiId = getString("upiId")
-  if (upiId !== null) data.upi_id = upiId || null
+  const { error } = existingSettings
+    ? await supabase.from("settings").update(data).eq("id", existingSettings.id)
+    : await supabase.from("settings").insert(data)
 
-  const bankAccountHolderName = getString("bankAccountHolderName")
-  if (bankAccountHolderName !== null) data.bank_account_holder_name = bankAccountHolderName || null
-
-  const bankBranchName = getString("bankBranchName")
-  if (bankBranchName !== null) data.bank_branch_name = bankBranchName || null
-  
-  const invoiceTemplate = getString("invoiceTemplate")
-  if (invoiceTemplate) data.invoice_template = invoiceTemplate
-  
-  const templateColor = getString("templateColor")
-  if (templateColor) data.template_color = templateColor
-  
-  const customTerms = getString("customTerms")
-  if (customTerms !== null) data.custom_terms = customTerms || null
-  
-  const invoiceFooter = getString("invoiceFooter")
-  if (invoiceFooter !== null) data.invoice_footer = invoiceFooter || null
-
-  const defaultNotes = getString("defaultNotes")
-  if (defaultNotes !== null) data.default_notes = defaultNotes || null
-  
-  const invoicePrefix = getString("invoicePrefix")
-  if (invoicePrefix) data.invoice_prefix = invoicePrefix
-  
-  const purchasePrefix = getString("purchasePrefix")
-  if (purchasePrefix) data.purchase_prefix = purchasePrefix
-
-  const quotationPrefix = getString("quotationPrefix")
-  if (quotationPrefix) data.quotation_prefix = quotationPrefix
-
-  const proformaPrefix = getString("proformaPrefix")
-  if (proformaPrefix) data.proforma_prefix = proformaPrefix
-
-  const salesOrderPrefix = getString("salesOrderPrefix")
-  if (salesOrderPrefix) data.sales_order_prefix = salesOrderPrefix
-
-  const deliveryChallanPrefix = getString("deliveryChallanPrefix")
-  if (deliveryChallanPrefix) data.delivery_challan_prefix = deliveryChallanPrefix
-
-  const creditNotePrefix = getString("creditNotePrefix")
-  if (creditNotePrefix) data.credit_note_prefix = creditNotePrefix
-
-  const debitNotePrefix = getString("debitNotePrefix")
-  if (debitNotePrefix) data.debit_note_prefix = debitNotePrefix
-  
-  const taxEnabled = getString("taxEnabled")
-  if (taxEnabled !== null) data.tax_enabled = taxEnabled === "true"
-  
-  const defaultTaxRate = getString("defaultTaxRate")
-  if (defaultTaxRate) data.default_tax_rate = Number(defaultTaxRate)
-  
-  const currencySymbol = getString("currencySymbol")
-  if (currencySymbol) data.currency_symbol = currencySymbol
-  
-  const dateFormat = getString("dateFormat")
-  if (dateFormat) data.date_format = dateFormat
-  
-  const financialYearStart = getString("financialYearStart")
-  if (financialYearStart) data.financial_year_start = Number(financialYearStart)
-  
-  const lowStockAlert = getString("lowStockAlert")
-  if (lowStockAlert !== null) data.low_stock_alert = lowStockAlert === "true"
-
-  const lowStockThreshold = getString("lowStockThreshold")
-  if (lowStockThreshold) data.low_stock_threshold = Number(lowStockThreshold)
-
-  const defaultPaymentTermsDays = getString("defaultPaymentTermsDays")
-  if (defaultPaymentTermsDays !== null) data.default_payment_terms_days = Number(defaultPaymentTermsDays)
-
-  const defaultBillingMode = getString("defaultBillingMode")
-  if (defaultBillingMode) data.default_billing_mode = defaultBillingMode
-
-  const defaultPricingMode = getString("defaultPricingMode")
-  if (defaultPricingMode) data.default_pricing_mode = defaultPricingMode
-
-  const defaultPackingType = getString("defaultPackingType")
-  if (defaultPackingType) data.default_packing_type = defaultPackingType
-
-  const showAmountInWords = getString("showAmountInWords")
-  if (showAmountInWords !== null) data.show_amount_in_words = showAmountInWords === "true"
-
-  const roundOffTotal = getString("roundOffTotal")
-  if (roundOffTotal !== null) data.round_off_total = roundOffTotal === "true"
-
-  const customField1Enabled = getString("customField1Enabled")
-  if (customField1Enabled !== null) data.custom_field_1_enabled = customField1Enabled === "true"
-  
-  const customField1Label = getString("customField1Label")
-  if (customField1Label) data.custom_field_1_label = customField1Label
-  
-  const customField2Enabled = getString("customField2Enabled")
-  if (customField2Enabled !== null) data.custom_field_2_enabled = customField2Enabled === "true"
-  
-  const customField2Label = getString("customField2Label")
-  if (customField2Label) data.custom_field_2_label = customField2Label
-
-  const invoiceNumberResetMode = getString("invoiceNumberResetMode")
-  if (invoiceNumberResetMode) data.invoice_number_reset_mode = invoiceNumberResetMode
-
-  const nextInvoiceNumber = getString("nextInvoiceNumber")
-  if (nextInvoiceNumber) data.next_invoice_number = Number(nextInvoiceNumber)
-
-  const multiCurrencyEnabled = getString("multiCurrencyEnabled")
-  if (multiCurrencyEnabled !== null) data.multi_currency_enabled = multiCurrencyEnabled === "true"
-
-  const secondaryCurrencies = getString("secondaryCurrencies")
-  if (secondaryCurrencies !== null) data.secondary_currencies = secondaryCurrencies || ""
-
-  const emailNotificationsEnabled = getString("emailNotificationsEnabled")
-  if (emailNotificationsEnabled !== null) data.email_notifications_enabled = emailNotificationsEnabled === "true"
-
-  const emailOnInvoiceCreated = getString("emailOnInvoiceCreated")
-  if (emailOnInvoiceCreated !== null) data.email_on_invoice_created = emailOnInvoiceCreated === "true"
-
-  const emailOnPaymentReceived = getString("emailOnPaymentReceived")
-  if (emailOnPaymentReceived !== null) data.email_on_payment_received = emailOnPaymentReceived === "true"
-
-  const emailOnLowStock = getString("emailOnLowStock")
-  if (emailOnLowStock !== null) data.email_on_low_stock = emailOnLowStock === "true"
-
-  const notificationEmail = getString("notificationEmail")
-  if (notificationEmail !== null) data.notification_email = notificationEmail || ""
-
-  const { data: existingSettings } = await supabase.from("settings").select("id").eq("organization_id", organizationId).limit(1).single()
-
-  if (existingSettings) {
-    const { error } = await supabase.from("settings").update(data).eq("id", existingSettings.id)
-
-    if (error) {
-      console.error("[v0] Error updating settings:", error)
-      return { success: false, error: error.message }
-    }
-  } else {
-    if (!data.business_name) {
-      data.business_name = "My Business"
-    }
-    if (!data.invoice_prefix) {
-      data.invoice_prefix = "INV"
-    }
-    if (!data.purchase_prefix) {
-      data.purchase_prefix = "PO"
-    }
-    data.organization_id = organizationId
-    
-    const { error } = await supabase.from("settings").insert(data)
-
-    if (error) {
-      console.error("[v0] Error creating settings:", error)
-      return { success: false, error: error.message }
-    }
+  if (error) {
+    console.error("[v0] Error saving settings:", error)
+    return { success: false, error: error.message }
   }
 
   revalidatePath("/settings")

@@ -58,189 +58,198 @@ export default function ReportDetailScreen() {
   const [summary, setSummary] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    const loadSalesReport = async () => {
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('*, customers(name)')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const total = (invoices || []).reduce((sum, i) => sum + (i.total || 0), 0);
+      const paid = (invoices || []).reduce((sum, i) => sum + (i.total - i.balance || 0), 0);
+
+      setData(invoices || []);
+      setSummary({ total, paid, pending: total - paid });
+    };
+
+    const loadPurchasesReport = async () => {
+      const { data: purchases } = await supabase
+        .from('purchases')
+        .select('*, suppliers(name)')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const total = (purchases || []).reduce((sum, p) => sum + (p.total || 0), 0);
+      const paid = (purchases || []).reduce((sum, p) => sum + (p.total - p.balance || 0), 0);
+
+      setData(purchases || []);
+      setSummary({ total, paid, pending: total - paid });
+    };
+
+    const loadStockReport = async () => {
+      const { data: items } = await supabase
+        .from('items')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .order('name');
+
+      const totalValue = (items || []).reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
+      const totalItems = items?.length || 0;
+
+      setData(items || []);
+      setSummary({ totalValue, totalItems });
+    };
+
+    const loadLowStockReport = async () => {
+      const { data: items } = await supabase
+        .from('items')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .lt('current_stock', 10)
+        .order('current_stock');
+
+      setData(items || []);
+      setSummary({ count: items?.length || 0 });
+    };
+
+    const loadOutstandingReport = async () => {
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('*, customers(name)')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .gt('balance', 0)
+        .order('balance', { ascending: false });
+
+      const totalReceivable = (invoices || []).reduce((sum, i) => sum + (i.balance || 0), 0);
+
+      setData(invoices || []);
+      setSummary({ totalReceivable });
+    };
+
+    const loadPartyProfitReport = async () => {
+      const { data: customers } = await supabase
+        .from('customers')
+        .select('id, name')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('customer_id, total, subtotal')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+
+      const customerRevenueMap = new Map<string, { revenue: number; invoiceCount: number }>();
+      for (const inv of (invoices || [])) {
+        const entry = customerRevenueMap.get(inv.customer_id) || { revenue: 0, invoiceCount: 0 };
+        entry.revenue += inv.total || 0;
+        entry.invoiceCount += 1;
+        customerRevenueMap.set(inv.customer_id, entry);
+      }
+
+      const partyData = (customers || [])
+        .filter(c => customerRevenueMap.has(c.id) && customerRevenueMap.get(c.id)!.invoiceCount > 0)
+        .map(c => {
+          const stats = customerRevenueMap.get(c.id)!;
+          return { ...c, revenue: stats.revenue, invoiceCount: stats.invoiceCount };
+        })
+        .sort((a, b) => b.revenue - a.revenue);
+
+      setData(partyData);
+      setSummary({ totalRevenue: partyData.reduce((sum, p) => sum + p.revenue, 0) });
+    };
+
+    const loadGSTReport = async () => {
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .eq('gst_enabled', true);
+
+      const cgst = (invoices || []).reduce((sum, i) => sum + (i.cgst || 0), 0);
+      const sgst = (invoices || []).reduce((sum, i) => sum + (i.sgst || 0), 0);
+      const igst = (invoices || []).reduce((sum, i) => sum + (i.igst || 0), 0);
+
+      setData(invoices || []);
+      setSummary({ cgst, sgst, igst, total: cgst + sgst + igst });
+    };
+
+    const loadProfitLossReport = async () => {
+      const { data: invoices } = await supabase
+        .from('invoices')
+        .select('total, subtotal')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+
+      const { data: purchases } = await supabase
+        .from('purchases')
+        .select('total')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+
+      const revenue = (invoices || []).reduce((sum, i) => sum + (i.total || 0), 0);
+      const expense = (purchases || []).reduce((sum, p) => sum + (p.total || 0), 0);
+
+      setData([
+        { type: 'Revenue', amount: revenue },
+        { type: 'Expenses', amount: expense },
+        { type: 'Net Profit', amount: revenue - expense },
+      ]);
+      setSummary({ revenue, expense, profit: revenue - expense });
+    };
+
+    const loadReportData = async () => {
+      if (!organizationId) return;
+      setLoading(true);
+
+      try {
+        switch (reportKey) {
+          case 'sales':
+            await loadSalesReport();
+            break;
+          case 'purchases':
+            await loadPurchasesReport();
+            break;
+          case 'stock-summary':
+          case 'stock-detail':
+            await loadStockReport();
+            break;
+          case 'low-stock':
+            await loadLowStockReport();
+            break;
+          case 'outstanding':
+            await loadOutstandingReport();
+            break;
+          case 'party-profit':
+            await loadPartyProfitReport();
+            break;
+          case 'gstr-1':
+          case 'gstr-2':
+          case 'gstr-3b':
+            await loadGSTReport();
+            break;
+          case 'profit-loss':
+            await loadProfitLossReport();
+            break;
+          default:
+            setData([]);
+        }
+      } catch (error) {
+        console.error('Error loading report:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadReportData();
   }, [reportKey, organizationId]);
-
-  const loadReportData = async () => {
-    if (!organizationId) return;
-    setLoading(true);
-
-    try {
-      switch (reportKey) {
-        case 'sales':
-          await loadSalesReport();
-          break;
-        case 'purchases':
-          await loadPurchasesReport();
-          break;
-        case 'stock-summary':
-        case 'stock-detail':
-          await loadStockReport();
-          break;
-        case 'low-stock':
-          await loadLowStockReport();
-          break;
-        case 'outstanding':
-          await loadOutstandingReport();
-          break;
-        case 'party-profit':
-          await loadPartyProfitReport();
-          break;
-        case 'gstr-1':
-        case 'gstr-2':
-        case 'gstr-3b':
-          await loadGSTReport();
-          break;
-        case 'profit-loss':
-          await loadProfitLossReport();
-          break;
-        default:
-          setData([]);
-      }
-    } catch (error) {
-      console.error('Error loading report:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSalesReport = async () => {
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('*, customers(name)')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    const total = (invoices || []).reduce((sum, i) => sum + (i.total || 0), 0);
-    const paid = (invoices || []).reduce((sum, i) => sum + (i.total - i.balance || 0), 0);
-
-    setData(invoices || []);
-    setSummary({ total, paid, pending: total - paid });
-  };
-
-  const loadPurchasesReport = async () => {
-    const { data: purchases } = await supabase
-      .from('purchases')
-      .select('*, suppliers(name)')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    const total = (purchases || []).reduce((sum, p) => sum + (p.total || 0), 0);
-    const paid = (purchases || []).reduce((sum, p) => sum + (p.total - p.balance || 0), 0);
-
-    setData(purchases || []);
-    setSummary({ total, paid, pending: total - paid });
-  };
-
-  const loadStockReport = async () => {
-    const { data: items } = await supabase
-      .from('items')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .order('name');
-
-    const totalValue = (items || []).reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
-    const totalItems = items?.length || 0;
-
-    setData(items || []);
-    setSummary({ totalValue, totalItems });
-  };
-
-  const loadLowStockReport = async () => {
-    const { data: items } = await supabase
-      .from('items')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .lt('current_stock', 10)
-      .order('current_stock');
-
-    setData(items || []);
-    setSummary({ count: items?.length || 0 });
-  };
-
-  const loadOutstandingReport = async () => {
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('*, customers(name)')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .gt('balance', 0)
-      .order('balance', { ascending: false });
-
-    const totalReceivable = (invoices || []).reduce((sum, i) => sum + (i.balance || 0), 0);
-
-    setData(invoices || []);
-    setSummary({ totalReceivable });
-  };
-
-  const loadPartyProfitReport = async () => {
-    const { data: customers } = await supabase
-      .from('customers')
-      .select('id, name')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null);
-
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('customer_id, total, subtotal')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null);
-
-    const partyData = (customers || []).map(c => {
-      const customerInvoices = (invoices || []).filter(i => i.customer_id === c.id);
-      const revenue = customerInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
-      return { ...c, revenue, invoiceCount: customerInvoices.length };
-    }).filter(c => c.invoiceCount > 0).sort((a, b) => b.revenue - a.revenue);
-
-    setData(partyData);
-    setSummary({ totalRevenue: partyData.reduce((sum, p) => sum + p.revenue, 0) });
-  };
-
-  const loadGSTReport = async () => {
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null)
-      .eq('gst_enabled', true);
-
-    const cgst = (invoices || []).reduce((sum, i) => sum + (i.cgst || 0), 0);
-    const sgst = (invoices || []).reduce((sum, i) => sum + (i.sgst || 0), 0);
-    const igst = (invoices || []).reduce((sum, i) => sum + (i.igst || 0), 0);
-
-    setData(invoices || []);
-    setSummary({ cgst, sgst, igst, total: cgst + sgst + igst });
-  };
-
-  const loadProfitLossReport = async () => {
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('total, subtotal')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null);
-
-    const { data: purchases } = await supabase
-      .from('purchases')
-      .select('total')
-      .eq('organization_id', organizationId)
-      .is('deleted_at', null);
-
-    const revenue = (invoices || []).reduce((sum, i) => sum + (i.total || 0), 0);
-    const expense = (purchases || []).reduce((sum, p) => sum + (p.total || 0), 0);
-
-    setData([
-      { type: 'Revenue', amount: revenue },
-      { type: 'Expenses', amount: expense },
-      { type: 'Net Profit', amount: revenue - expense },
-    ]);
-    setSummary({ revenue, expense, profit: revenue - expense });
-  };
 
   const renderSummaryCard = () => {
     const summaryItems = Object.entries(summary).map(([key, value]) => ({

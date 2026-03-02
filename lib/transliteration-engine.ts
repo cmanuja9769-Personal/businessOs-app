@@ -480,114 +480,112 @@ function matchPattern(
   return null
 }
 
-/**
- * Transliterate a single word from English to Hindi
- */
+interface TransliterationState {
+  result: string
+  lastWasConsonant: boolean
+  pendingHalant: boolean
+}
+
+function stripPendingHalant(state: TransliterationState): string {
+  if (!state.pendingHalant) return state.result
+  return state.result.slice(0, -1)
+}
+
+function processConsonantCluster(
+  word: string, position: number, state: TransliterationState
+): { state: TransliterationState; advance: number } | null {
+  const match = matchPattern(word, position, CONSONANT_CLUSTERS)
+  if (!match) return null
+
+  const [, hindi, length] = match
+  const nextChar = word[position + length]
+  const base = stripPendingHalant(state)
+
+  if (nextChar && isConsonant(nextChar)) {
+    return {
+      state: { result: base + hindi + HALANT, lastWasConsonant: true, pendingHalant: true },
+      advance: length,
+    }
+  }
+  return {
+    state: { result: base + hindi, lastWasConsonant: true, pendingHalant: false },
+    advance: length,
+  }
+}
+
+function processVowel(
+  word: string, position: number, state: TransliterationState
+): { state: TransliterationState; advance: number } | null {
+  if (!isVowel(word[position])) return null
+
+  const patterns = state.lastWasConsonant ? VOWEL_MATRAS : INITIAL_VOWELS
+  const match = matchPattern(word, position, patterns)
+  if (!match) return null
+
+  const [, hindi, length] = match
+  const base = (state.pendingHalant && state.lastWasConsonant)
+    ? state.result.slice(0, -1)
+    : state.result
+
+  return {
+    state: { result: base + hindi, lastWasConsonant: false, pendingHalant: false },
+    advance: length,
+  }
+}
+
+const DEVANAGARI_NUMERALS = '०१२३४५६७८९'
+
+function processRemainingChar(char: string, state: TransliterationState): TransliterationState {
+  const mapped = /\d/.test(char) ? DEVANAGARI_NUMERALS[parseInt(char)] : char
+  return { result: state.result + mapped, lastWasConsonant: false, pendingHalant: false }
+}
+
+function applyEndingPattern(word: string): { stem: string; suffix: string } {
+  for (const [pattern, replacement] of ENDING_PATTERNS) {
+    if (word.endsWith(pattern) && word.length > pattern.length) {
+      return { stem: word.slice(0, -pattern.length), suffix: replacement }
+    }
+  }
+  return { stem: word, suffix: '' }
+}
+
 function transliterateWord(word: string): string {
   if (!word || word.trim() === '') return ''
-  
+
   const lowerWord = word.toLowerCase().trim()
-  
-  // Check for complete word match first
+
   const wordMatch = COMMON_WORD_PATTERNS.find(([pattern]) => pattern === lowerWord)
-  if (wordMatch) {
-    return wordMatch[1]
-  }
-  
-  // Check for ending patterns and apply them
-  let processedWord = lowerWord
-  let suffix = ''
-  
-  for (const [pattern, replacement] of ENDING_PATTERNS) {
-    if (processedWord.endsWith(pattern) && processedWord.length > pattern.length) {
-      processedWord = processedWord.slice(0, -pattern.length)
-      suffix = replacement
-      break
-    }
-  }
-  
-  let result = ''
+  if (wordMatch) return wordMatch[1]
+
+  const { stem, suffix } = applyEndingPattern(lowerWord)
+
+  let state: TransliterationState = { result: '', lastWasConsonant: false, pendingHalant: false }
   let i = 0
-  let lastWasConsonant = false
-  let pendingHalant = false
-  
-  while (i < processedWord.length) {
-    const remaining = processedWord.slice(i)
-    
-    // Try to match consonant clusters first
-    const consonantMatch = matchPattern(processedWord, i, CONSONANT_CLUSTERS)
-    
-    if (consonantMatch) {
-      const [, hindi, length] = consonantMatch
-      
-      // Check what comes after this consonant
-      const nextPos = i + length
-      const nextChar = processedWord[nextPos]
-      
-      if (nextChar && isConsonant(nextChar)) {
-        if (pendingHalant) {
-          result = result.slice(0, -1)
-        }
-        result += hindi + HALANT
-        lastWasConsonant = true
-        pendingHalant = true
-      } else {
-        if (pendingHalant) {
-          result = result.slice(0, -1)
-        }
-        result += hindi
-        lastWasConsonant = true
-        pendingHalant = false
-      }
-      
-      i += length
+
+  while (i < stem.length) {
+    const consonantResult = processConsonantCluster(stem, i, state)
+    if (consonantResult) {
+      state = consonantResult.state
+      i += consonantResult.advance
       continue
     }
-    
-    // Try to match vowels
-    if (isVowel(remaining[0])) {
-      const vowelPatterns = lastWasConsonant ? VOWEL_MATRAS : INITIAL_VOWELS
-      const vowelMatch = matchPattern(processedWord, i, vowelPatterns)
-      
-      if (vowelMatch) {
-        const [, hindi, length] = vowelMatch
-        
-        // Remove pending halant before adding matra
-        if (pendingHalant && lastWasConsonant) {
-          result = result.slice(0, -1)
-        }
-        
-        result += hindi
-        lastWasConsonant = false
-        pendingHalant = false
-        i += length
-        continue
-      }
+
+    const vowelResult = processVowel(stem, i, state)
+    if (vowelResult) {
+      state = vowelResult.state
+      i += vowelResult.advance
+      continue
     }
-    
-    // Handle remaining characters
-    const char = remaining[0]
-    
-    if (/\d/.test(char)) {
-      const devanagariNumerals = '०१२३४५६७८९'
-      result += devanagariNumerals[parseInt(char)]
-      lastWasConsonant = false
-      pendingHalant = false
-    } else {
-      result += char
-      lastWasConsonant = false
-      pendingHalant = false
-    }
-    
+
+    state = processRemainingChar(stem[i], state)
     i++
   }
-  
-  // Remove trailing halant if present
-  if (result.endsWith(HALANT)) {
-    result = result.slice(0, -1)
+
+  if (state.result.endsWith(HALANT)) {
+    state.result = state.result.slice(0, -1)
   }
-  
-  return result + suffix
+
+  return state.result + suffix
 }
 
 /**

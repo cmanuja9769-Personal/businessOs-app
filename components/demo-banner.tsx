@@ -5,7 +5,7 @@ import Link from "next/link"
 import { AlertTriangle, LogOut, UserPlus } from "lucide-react"
 
 export function DemoBanner() {
-  const [visible, setVisible] = useState(() => {
+  const [visible] = useState(() => {
     if (typeof document === "undefined") return false
     return document.cookie.includes("businessos_demo=1")
   })

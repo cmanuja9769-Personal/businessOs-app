@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, ViewStyle, StyleProp } from 'react-native';
 
 interface AnimatedListItemProps {
@@ -10,8 +10,8 @@ interface AnimatedListItemProps {
 const MAX_ANIMATED = 15;
 
 export default function AnimatedListItem({ children, index, style }: AnimatedListItemProps) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [slideAnim] = useState(() => new Animated.Value(20));
 
   useEffect(() => {
     if (index >= MAX_ANIMATED) {

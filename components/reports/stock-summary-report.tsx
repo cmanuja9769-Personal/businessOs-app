@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -24,6 +24,8 @@ import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/component
 import { type ReportColumn, type ReportGroup } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+
+const ISO_DATE = "yyyy-MM-dd"
 
 interface StockItem {
   id: string
@@ -78,35 +80,10 @@ export default function StockReportComponent() {
   const [showItemCode, setShowItemCode] = useState(false)
   const [includeZeroStock, setIncludeZeroStock] = useState(false)
   const [filters, setFilters] = useState<ReportFilters>(() =>
-    getDefaultFilters({ dateFrom: format(new Date(), "yyyy-MM-dd"), dateTo: format(new Date(), "yyyy-MM-dd") })
+    getDefaultFilters({ dateFrom: format(new Date(), ISO_DATE), dateTo: format(new Date(), ISO_DATE) })
   )
 
-  useEffect(() => {
-    Promise.all([loadWarehouses(), loadMetadata()]).then(() => fetchStockReport())
-  }, [])
-
-  const loadWarehouses = async () => {
-    try {
-      const response = await fetch("/api/warehouses")
-      if (response.ok) {
-        const data = await response.json()
-        setWarehouses(data)
-      }
-    } catch (error) {
-      console.error("Failed to load warehouses:", error)
-    }
-  }
-
-  const loadMetadata = async () => {
-    try {
-      const catResponse = await fetch("/api/items/categories")
-      if (catResponse.ok) setAvailableCategories(await catResponse.json())
-    } catch (error) {
-      console.error("Failed to load metadata:", error)
-    }
-  }
-
-  const fetchStockReport = async () => {
+  const fetchStockReport = useCallback(async () => {
     setLoading(true)
     setFetchError(null)
     try {
@@ -142,7 +119,32 @@ export default function StockReportComponent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [includeZeroStock, filters])
+
+  useEffect(() => {
+    const loadWarehouses = async () => {
+      try {
+        const response = await fetch("/api/warehouses")
+        if (response.ok) {
+          const data = await response.json()
+          setWarehouses(data)
+        }
+      } catch (error) {
+        console.error("Failed to load warehouses:", error)
+      }
+    }
+
+    const loadMetadata = async () => {
+      try {
+        const catResponse = await fetch("/api/items/categories")
+        if (catResponse.ok) setAvailableCategories(await catResponse.json())
+      } catch (error) {
+        console.error("Failed to load metadata:", error)
+      }
+    }
+
+    Promise.all([loadWarehouses(), loadMetadata()]).then(() => fetchStockReport())
+  }, [fetchStockReport])
 
   const toggleRowExpansion = (itemId: string) => {
     setExpandedRows((prev) => {
@@ -278,7 +280,7 @@ export default function StockReportComponent() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `stock-report-${format(new Date(), "yyyy-MM-dd")}.pdf`
+      link.download = `stock-report-${format(new Date(), ISO_DATE)}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -309,7 +311,7 @@ export default function StockReportComponent() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `stock-report-${format(new Date(), "yyyy-MM-dd")}.csv`
+    link.download = `stock-report-${format(new Date(), ISO_DATE)}.csv`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

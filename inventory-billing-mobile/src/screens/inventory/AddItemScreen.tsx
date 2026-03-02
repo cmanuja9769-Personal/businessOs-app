@@ -30,6 +30,101 @@ const GST_RATES = [0, 5, 12, 18, 28];
 const UNITS = ['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'SET'];
 const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Stationery', 'Hardware', 'Other'];
 
+interface ItemFormFields {
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  unit: string;
+  purchasePrice: string;
+  sellingPrice: string;
+  gstRate: number;
+  hsnCode: string;
+  minStock: string;
+  maxStock: string;
+  currentStock: string;
+  description: string;
+}
+
+const mapSupabaseItemToForm = (data: Record<string, unknown>): ItemFormFields => ({
+  name: String(data.name || ''),
+  sku: String(data.item_code || ''),
+  barcode: String(data.barcode_no || ''),
+  category: String(data.category || ''),
+  unit: String(data.unit || 'PCS'),
+  purchasePrice: data.purchase_price ? String(data.purchase_price) : '',
+  sellingPrice: data.sale_price ? String(data.sale_price) : '',
+  gstRate: data.tax_rate ? Number(data.tax_rate) : 18,
+  hsnCode: String(data.hsn || ''),
+  minStock: data.min_stock ? String(data.min_stock) : '',
+  maxStock: '',
+  currentStock: data.current_stock ? String(data.current_stock) : '0',
+  description: String(data.description || ''),
+});
+
+const validateItemForm = (fields: {
+  name: string;
+  sku: string;
+  purchasePrice: string;
+  sellingPrice: string;
+  currentStock: string;
+}): Record<string, string> => {
+  const errors: Record<string, string> = {};
+  if (!fields.name.trim()) errors.name = 'Item name is required';
+  if (!fields.sku.trim()) errors.sku = 'SKU is required';
+  if (!fields.purchasePrice || parseFloat(fields.purchasePrice) <= 0) {
+    errors.purchasePrice = 'Valid purchase price is required';
+  }
+  if (!fields.sellingPrice || parseFloat(fields.sellingPrice) <= 0) {
+    errors.sellingPrice = 'Valid selling price is required';
+  }
+  if (!fields.currentStock || parseInt(fields.currentStock) < 0) {
+    errors.currentStock = 'Valid stock quantity is required';
+  }
+  return errors;
+};
+
+const buildItemData = (
+  fields: {
+    name: string; sku: string; barcode: string; category: string; unit: string;
+    purchasePrice: string; sellingPrice: string; gstRate: number; hsnCode: string;
+    minStock: string; currentStock: string; description: string;
+  },
+  organizationId: string,
+) => ({
+  organization_id: organizationId,
+  name: fields.name.trim(),
+  item_code: fields.sku.trim(),
+  barcode_no: fields.barcode.trim() || null,
+  category: fields.category.trim() || 'Other',
+  unit: fields.unit,
+  purchase_price: parseFloat(fields.purchasePrice),
+  sale_price: parseFloat(fields.sellingPrice),
+  tax_rate: fields.gstRate,
+  hsn: fields.hsnCode.trim() || null,
+  min_stock: fields.minStock ? parseInt(fields.minStock) : 0,
+  current_stock: parseInt(fields.currentStock),
+  description: fields.description.trim() || null,
+});
+
+const upsertItem = async (
+  isEditing: boolean,
+  itemId: string | undefined,
+  organizationId: string,
+  itemData: Record<string, unknown>,
+) => {
+  if (isEditing) {
+    const { error } = await supabase.from('items').update(itemData).eq('id', itemId).eq('organization_id', organizationId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from('items').insert(itemData).select().single();
+  if (error) throw error;
+};
+
+const getErrorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error ? err.message : fallback;
+
 export default function AddItemScreen() {
   const navigation = useNavigation<InventoryStackNavigationProp>();
   const route = useRoute<RouteProp<InventoryStackParamList, 'AddItem'>>();
@@ -100,19 +195,20 @@ export default function AddItemScreen() {
 
         if (error) throw error;
         if (data) {
-          setName(data.name || '');
-          setSku(data.item_code || '');
-          setBarcode(data.barcode_no || '');
-          setCategory(data.category || '');
-          setUnit(data.unit || 'PCS');
-          setPurchasePrice(data.purchase_price ? String(data.purchase_price) : '');
-          setSellingPrice(data.sale_price ? String(data.sale_price) : '');
-          setGstRate(data.tax_rate ? Number(data.tax_rate) : 18);
-          setHsnCode(data.hsn || '');
-          setMinStock(data.min_stock ? String(data.min_stock) : '');
-          setMaxStock('');
-          setCurrentStock(data.current_stock ? String(data.current_stock) : '0');
-          setDescription(data.description || '');
+          const fields = mapSupabaseItemToForm(data as Record<string, unknown>);
+          setName(fields.name);
+          setSku(fields.sku);
+          setBarcode(fields.barcode);
+          setCategory(fields.category);
+          setUnit(fields.unit);
+          setPurchasePrice(fields.purchasePrice);
+          setSellingPrice(fields.sellingPrice);
+          setGstRate(fields.gstRate);
+          setHsnCode(fields.hsnCode);
+          setMinStock(fields.minStock);
+          setMaxStock(fields.maxStock);
+          setCurrentStock(fields.currentStock);
+          setDescription(fields.description);
         }
       } catch {
         toast.error('Failed to load item details');
@@ -122,7 +218,7 @@ export default function AddItemScreen() {
     };
 
     fetchItem();
-  }, [itemId, organizationId]);
+  }, [itemId, organizationId, toast]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -157,20 +253,7 @@ export default function AddItemScreen() {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!name.trim()) newErrors.name = 'Item name is required';
-    if (!sku.trim()) newErrors.sku = 'SKU is required';
-    if (!purchasePrice || parseFloat(purchasePrice) <= 0) {
-      newErrors.purchasePrice = 'Valid purchase price is required';
-    }
-    if (!sellingPrice || parseFloat(sellingPrice) <= 0) {
-      newErrors.sellingPrice = 'Valid selling price is required';
-    }
-    if (!currentStock || parseInt(currentStock) < 0) {
-      newErrors.currentStock = 'Valid stock quantity is required';
-    }
-
+    const newErrors = validateItemForm({ name, sku, purchasePrice, sellingPrice, currentStock });
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -190,48 +273,18 @@ export default function AddItemScreen() {
     setLoading(true);
 
     try {
-      const itemData = {
-        organization_id: organizationId,
-        name: name.trim(),
-        item_code: sku.trim(),
-        barcode_no: barcode.trim() || null,
-        category: category.trim() || 'Other',
-        unit,
-        purchase_price: parseFloat(purchasePrice),
-        sale_price: parseFloat(sellingPrice),
-        tax_rate: gstRate,
-        hsn: hsnCode.trim() || null,
-        min_stock: minStock ? parseInt(minStock) : 0,
-        current_stock: parseInt(currentStock),
-        description: description.trim() || null,
-      };
-
-      if (isEditing) {
-        const { error } = await supabase
-          .from('items')
-          .update(itemData)
-          .eq('id', itemId)
-          .eq('organization_id', organizationId);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('items')
-          .insert(itemData)
-          .select()
-          .single();
-
-        if (error) throw error;
-      }
-
+      const itemData = buildItemData(
+        { name, sku, barcode, category, unit, purchasePrice, sellingPrice, gstRate, hsnCode, minStock, currentStock, description },
+        organizationId,
+      );
+      await upsertItem(isEditing, itemId, organizationId, itemData);
       setSavedSuccessfully(true);
       successFeedback();
       toast.success(isEditing ? 'Item updated successfully' : 'Item added successfully');
       navigation.goBack();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save item';
       errorFeedback();
-      toast.error(message);
+      toast.error(getErrorMessage(err, 'Failed to save item'));
     } finally {
       setLoading(false);
     }
@@ -253,7 +306,7 @@ export default function AddItemScreen() {
           </Text>
           {imageUri ? (
             <View style={styles.imageContainer}>
-              <Image source={{ uri: imageUri }} style={styles.itemImage} />
+              <Image source={{ uri: imageUri }} style={styles.itemImage} alt="Item image" accessibilityLabel="Item image" />
               <TouchableOpacity
                 style={styles.removeImageButton}
                 onPress={() => setImageUri(null)}

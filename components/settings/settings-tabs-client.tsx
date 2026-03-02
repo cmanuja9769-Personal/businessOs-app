@@ -3,7 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Palette, SettingsIcon, CreditCard, Mail, Phone, MapPin, Banknote, FileText, Package, Receipt, Hash, Globe, Bell, Database } from "lucide-react"
+import { Building2, Palette, SettingsIcon, CreditCard, Mail, Phone, MapPin, Banknote, FileText, Package, Receipt, Hash, Globe, Bell } from "lucide-react"
 import { SettingsForm } from "@/components/settings/settings-form"
 import type { ISettings, IOrganization } from "@/app/settings/actions"
 
@@ -11,8 +11,6 @@ interface SettingsTabsClientProps {
   settings: ISettings
   organization?: IOrganization | null
 }
-
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 const PAYMENT_TERMS_LABEL: Record<number, string> = {
   0: "Due on Receipt",
@@ -30,8 +28,143 @@ const RESET_MODE_LABEL: Record<string, string> = {
   monthly: "Monthly Reset",
 }
 
-export function SettingsTabsClient({ settings, organization }: SettingsTabsClientProps) {
+function resolveOrgField(
+  orgValue: string | null | undefined,
+  settingsValue: string | null | undefined,
+): string | undefined {
+  return orgValue || settingsValue || undefined
+}
+
+function ConfigBadge({ value, activeText = "Configured", inactiveText = "Not set" }: {
+  readonly value: string | null | undefined
+  readonly activeText?: string
+  readonly inactiveText?: string
+}) {
+  return (
+    <Badge variant={value ? "default" : "secondary"} className="text-xs">
+      {value ? activeText : inactiveText}
+    </Badge>
+  )
+}
+
+function ToggleBadge({ enabled, activeText, inactiveText = "Off" }: {
+  readonly enabled: boolean
+  readonly activeText: string
+  readonly inactiveText?: string
+}) {
+  return (
+    <Badge variant={enabled ? "default" : "secondary"} className="text-xs">
+      {enabled ? activeText : inactiveText}
+    </Badge>
+  )
+}
+
+function BusinessProfileCard({ organization, settings }: {
+  readonly organization?: IOrganization | null
+  readonly settings: ISettings
+}) {
+  const gst = resolveOrgField(organization?.gstNumber, settings.businessGst)
+  const pan = resolveOrgField(organization?.panNumber, settings.businessPan)
+
+  return (
+    <Card className="sm:col-span-2 lg:col-span-1">
+      <CardHeader>
+        <CardTitle className="text-sm">Business Profile</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <p className="text-2xl font-bold">{organization?.name || settings.businessName}</p>
+          <div className="flex flex-wrap gap-2">
+            {gst && (
+              <Badge variant="outline" className="text-xs font-mono">
+                GSTIN: {gst}
+              </Badge>
+            )}
+            {pan && (
+              <Badge variant="secondary" className="text-xs font-mono">
+                PAN: {pan}
+              </Badge>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ContactDetailsCard({ organization, settings }: {
+  readonly organization?: IOrganization | null
+  readonly settings: ISettings
+}) {
+  const email = resolveOrgField(organization?.email, settings.businessEmail)
+  const phone = resolveOrgField(organization?.phone, settings.businessPhone)
+  const address = resolveOrgField(organization?.address, settings.businessAddress)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Contact Details</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {email && (
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{email}</span>
+            </div>
+          )}
+          {phone && (
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span>{phone}</span>
+            </div>
+          )}
+          {address && (
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+              <span className="text-muted-foreground">{address}</span>
+            </div>
+          )}
+          {!email && !phone && (
+            <p className="text-sm text-muted-foreground">No contact details configured</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function BankAccountCard({ settings }: { readonly settings: ISettings }) {
   const hasBankDetails = settings.bankName || settings.bankAccountNo
+  const bankLabel = hasBankDetails ? settings.bankName || "Configured" : "Not configured"
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Bank Account</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-2">
+          <Banknote className="h-5 w-5 text-muted-foreground" />
+          <span className="text-lg font-semibold">{bankLabel}</span>
+        </div>
+        {hasBankDetails && settings.bankAccountNo && (
+          <p className="mt-1 text-xs text-muted-foreground font-mono">
+            A/C: ****{settings.bankAccountNo.slice(-4)}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function StockAlertDisplay({ settings }: { readonly settings: ISettings }) {
+  const label = settings.lowStockAlert ? `Below ${settings.lowStockThreshold}` : "Disabled"
+
+  return <span className="text-sm font-medium">{label}</span>
+}
+
+export function SettingsTabsClient({ settings, organization }: SettingsTabsClientProps) {
   const hasUpi = !!settings.upiId
 
   return (
@@ -57,60 +190,9 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
 
       <TabsContent value="business" className="space-y-6">
         <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="sm:col-span-2 lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-sm">Business Profile</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <p className="text-2xl font-bold">{organization?.name || settings.businessName}</p>
-                
-                <div className="flex flex-wrap gap-2">
-                  {(organization?.gstNumber || settings.businessGst) && (
-                    <Badge variant="outline" className="text-xs font-mono">
-                      GSTIN: {organization?.gstNumber || settings.businessGst}
-                    </Badge>
-                  )}
-                  {(organization?.panNumber || settings.businessPan) && (
-                    <Badge variant="secondary" className="text-xs font-mono">
-                      PAN: {organization?.panNumber || settings.businessPan}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <BusinessProfileCard organization={organization} settings={settings} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Contact Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {(organization?.email || settings.businessEmail) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate">{organization?.email || settings.businessEmail}</span>
-                  </div>
-                )}
-                {(organization?.phone || settings.businessPhone) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{organization?.phone || settings.businessPhone}</span>
-                  </div>
-                )}
-                {(organization?.address || settings.businessAddress) && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <span className="text-muted-foreground">{organization?.address || settings.businessAddress}</span>
-                  </div>
-                )}
-                {!organization?.email && !organization?.phone && !settings.businessEmail && !settings.businessPhone && (
-                  <p className="text-sm text-muted-foreground">No contact details configured</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <ContactDetailsCard organization={organization} settings={settings} />
 
           <Card>
             <CardHeader>
@@ -154,15 +236,11 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
               <div className="space-y-1 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Logo</span>
-                  <Badge variant={settings.businessLogoUrl ? "default" : "secondary"} className="text-xs">
-                    {settings.businessLogoUrl ? "Uploaded" : "Not set"}
-                  </Badge>
+                  <ConfigBadge value={settings.businessLogoUrl} activeText="Uploaded" />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Signature</span>
-                  <Badge variant={settings.signatureImageUrl ? "default" : "secondary"} className="text-xs">
-                    {settings.signatureImageUrl ? "Uploaded" : "Not set"}
-                  </Badge>
+                  <ConfigBadge value={settings.signatureImageUrl} activeText="Uploaded" />
                 </div>
               </div>
             </CardContent>
@@ -176,21 +254,15 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
               <div className="space-y-1 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Terms</span>
-                  <Badge variant={settings.customTerms ? "default" : "secondary"} className="text-xs">
-                    {settings.customTerms ? "Configured" : "Not set"}
-                  </Badge>
+                  <ConfigBadge value={settings.customTerms} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Footer</span>
-                  <Badge variant={settings.invoiceFooter ? "default" : "secondary"} className="text-xs">
-                    {settings.invoiceFooter ? "Configured" : "Not set"}
-                  </Badge>
+                  <ConfigBadge value={settings.invoiceFooter} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Default Notes</span>
-                  <Badge variant={settings.defaultNotes ? "default" : "secondary"} className="text-xs">
-                    {settings.defaultNotes ? "Configured" : "Not set"}
-                  </Badge>
+                  <ConfigBadge value={settings.defaultNotes} />
                 </div>
               </div>
             </CardContent>
@@ -202,24 +274,7 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
 
       <TabsContent value="payment" className="space-y-6">
         <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Bank Account</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Banknote className="h-5 w-5 text-muted-foreground" />
-                <span className="text-lg font-semibold">
-                  {hasBankDetails ? settings.bankName || "Configured" : "Not configured"}
-                </span>
-              </div>
-              {hasBankDetails && settings.bankAccountNo && (
-                <p className="mt-1 text-xs text-muted-foreground font-mono">
-                  A/C: ****{settings.bankAccountNo.slice(-4)}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <BankAccountCard settings={settings} />
 
           <Card>
             <CardHeader>
@@ -296,9 +351,7 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
             <CardContent>
               <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-muted-foreground" />
-                <Badge variant={settings.multiCurrencyEnabled ? "default" : "secondary"} className="text-xs">
-                  {settings.multiCurrencyEnabled ? "Enabled" : "Off"}
-                </Badge>
+                <ToggleBadge enabled={settings.multiCurrencyEnabled} activeText="Enabled" />
               </div>
             </CardContent>
           </Card>
@@ -310,9 +363,7 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
             <CardContent>
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-muted-foreground" />
-                <Badge variant={settings.emailNotificationsEnabled ? "default" : "secondary"} className="text-xs">
-                  {settings.emailNotificationsEnabled ? "Active" : "Off"}
-                </Badge>
+                <ToggleBadge enabled={settings.emailNotificationsEnabled} activeText="Active" />
               </div>
             </CardContent>
           </Card>
@@ -324,9 +375,7 @@ export function SettingsTabsClient({ settings, organization }: SettingsTabsClien
             <CardContent>
               <div className="flex items-center gap-2">
                 <Package className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">
-                  {settings.lowStockAlert ? `Below ${settings.lowStockThreshold}` : "Disabled"}
-                </span>
+                <StockAlertDisplay settings={settings} />
               </div>
             </CardContent>
           </Card>

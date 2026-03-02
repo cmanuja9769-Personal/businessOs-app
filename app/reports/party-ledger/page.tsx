@@ -26,6 +26,11 @@ import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
+const ISO_DATE = "yyyy-MM-dd"
+const DISPLAY_DATE = "dd MMM yyyy"
+const COLOR_POSITIVE = "text-green-600"
+const COLOR_NEGATIVE = "text-red-600"
+
 interface Party {
   id: string
   name: string
@@ -46,6 +51,147 @@ interface LedgerEntry {
   balance: number
 }
 
+function createOpeningEntry(openingBalance: number, dateFrom: string): LedgerEntry | null {
+  if (openingBalance === 0) return null
+  return {
+    id: "opening",
+    date: dateFrom,
+    type: "opening",
+    documentNo: "-",
+    description: "Opening Balance B/F",
+    debit: openingBalance > 0 ? openingBalance : 0,
+    credit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
+    balance: 0,
+  }
+}
+
+function isInDateRange(dateStr: string, from: string, to: string): boolean {
+  const d = dateStr.slice(0, 10)
+  return d >= from && d <= to
+}
+
+async function fetchCustomerLedgerEntries(
+  partyId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LedgerEntry[]> {
+  const [invoicesRes, paymentsRes] = await Promise.all([
+    fetch("/api/invoices"),
+    fetch("/api/payments"),
+  ])
+  const invoices = invoicesRes.ok ? await invoicesRes.json() : []
+  const payments = paymentsRes.ok ? await paymentsRes.json() : []
+
+  const entries: LedgerEntry[] = []
+
+  invoices
+    .filter((inv: { customerId: string; invoiceDate: string; status?: string }) =>
+      inv.customerId === partyId &&
+      isInDateRange(inv.invoiceDate, dateFrom, dateTo) &&
+      inv.status !== "cancelled"
+    )
+    .forEach((inv: { id: string; invoiceDate: string; invoiceNo: string; total: number }) => {
+      entries.push({
+        id: `inv-${inv.id}`,
+        date: inv.invoiceDate,
+        type: "invoice",
+        documentNo: inv.invoiceNo,
+        description: "Sales Invoice",
+        debit: inv.total,
+        credit: 0,
+        balance: 0,
+      })
+    })
+
+  payments
+    .filter((pay: { invoiceId?: string; paymentDate?: string; date?: string }) => {
+      const inv = invoices.find((i: { id: string }) => i.id === pay.invoiceId)
+      return inv?.customerId === partyId && isInDateRange(pay.paymentDate || pay.date || '', dateFrom, dateTo)
+    })
+    .forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
+      entries.push({
+        id: `pay-${pay.id}`,
+        date: pay.paymentDate || pay.date || '',
+        type: "payment",
+        documentNo: pay.referenceNo || "Payment",
+        description: `Payment Received - ${pay.paymentMethod || "Cash"}`,
+        debit: 0,
+        credit: pay.amount,
+        balance: 0,
+      })
+    })
+
+  return entries
+}
+
+async function fetchSupplierLedgerEntries(
+  partyId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LedgerEntry[]> {
+  const [purchasesRes, paymentsRes] = await Promise.all([
+    fetch("/api/purchases"),
+    fetch("/api/payments"),
+  ])
+  const purchases = purchasesRes.ok ? await purchasesRes.json() : []
+  const payments = paymentsRes.ok ? await paymentsRes.json() : []
+
+  const entries: LedgerEntry[] = []
+
+  purchases
+    .filter((pur: { supplierId: string; date: string }) =>
+      pur.supplierId === partyId && isInDateRange(pur.date, dateFrom, dateTo)
+    )
+    .forEach((pur: { id: string; date: string; purchaseNo: string; total: number }) => {
+      entries.push({
+        id: `pur-${pur.id}`,
+        date: pur.date,
+        type: "invoice",
+        documentNo: pur.purchaseNo,
+        description: "Purchase Invoice",
+        debit: 0,
+        credit: pur.total,
+        balance: 0,
+      })
+    })
+
+  payments
+    .filter((pay: { purchaseId?: string; paymentDate?: string; date?: string }) => {
+      const pur = purchases.find((p: { id: string }) => p.id === pay.purchaseId)
+      return pur?.supplierId === partyId && isInDateRange(pay.paymentDate || pay.date || '', dateFrom, dateTo)
+    })
+    .forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
+      entries.push({
+        id: `pay-${pay.id}`,
+        date: pay.paymentDate || pay.date || '',
+        type: "payment",
+        documentNo: pay.referenceNo || "Payment",
+        description: `Payment Made - ${pay.paymentMethod || "Cash"}`,
+        debit: pay.amount,
+        credit: 0,
+        balance: 0,
+      })
+    })
+
+  return entries
+}
+
+function sortLedgerEntries(entries: LedgerEntry[]): void {
+  entries.sort((a, b) => {
+    if (a.type === "opening") return -1
+    if (b.type === "opening") return 1
+    return new Date(a.date).getTime() - new Date(b.date).getTime()
+  })
+}
+
+function computeRunningBalances(entries: LedgerEntry[]): void {
+  let balance = 0
+  for (const entry of entries) {
+    balance += entry.debit - entry.credit
+    entry.balance = balance
+  }
+}
+
 export default function PartyLedgerPage() {
   const [parties, setParties] = useState<Party[]>([])
   const [selectedParty, setSelectedParty] = useState<string>("")
@@ -58,8 +204,8 @@ export default function PartyLedgerPage() {
     const now = new Date()
     const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
     return getDefaultFilters({
-      dateFrom: format(new Date(fyStartYear, 3, 1), "yyyy-MM-dd"),
-      dateTo: format(endOfMonth(new Date()), "yyyy-MM-dd"),
+      dateFrom: format(new Date(fyStartYear, 3, 1), ISO_DATE),
+      dateTo: format(endOfMonth(new Date()), ISO_DATE),
     })
   })
 
@@ -94,126 +240,17 @@ export default function PartyLedgerPage() {
       const party = parties.find((p) => p.id === selectedParty)
       if (!party) return
 
-      const dateFromStr = filters.dateFrom
-      const dateToStr = filters.dateTo
-
       const entries: LedgerEntry[] = []
-      const openingBalance = party.opening_balance || 0
+      const openingEntry = createOpeningEntry(party.opening_balance || 0, filters.dateFrom)
+      if (openingEntry) entries.push(openingEntry)
 
-      if (openingBalance !== 0) {
-        entries.push({
-          id: "opening",
-          date: filters.dateFrom,
-          type: "opening",
-          documentNo: "-",
-          description: "Opening Balance B/F",
-          debit: openingBalance > 0 ? openingBalance : 0,
-          credit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
-          balance: 0,
-        })
-      }
+      const partyEntries = party.type === "customer"
+        ? await fetchCustomerLedgerEntries(selectedParty, filters.dateFrom, filters.dateTo)
+        : await fetchSupplierLedgerEntries(selectedParty, filters.dateFrom, filters.dateTo)
 
-      if (party.type === "customer") {
-        const [invoicesRes, paymentsRes] = await Promise.all([
-          fetch("/api/invoices"),
-          fetch("/api/payments"),
-        ])
-        const invoices = invoicesRes.ok ? await invoicesRes.json() : []
-        const payments = paymentsRes.ok ? await paymentsRes.json() : []
-
-        const customerInvoices = invoices.filter((inv: { customerId: string; invoiceDate: string; status?: string }) => {
-          const invDateStr = inv.invoiceDate.slice(0, 10)
-          return inv.customerId === selectedParty && invDateStr >= dateFromStr && invDateStr <= dateToStr && inv.status !== "cancelled"
-        })
-
-        const customerPayments = payments.filter((pay: { invoiceId?: string; paymentDate?: string; date?: string }) => {
-          const payDateStr = (pay.paymentDate || pay.date || '').slice(0, 10)
-          const inv = invoices.find((i: { id: string }) => i.id === pay.invoiceId)
-          return inv?.customerId === selectedParty && payDateStr >= dateFromStr && payDateStr <= dateToStr
-        })
-
-        customerInvoices.forEach((inv: { id: string; invoiceDate: string; invoiceNo: string; total: number }) => {
-          entries.push({
-            id: `inv-${inv.id}`,
-            date: inv.invoiceDate,
-            type: "invoice",
-            documentNo: inv.invoiceNo,
-            description: "Sales Invoice",
-            debit: inv.total,
-            credit: 0,
-            balance: 0,
-          })
-        })
-
-        customerPayments.forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
-          entries.push({
-            id: `pay-${pay.id}`,
-            date: pay.paymentDate || pay.date || '',
-            type: "payment",
-            documentNo: pay.referenceNo || "Payment",
-            description: `Payment Received - ${pay.paymentMethod || "Cash"}`,
-            debit: 0,
-            credit: pay.amount,
-            balance: 0,
-          })
-        })
-      } else {
-        const [purchasesRes, paymentsRes] = await Promise.all([
-          fetch("/api/purchases"),
-          fetch("/api/payments"),
-        ])
-        const purchases = purchasesRes.ok ? await purchasesRes.json() : []
-        const payments = paymentsRes.ok ? await paymentsRes.json() : []
-
-        const supplierPurchases = purchases.filter((pur: { supplierId: string; date: string }) => {
-          const purDateStr = pur.date.slice(0, 10)
-          return pur.supplierId === selectedParty && purDateStr >= dateFromStr && purDateStr <= dateToStr
-        })
-
-        const supplierPayments = payments.filter((pay: { purchaseId?: string; paymentDate?: string; date?: string }) => {
-          const payDateStr = (pay.paymentDate || pay.date || '').slice(0, 10)
-          const pur = purchases.find((p: { id: string }) => p.id === pay.purchaseId)
-          return pur?.supplierId === selectedParty && payDateStr >= dateFromStr && payDateStr <= dateToStr
-        })
-
-        supplierPurchases.forEach((pur: { id: string; date: string; purchaseNo: string; total: number }) => {
-          entries.push({
-            id: `pur-${pur.id}`,
-            date: pur.date,
-            type: "invoice",
-            documentNo: pur.purchaseNo,
-            description: "Purchase Invoice",
-            debit: 0,
-            credit: pur.total,
-            balance: 0,
-          })
-        })
-
-        supplierPayments.forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
-          entries.push({
-            id: `pay-${pay.id}`,
-            date: pay.paymentDate || pay.date || '',
-            type: "payment",
-            documentNo: pay.referenceNo || "Payment",
-            description: `Payment Made - ${pay.paymentMethod || "Cash"}`,
-            debit: pay.amount,
-            credit: 0,
-            balance: 0,
-          })
-        })
-      }
-
-      entries.sort((a, b) => {
-        if (a.type === "opening") return -1
-        if (b.type === "opening") return 1
-        return new Date(a.date).getTime() - new Date(b.date).getTime()
-      })
-
-      let balance = 0
-      for (const entry of entries) {
-        balance += entry.debit - entry.credit
-        entry.balance = balance
-      }
+      entries.push(...partyEntries)
+      sortLedgerEntries(entries)
+      computeRunningBalances(entries)
 
       setLedgerEntries(entries)
     } catch (error) {
@@ -259,7 +296,7 @@ export default function PartyLedgerPage() {
     if (!selectedPartyData) return
     setPdfGenerating(true)
     try {
-      const dateRange = `${format(new Date(filters.dateFrom), "dd MMM yyyy")} - ${format(new Date(filters.dateTo), "dd MMM yyyy")}`
+      const dateRange = `${format(new Date(filters.dateFrom), DISPLAY_DATE)} - ${format(new Date(filters.dateTo), DISPLAY_DATE)}`
 
       const pdfData = ledgerEntries.map((entry) => ({
         date: format(new Date(entry.date), "dd/MM/yyyy"),
@@ -300,7 +337,7 @@ export default function PartyLedgerPage() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `party-ledger-${selectedPartyData.name.replace(/[^a-zA-Z0-9]/g, "-")}-${format(new Date(), "yyyy-MM-dd")}.pdf`
+      link.download = `party-ledger-${selectedPartyData.name.replace(/[^a-zA-Z0-9]/g, "-")}-${format(new Date(), ISO_DATE)}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -480,7 +517,7 @@ export default function PartyLedgerPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">Closing Balance</p>
-                    <p className={`text-2xl font-bold ${closingBalance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    <p className={`text-2xl font-bold ${closingBalance >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                       {formatCurrency(closingBalance)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -497,11 +534,29 @@ export default function PartyLedgerPage() {
 
           <Card>
             <CardContent className="pt-4">
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
+              {(() => {
+                if (loading) {
+                  return (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  )
+                }
+                if (fetchError) {
+                  return (
+                    <DataEmptyState
+                      icon={<AlertCircle className="h-12 w-12" />}
+                      title="Failed to load ledger"
+                      description={fetchError}
+                      action={
+                        <Button variant="outline" size="sm" onClick={() => void fetchLedger()}>
+                          Retry
+                        </Button>
+                      }
+                    />
+                  )
+                }
+                return (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
@@ -528,7 +583,7 @@ export default function PartyLedgerPage() {
                               key={entry.id}
                               className={entry.type === "opening" ? "bg-blue-50/50 dark:bg-blue-950/20 font-medium" : ""}
                             >
-                              <TableCell>{format(new Date(entry.date), "dd MMM yyyy")}</TableCell>
+                              <TableCell>{format(new Date(entry.date), DISPLAY_DATE)}</TableCell>
                               <TableCell className="font-mono">{entry.documentNo}</TableCell>
                               <TableCell>{entry.description}</TableCell>
                               <TableCell className="text-right">
@@ -537,7 +592,7 @@ export default function PartyLedgerPage() {
                               <TableCell className="text-right">
                                 {entry.credit > 0 ? formatCurrency(entry.credit) : "-"}
                               </TableCell>
-                              <TableCell className={`text-right font-medium ${entry.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                              <TableCell className={`text-right font-medium ${entry.balance >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                                 {formatCurrency(entry.balance)}
                                 <span className="text-xs ml-1">{entry.balance >= 0 ? "Dr" : "Cr"}</span>
                               </TableCell>
@@ -547,7 +602,7 @@ export default function PartyLedgerPage() {
                             <TableCell colSpan={3}>Totals</TableCell>
                             <TableCell className="text-right">{formatCurrency(totalDebit)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(totalCredit)}</TableCell>
-                            <TableCell className={`text-right ${closingBalance >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            <TableCell className={`text-right ${closingBalance >= 0 ? COLOR_POSITIVE : COLOR_NEGATIVE}`}>
                               {formatCurrency(closingBalance)}
                               <span className="text-xs ml-1">{closingBalance >= 0 ? "Dr" : "Cr"}</span>
                             </TableCell>
@@ -557,7 +612,8 @@ export default function PartyLedgerPage() {
                     </TableBody>
                   </Table>
                 </div>
-              )}
+              )
+              })()}
             </CardContent>
           </Card>
         </>

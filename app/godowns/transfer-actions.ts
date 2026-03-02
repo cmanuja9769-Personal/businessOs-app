@@ -93,56 +93,57 @@ export async function getWarehouseItemStock(warehouseId: string) {
   })
 }
 
-export async function createStockTransfer(input: CreateTransferInput) {
-  const ctx = await getOrgContext()
-  if (!ctx) return { success: false as const, error: "No active organization found" }
-
+function validateTransferInput(input: CreateTransferInput): string | null {
   if (input.sourceWarehouseId === input.destinationWarehouseId) {
-    return { success: false as const, error: "Source and destination warehouse cannot be the same" }
+    return "Source and destination warehouse cannot be the same"
   }
-
   if (!input.items || input.items.length === 0) {
-    return { success: false as const, error: "At least one item is required for transfer" }
+    return "At least one item is required for transfer"
   }
+  const invalid = input.items.some(item => !item.itemId || item.quantity <= 0)
+  if (invalid) return "All items must have valid quantity > 0"
+  return null
+}
 
-  for (const item of input.items) {
-    if (!item.itemId || item.quantity <= 0) {
-      return { success: false as const, error: "All items must have valid quantity > 0" }
-    }
-  }
-
-  const { data: sourceStockRows } = await ctx.supabase
+async function fetchSourceStockMap(
+  ctx: OrgContext, warehouseId: string, itemIds: string[]
+): Promise<Map<string, number>> {
+  const { data } = await ctx.supabase
     .from("item_warehouse_stock")
     .select("item_id, quantity")
-    .eq("warehouse_id", input.sourceWarehouseId)
+    .eq("warehouse_id", warehouseId)
     .eq("organization_id", ctx.organizationId)
-    .in("item_id", input.items.map(i => i.itemId))
+    .in("item_id", itemIds)
 
-  const sourceStockMap = new Map<string, number>()
-  if (sourceStockRows) {
-    for (const row of sourceStockRows as Array<Record<string, unknown>>) {
-      sourceStockMap.set(row.item_id as string, Number(row.quantity) || 0)
+  const map = new Map<string, number>()
+  if (data) {
+    for (const row of data as Array<Record<string, unknown>>) {
+      map.set(row.item_id as string, Number(row.quantity) || 0)
     }
   }
+  return map
+}
 
-  const insufficientItems: string[] = []
-  for (const item of input.items) {
-    const available = sourceStockMap.get(item.itemId) || 0
-    if (available < item.quantity) {
-      insufficientItems.push(item.itemId)
-    }
-  }
+async function findInsufficientStockError(
+  ctx: OrgContext, items: TransferItemInput[], sourceStockMap: Map<string, number>
+): Promise<string | null> {
+  const insufficientIds = items
+    .filter(item => (sourceStockMap.get(item.itemId) || 0) < item.quantity)
+    .map(item => item.itemId)
 
-  if (insufficientItems.length > 0) {
-    const { data: itemNames } = await ctx.supabase
-      .from("items")
-      .select("id, name")
-      .in("id", insufficientItems)
+  if (insufficientIds.length === 0) return null
 
-    const names = (itemNames as Array<Record<string, unknown>> | null)?.map(i => i.name as string).join(", ") || "Some items"
-    return { success: false as const, error: `Insufficient stock for: ${names}` }
-  }
+  const { data: itemNames } = await ctx.supabase
+    .from("items")
+    .select("id, name")
+    .in("id", insufficientIds)
 
+  const names = (itemNames as Array<Record<string, unknown>> | null)
+    ?.map(i => i.name as string).join(", ") || "Some items"
+  return `Insufficient stock for: ${names}`
+}
+
+async function generateTransferNumber(ctx: OrgContext): Promise<string> {
   const { data: lastTransfer } = await ctx.supabase
     .from("stock_transfers")
     .select("transfer_no")
@@ -157,9 +158,12 @@ export async function createStockTransfer(input: CreateTransferInput) {
     const parsed = parseInt(lastNo.replace("ST/", ""), 10)
     if (!isNaN(parsed)) nextNum = parsed + 1
   }
+  return `ST/${String(nextNum).padStart(4, "0")}`
+}
 
-  const transferNo = `ST/${String(nextNum).padStart(4, "0")}`
-
+async function insertTransferRecord(
+  ctx: OrgContext, input: CreateTransferInput, transferNo: string
+): Promise<{ id: string; transferNo: string } | { error: string }> {
   const { data: transfer, error: transferError } = await ctx.supabase
     .from("stock_transfers")
     .insert({
@@ -176,138 +180,220 @@ export async function createStockTransfer(input: CreateTransferInput) {
     .single()
 
   if (transferError || !transfer) {
-    return { success: false as const, error: transferError?.message || "Failed to create transfer" }
+    return { error: transferError?.message || "Failed to create transfer" }
   }
+  return {
+    id: (transfer as Record<string, unknown>).id as string,
+    transferNo: (transfer as Record<string, unknown>).transfer_no as string,
+  }
+}
 
-  const transferId = (transfer as Record<string, unknown>).id as string
-  const transferNumber = (transfer as Record<string, unknown>).transfer_no as string
-
-  const transferItems = input.items.map(item => ({
+async function saveTransferItems(
+  ctx: OrgContext, transferId: string, items: TransferItemInput[]
+): Promise<string | null> {
+  const rows = items.map(item => ({
     transfer_id: transferId,
     item_id: item.itemId,
     quantity: item.quantity,
     notes: item.notes?.trim() || null,
   }))
 
-  const { error: itemsError } = await ctx.supabase
+  const { error } = await ctx.supabase
     .from("stock_transfer_items")
-    .insert(transferItems)
+    .insert(rows)
 
-  if (itemsError) {
-    await ctx.supabase.from("stock_transfers").delete().eq("id", transferId)
-    return { success: false as const, error: `Failed to save transfer items: ${itemsError.message}` }
-  }
+  if (!error) return null
 
-  const itemIds = input.items.map(i => i.itemId)
-  const { data: itemUnitsData } = await ctx.supabase
+  await ctx.supabase.from("stock_transfers").delete().eq("id", transferId)
+  return `Failed to save transfer items: ${error.message}`
+}
+
+async function fetchItemUnitMap(
+  ctx: OrgContext, itemIds: string[]
+): Promise<Map<string, string>> {
+  const { data } = await ctx.supabase
     .from("items")
     .select("id, unit")
     .in("id", itemIds)
 
-  const unitMap = new Map<string, string>()
-  if (itemUnitsData) {
-    for (const row of itemUnitsData as Array<Record<string, unknown>>) {
-      unitMap.set(row.id as string, (row.unit as string) || "PCS")
+  const map = new Map<string, string>()
+  if (data) {
+    for (const row of data as Array<Record<string, unknown>>) {
+      map.set(row.id as string, (row.unit as string) || "PCS")
     }
   }
+  return map
+}
 
+async function deductSourceStock(
+  ctx: OrgContext, itemId: string, warehouseId: string, newQty: number
+): Promise<string | null> {
+  const { error } = await ctx.supabase
+    .from("item_warehouse_stock")
+    .update({ quantity: newQty })
+    .eq("item_id", itemId)
+    .eq("warehouse_id", warehouseId)
+    .eq("organization_id", ctx.organizationId)
+
+  return error ? `Source deduction failed for item ${itemId}: ${error.message}` : null
+}
+
+async function upsertDestinationStock(
+  ctx: OrgContext, itemId: string, warehouseId: string, quantity: number
+): Promise<{ destBefore: number; error?: string }> {
+  const { data: destRow } = await ctx.supabase
+    .from("item_warehouse_stock")
+    .select("id, quantity")
+    .eq("item_id", itemId)
+    .eq("warehouse_id", warehouseId)
+    .eq("organization_id", ctx.organizationId)
+    .maybeSingle()
+
+  if (!destRow) {
+    const { error } = await ctx.supabase
+      .from("item_warehouse_stock")
+      .insert({
+        item_id: itemId,
+        warehouse_id: warehouseId,
+        organization_id: ctx.organizationId,
+        quantity,
+      })
+    return { destBefore: 0, error: error ? `Destination insert failed for item ${itemId}: ${error.message}` : undefined }
+  }
+
+  const destBefore = Number((destRow as Record<string, unknown>).quantity) || 0
+  const { error } = await ctx.supabase
+    .from("item_warehouse_stock")
+    .update({ quantity: destBefore + quantity })
+    .eq("id", (destRow as Record<string, unknown>).id as string)
+
+  return { destBefore, error: error ? `Destination add failed for item ${itemId}: ${error.message}` : undefined }
+}
+
+interface LedgerParams {
+  ctx: OrgContext
+  itemId: string
+  warehouseId: string
+  transactionType: string
+  transferDate: string
+  qtyBefore: number
+  qtyChange: number
+  entryQuantity: number
+  entryUnit: string
+  referenceId: string
+  referenceNo: string
+  notes: string
+}
+
+async function createLedgerEntry(params: LedgerParams): Promise<string | null> {
+  const { error } = await params.ctx.supabase
+    .from("stock_ledger")
+    .insert({
+      organization_id: params.ctx.organizationId,
+      item_id: params.itemId,
+      warehouse_id: params.warehouseId,
+      transaction_type: params.transactionType,
+      transaction_date: params.transferDate,
+      quantity_before: params.qtyBefore,
+      quantity_change: params.qtyChange,
+      quantity_after: params.qtyBefore + params.qtyChange,
+      entry_quantity: params.entryQuantity,
+      entry_unit: params.entryUnit,
+      base_quantity: params.entryQuantity,
+      reference_type: "transfer",
+      reference_id: params.referenceId,
+      reference_no: params.referenceNo,
+      notes: params.notes,
+      created_by: params.ctx.userId,
+    })
+
+  return error ? `Ledger ${params.transactionType} entry failed: ${error.message}` : null
+}
+
+async function processTransferItem(
+  ctx: OrgContext,
+  item: TransferItemInput,
+  input: CreateTransferInput,
+  transferId: string,
+  transferNumber: string,
+  sourceStockMap: Map<string, number>,
+  unitMap: Map<string, string>,
+): Promise<string[]> {
   const errors: string[] = []
+  const sourceQty = sourceStockMap.get(item.itemId) || 0
+  const newSourceQty = sourceQty - item.quantity
+  const itemUnit = unitMap.get(item.itemId) || "PCS"
 
+  const srcError = await deductSourceStock(ctx, item.itemId, input.sourceWarehouseId, newSourceQty)
+  if (srcError) return [srcError]
+
+  const destResult = await upsertDestinationStock(ctx, item.itemId, input.destinationWarehouseId, item.quantity)
+  if (destResult.error) errors.push(destResult.error)
+
+  const outError = await createLedgerEntry({
+    ctx, itemId: item.itemId, warehouseId: input.sourceWarehouseId,
+    transactionType: "TRANSFER_OUT", transferDate: input.transferDate,
+    qtyBefore: sourceQty, qtyChange: -item.quantity,
+    entryQuantity: item.quantity, entryUnit: itemUnit,
+    referenceId: transferId, referenceNo: transferNumber,
+    notes: `Transfer to ${input.destinationWarehouseId}`,
+  })
+  if (outError) errors.push(outError)
+
+  const inError = await createLedgerEntry({
+    ctx, itemId: item.itemId, warehouseId: input.destinationWarehouseId,
+    transactionType: "TRANSFER_IN", transferDate: input.transferDate,
+    qtyBefore: destResult.destBefore, qtyChange: item.quantity,
+    entryQuantity: item.quantity, entryUnit: itemUnit,
+    referenceId: transferId, referenceNo: transferNumber,
+    notes: `Transfer from ${input.sourceWarehouseId}`,
+  })
+  if (inError) errors.push(inError)
+
+  return errors
+}
+
+async function processAllItemTransfers(
+  ctx: OrgContext,
+  input: CreateTransferInput,
+  transferId: string,
+  transferNumber: string,
+  sourceStockMap: Map<string, number>,
+  unitMap: Map<string, string>,
+): Promise<string[]> {
+  const errors: string[] = []
   for (const item of input.items) {
-    const sourceQty = sourceStockMap.get(item.itemId) || 0
-    const newSourceQty = sourceQty - item.quantity
-    const itemUnit = unitMap.get(item.itemId) || "PCS"
-
-    const { error: srcError } = await ctx.supabase
-      .from("item_warehouse_stock")
-      .update({ quantity: newSourceQty })
-      .eq("item_id", item.itemId)
-      .eq("warehouse_id", input.sourceWarehouseId)
-      .eq("organization_id", ctx.organizationId)
-
-    if (srcError) {
-      errors.push(`Source deduction failed for item ${item.itemId}: ${srcError.message}`)
-      continue
-    }
-
-    const { data: destRow } = await ctx.supabase
-      .from("item_warehouse_stock")
-      .select("id, quantity")
-      .eq("item_id", item.itemId)
-      .eq("warehouse_id", input.destinationWarehouseId)
-      .eq("organization_id", ctx.organizationId)
-      .maybeSingle()
-
-    if (destRow) {
-      const newDestQty = (Number((destRow as Record<string, unknown>).quantity) || 0) + item.quantity
-      const { error: destError } = await ctx.supabase
-        .from("item_warehouse_stock")
-        .update({ quantity: newDestQty })
-        .eq("id", (destRow as Record<string, unknown>).id as string)
-
-      if (destError) errors.push(`Destination add failed for item ${item.itemId}: ${destError.message}`)
-    } else {
-      const { error: destInsertError } = await ctx.supabase
-        .from("item_warehouse_stock")
-        .insert({
-          item_id: item.itemId,
-          warehouse_id: input.destinationWarehouseId,
-          organization_id: ctx.organizationId,
-          quantity: item.quantity,
-        })
-
-      if (destInsertError) errors.push(`Destination insert failed for item ${item.itemId}: ${destInsertError.message}`)
-    }
-
-    const { error: outError } = await ctx.supabase
-      .from("stock_ledger")
-      .insert({
-        organization_id: ctx.organizationId,
-        item_id: item.itemId,
-        warehouse_id: input.sourceWarehouseId,
-        transaction_type: "TRANSFER_OUT",
-        transaction_date: input.transferDate,
-        quantity_before: sourceQty,
-        quantity_change: -item.quantity,
-        quantity_after: newSourceQty,
-        entry_quantity: item.quantity,
-        entry_unit: itemUnit,
-        base_quantity: item.quantity,
-        reference_type: "transfer",
-        reference_id: transferId,
-        reference_no: transferNumber,
-        notes: `Transfer to ${input.destinationWarehouseId}`,
-        created_by: ctx.userId,
-      })
-
-    if (outError) errors.push(`Ledger OUT entry failed: ${outError.message}`)
-
-    const destBefore = Number((destRow as Record<string, unknown> | null)?.quantity) || 0
-
-    const { error: inError } = await ctx.supabase
-      .from("stock_ledger")
-      .insert({
-        organization_id: ctx.organizationId,
-        item_id: item.itemId,
-        warehouse_id: input.destinationWarehouseId,
-        transaction_type: "TRANSFER_IN",
-        transaction_date: input.transferDate,
-        quantity_before: destBefore,
-        quantity_change: item.quantity,
-        quantity_after: destBefore + item.quantity,
-        entry_quantity: item.quantity,
-        entry_unit: itemUnit,
-        base_quantity: item.quantity,
-        reference_type: "transfer",
-        reference_id: transferId,
-        reference_no: transferNumber,
-        notes: `Transfer from ${input.sourceWarehouseId}`,
-        created_by: ctx.userId,
-      })
-
-    if (inError) errors.push(`Ledger IN entry failed: ${inError.message}`)
+    const itemErrors = await processTransferItem(ctx, item, input, transferId, transferNumber, sourceStockMap, unitMap)
+    errors.push(...itemErrors)
   }
+  return errors
+}
 
+export async function createStockTransfer(input: CreateTransferInput) {
+  const ctx = await getOrgContext()
+  if (!ctx) return { success: false as const, error: "No active organization found" }
+
+  const validationError = validateTransferInput(input)
+  if (validationError) return { success: false as const, error: validationError }
+
+  const itemIds = input.items.map(i => i.itemId)
+  const sourceStockMap = await fetchSourceStockMap(ctx, input.sourceWarehouseId, itemIds)
+
+  const insufficientError = await findInsufficientStockError(ctx, input.items, sourceStockMap)
+  if (insufficientError) return { success: false as const, error: insufficientError }
+
+  const transferNo = await generateTransferNumber(ctx)
+  const recordResult = await insertTransferRecord(ctx, input, transferNo)
+  if ("error" in recordResult) return { success: false as const, error: recordResult.error }
+
+  const { id: transferId, transferNo: transferNumber } = recordResult
+
+  const itemsError = await saveTransferItems(ctx, transferId, input.items)
+  if (itemsError) return { success: false as const, error: itemsError }
+
+  const unitMap = await fetchItemUnitMap(ctx, itemIds)
+
+  const errors = await processAllItemTransfers(ctx, input, transferId, transferNumber, sourceStockMap, unitMap)
   if (errors.length > 0) {
     console.error("[StockTransfer] Partial errors:", errors)
     return { success: true as const, transferNo: transferNumber, transferId, warnings: errors }

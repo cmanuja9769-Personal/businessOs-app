@@ -17,7 +17,6 @@ import { InvoiceStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { useFocusRefresh } from '@hooks/useFocusRefresh';
-import Loading from '@components/ui/Loading';
 import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
@@ -61,6 +60,61 @@ interface Invoice {
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
 
+const buildAndExecuteInvoiceQuery = async (
+  organizationId: string,
+  docType: DocumentType | 'all',
+  query: string,
+  pageNum: number,
+  totalCountFallback: number
+): Promise<{ fetchedItems: Invoice[]; count: number | null }> => {
+  const from = pageNum * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  const isFirstPage = pageNum === 0;
+
+  let countQuery = supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .is('deleted_at', null);
+
+  let dataQuery = supabase
+    .from('invoices')
+    .select('id, invoice_number, customer_name, total, status, invoice_date, document_type')
+    .eq('organization_id', organizationId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (docType !== 'all') {
+    countQuery = countQuery.eq('document_type', docType);
+    dataQuery = dataQuery.eq('document_type', docType);
+  }
+
+  if (query.trim()) {
+    const searchTerm = `%${query.trim()}%`;
+    const filter = `invoice_number.ilike.${searchTerm},customer_name.ilike.${searchTerm}`;
+    countQuery = countQuery.or(filter);
+    dataQuery = dataQuery.or(filter);
+  }
+
+  const [countResult, dataResult] = await Promise.all([
+    isFirstPage ? countQuery : Promise.resolve({ count: totalCountFallback, error: null }),
+    dataQuery,
+  ]);
+
+  if (dataResult.error) throw dataResult.error;
+
+  const fetchedItems = (dataResult.data || []) as Invoice[];
+  const count = isFirstPage && countResult && 'count' in countResult && countResult.count !== null
+    ? countResult.count
+    : null;
+
+  return { fetchedItems, count };
+};
+
+const extractFetchError = (err: unknown): string =>
+  err instanceof Error ? err.message : 'Failed to load invoices';
+
 export default function InvoiceListScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
   const { colors, shadows, isDark } = useTheme();
@@ -84,7 +138,27 @@ export default function InvoiceListScreen() {
 
   useFocusRefresh(useCallback(() => {
     fetchInvoices(searchQuery, selectedType, 0, true);
-  }, [searchQuery, selectedType]));
+  }, [searchQuery, selectedType, fetchInvoices]));
+
+  const applyFetchResults = (
+    fetchedItems: Invoice[],
+    count: number | null,
+    isFirstPage: boolean,
+    pageNum: number
+  ) => {
+    if (isFirstPage) {
+      setInvoices(fetchedItems);
+      if (count !== null) {
+        setTotalCount(count);
+        totalCountRef.current = count;
+      }
+    } else {
+      setInvoices((prev) => [...prev, ...fetchedItems]);
+    }
+    setHasMore(fetchedItems.length === PAGE_SIZE);
+    setPage(pageNum);
+    setError(null);
+  };
 
   const fetchInvoices = useCallback(async (
     query: string,
@@ -112,65 +186,13 @@ export default function InvoiceListScreen() {
     if (!isFirstPage) setIsLoadingMore(true);
 
     try {
-      const from = pageNum * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      let countQuery = supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .is('deleted_at', null);
-
-      let dataQuery = supabase
-        .from('invoices')
-        .select('id, invoice_number, customer_name, total, status, invoice_date, document_type')
-        .eq('organization_id', organizationId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (docType !== 'all') {
-        countQuery = countQuery.eq('document_type', docType);
-        dataQuery = dataQuery.eq('document_type', docType);
-      }
-
-      if (query.trim()) {
-        const searchTerm = `%${query.trim()}%`;
-        countQuery = countQuery.or(
-          `invoice_number.ilike.${searchTerm},customer_name.ilike.${searchTerm}`
-        );
-        dataQuery = dataQuery.or(
-          `invoice_number.ilike.${searchTerm},customer_name.ilike.${searchTerm}`
-        );
-      }
-
-      const [countResult, dataResult] = await Promise.all([
-        isFirstPage ? countQuery : Promise.resolve({ count: totalCountRef.current, error: null }),
-        dataQuery,
-      ]);
-
+      const { fetchedItems, count } = await buildAndExecuteInvoiceQuery(
+        organizationId, docType, query, pageNum, totalCountRef.current
+      );
       if (currentQueryRef.current !== query) return;
-
-      if (dataResult.error) throw dataResult.error;
-
-      const fetchedItems = (dataResult.data || []) as Invoice[];
-
-      if (isFirstPage) {
-        setInvoices(fetchedItems);
-        if (countResult && 'count' in countResult && countResult.count !== null) {
-          setTotalCount(countResult.count);
-          totalCountRef.current = countResult.count;
-        }
-      } else {
-        setInvoices((prev) => [...prev, ...fetchedItems]);
-      }
-
-      setHasMore(fetchedItems.length === PAGE_SIZE);
-      setPage(pageNum);
-      setError(null);
+      applyFetchResults(fetchedItems, count, isFirstPage, pageNum);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load invoices';
-      setError(message);
+      setError(extractFetchError(err));
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -226,7 +248,7 @@ export default function InvoiceListScreen() {
     return () => unsubscribe();
   }, [searchQuery, selectedType, error, fetchInvoices]);
 
-  const getStatusStyle = (status: string) => {
+  const getStatusStyle = useCallback((status: string) => {
     switch (status?.toLowerCase()) {
       case 'paid':
         return { bg: colors.successLight, color: colors.success };
@@ -242,7 +264,7 @@ export default function InvoiceListScreen() {
       default:
         return { bg: colors.surfaceElevated, color: colors.textSecondary };
     }
-  };
+  }, [colors, isDark]);
 
   const renderDocTypeButton = (type: DocumentType | 'all', label: string, icon: keyof typeof Ionicons.glyphMap) => (
     <TouchableOpacity
@@ -324,7 +346,7 @@ export default function InvoiceListScreen() {
       </TouchableOpacity>
       </AnimatedListItem>
     );
-  }, [colors, shadows, isDark, navigation]);
+  }, [colors, shadows, navigation, getStatusStyle]);
 
   const renderListFooter = useCallback(() => (
     <ListFooterLoader

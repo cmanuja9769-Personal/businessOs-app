@@ -8,6 +8,8 @@ import { fetchGSTDetails, type GSTDetails } from "@/lib/gst-lookup"
 import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
 import { demoCustomers } from "@/app/demo/data"
 
+const CUSTOMERS_PATH = "/customers"
+
 export async function getCustomers(): Promise<ICustomer[]> {
   if (await isDemoMode()) return demoCustomers
   try {
@@ -71,7 +73,7 @@ export async function createCustomer(formData: FormData) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { success: true, customer: newCustomer }
 }
 
@@ -107,7 +109,7 @@ export async function updateCustomer(id: string, formData: FormData) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { success: true }
 }
 
@@ -126,7 +128,7 @@ export async function deleteCustomer(id: string) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { success: true }
 }
 
@@ -149,7 +151,7 @@ export async function bulkDeleteCustomers(ids: string[]) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { 
     success: true, 
     deleted: count || ids.length,
@@ -181,7 +183,7 @@ export async function deleteAllCustomers() {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { 
     success: true, 
     deleted: count,
@@ -209,7 +211,7 @@ export async function bulkImportCustomers(customersData: ICustomer[]) {
     return { success: false, error: error.message }
   }
 
-  revalidatePath("/customers")
+  revalidatePath(CUSTOMERS_PATH)
   return { success: true, count: customersData.length }
 }
 

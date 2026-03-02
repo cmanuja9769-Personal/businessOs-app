@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -97,200 +97,178 @@ interface InvoiceItem {
   hsn?: string;
 }
 
-export default function InvoiceDetailScreen() {
-  const route = useRoute<InvoiceDetailRouteProp>();
-  const navigation = useNavigation();
-  const { colors, shadows, isDark } = useTheme();
-  const { organizationId } = useAuth();
-  const { invoiceId } = route.params;
+const mapDetailDbItems = (items: DbInvoiceItem[]): InvoiceItem[] =>
+  items.map((item) => ({
+    itemId: item.item_id,
+    itemName: item.item_name,
+    item_name: item.item_name,
+    quantity: item.quantity,
+    unit: item.unit,
+    rate: item.rate,
+    amount: item.amount,
+    gstRate: item.tax_rate,
+    gst_rate: item.tax_rate,
+    hsn: item.hsn,
+  }));
 
-  const [invoice, setInvoice] = useState<DbInvoice | null>(null);
-  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showItemsModal, setShowItemsModal] = useState(false);
+const formatShareItemLine = (item: InvoiceItem, index: number): string => {
+  const name = item.itemName || item.item_name || `Item ${index + 1}`;
+  const qty = item.quantity ?? 0;
+  const rate = formatCurrency(item.rate ?? 0);
+  const amount = formatCurrency(item.amount ?? (qty * (item.rate ?? 0)));
+  return `${index + 1}. ${name} — ${qty} × ${rate} = ${amount}`;
+};
 
-  const normalizeItems = (raw: unknown): InvoiceItem[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as InvoiceItem[];
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    if (typeof raw === 'object' && raw !== null) {
-      const obj = raw as Record<string, unknown>;
-      if (Array.isArray(obj.items)) return obj.items as InvoiceItem[];
-    }
-    return [];
-  };
+const buildShareMessage = (invoice: DbInvoice, items: InvoiceItem[]): string => {
+  const title = invoice.invoice_number || `#${invoice.id.slice(0, 8)}`;
+  const total = formatCurrency(invoice.total || 0);
+  const date = formatDate(invoice.invoice_date || new Date().toISOString());
+  const lines = items.slice(0, 20).map(formatShareItemLine).join('\n');
 
-  const fetchInvoice = async () => {
-    try {
-      if (!organizationId) {
-        setInvoice(null);
-        setInvoiceItems([]);
-        return;
-      }
+  return [
+    `Invoice ${title}`,
+    invoice.customer_name ? `Customer: ${invoice.customer_name}` : null,
+    `Date: ${date}`,
+    `Total: ${total}`,
+    '',
+    'Items:',
+    lines || '(No items)',
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
 
-      // Fetch invoice data
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .eq('id', invoiceId)
-        .is('deleted_at', null)
-        .maybeSingle();
+const getShareError = (err: unknown): string =>
+  err instanceof Error ? err.message : 'Unable to share invoice';
 
-      if (error) throw error;
-      setInvoice(data as DbInvoice | null);
+const buildPdfItemRow = (item: InvoiceItem, index: number, gstEnabled: boolean): string => {
+  const name = item.itemName || item.item_name || `Item ${index + 1}`;
+  const qty = item.quantity ?? 0;
+  const rate = item.rate ?? 0;
+  const amount = item.amount ?? (qty * rate);
+  const gstRate = item.gstRate || item.gst_rate || 0;
+  const hsn = item.hsn || '-';
+  const hsnHtml = hsn !== '-' ? `<br><small style="color: #6B7280;">HSN: ${hsn}</small>` : '';
+  const gstColumn = gstEnabled
+    ? `<td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: center;">${gstRate}%</td>`
+    : '';
 
-      // Also try to fetch items from invoice_items table (web app stores items here)
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .eq('invoice_id', invoiceId);
+  return `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #E5E7EB;">${index + 1}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #E5E7EB;">
+        <strong>${name}</strong>
+        ${hsnHtml}
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: center;">${qty}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: right;">₹${rate.toFixed(2)}</td>
+      ${gstColumn}
+      <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: right;"><strong>₹${amount.toFixed(2)}</strong></td>
+    </tr>
+  `;
+};
 
-      if (!itemsError && itemsData && itemsData.length > 0) {
-        // Map invoice_items table columns to our InvoiceItem interface
-        const mappedItems: InvoiceItem[] = itemsData.map((item: DbInvoiceItem) => ({
-          itemId: item.item_id,
-          itemName: item.item_name,
-          item_name: item.item_name,
-          quantity: item.quantity,
-          unit: item.unit,
-          rate: item.rate,
-          amount: item.amount,
-          gstRate: item.tax_rate,
-          gst_rate: item.tax_rate,
-          hsn: item.hsn,
-        }));
-        setInvoiceItems(mappedItems);
-      } else {
-        setInvoiceItems([]);
-      }
-    } catch (error) {
-      console.error('[INVOICE_DETAIL] fetchInvoice error:', error);
-      Alert.alert('Error', 'Failed to fetch invoice');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+const buildPdfCustomerHtml = (invoice: DbInvoice): string => {
+  const details = [
+    invoice.customer_phone && `<div class="customer-detail">📞 ${invoice.customer_phone}</div>`,
+    invoice.customer_email && `<div class="customer-detail">✉️ ${invoice.customer_email}</div>`,
+    invoice.customer_address && `<div class="customer-detail">📍 ${invoice.customer_address}</div>`,
+    invoice.customer_gst && `<div class="customer-detail">GSTIN: ${invoice.customer_gst}</div>`,
+  ].filter(Boolean).join('\n                ');
 
-  useEffect(() => {
-    fetchInvoice();
-  }, [organizationId, invoiceId]);
+  return `
+              <div class="info-box">
+                <div class="section-title">Bill To</div>
+                <div class="customer-name">${invoice.customer_name || 'Walk-in Customer'}</div>
+                ${details}
+              </div>`;
+};
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchInvoice();
-  };
-
-  const handleShare = async () => {
-    if (!invoice) return;
-    
-    const items = normalizeItems(invoice.items);
-    const title = invoice.invoice_number || `#${invoice.id.slice(0, 8)}`;
-    const total = formatCurrency(invoice.total || 0);
-    const date = formatDate(invoice.invoice_date || new Date().toISOString());
-
-    const lines = items
-      .slice(0, 20)
-      .map((it, idx) => {
-        const name = it.itemName || it.item_name || `Item ${idx + 1}`;
-        const qty = it.quantity ?? 0;
-        const rate = formatCurrency(it.rate ?? 0);
-        const amount = formatCurrency(it.amount ?? (qty * (it.rate ?? 0)));
-        return `${idx + 1}. ${name} — ${qty} × ${rate} = ${amount}`;
-      })
-      .join('\n');
-
-    const message = [
-      `Invoice ${title}`,
-      invoice.customer_name ? `Customer: ${invoice.customer_name}` : null,
-      `Date: ${date}`,
-      `Total: ${total}`,
-      '',
-      'Items:',
-      lines || '(No items)',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    try {
-      await Share.share({ message });
-    } catch (err: unknown) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Unable to share invoice');
-    }
-  };
-
-  const buildGstRowsHtml = (inv: DbInvoice): string => {
-    const parts: string[] = [];
-    if (inv.cgst) {
-      parts.push(`
+const buildGstRowsHtml = (inv: DbInvoice): string => {
+  const parts: string[] = [];
+  if (inv.cgst) {
+    parts.push(`
               <div class="totals-row">
                 <span class="totals-label">CGST</span>
                 <span class="totals-value">₹${inv.cgst.toFixed(2)}</span>
               </div>
-      `);
-    }
-    if (inv.sgst) {
-      parts.push(`
+    `);
+  }
+  if (inv.sgst) {
+    parts.push(`
               <div class="totals-row">
                 <span class="totals-label">SGST</span>
                 <span class="totals-value">₹${inv.sgst.toFixed(2)}</span>
               </div>
-      `);
-    }
-    if (inv.igst) {
-      parts.push(`
+    `);
+  }
+  if (inv.igst) {
+    parts.push(`
               <div class="totals-row">
                 <span class="totals-label">IGST</span>
                 <span class="totals-value">₹${inv.igst.toFixed(2)}</span>
               </div>
-      `);
-    }
-    return parts.join('');
-  };
+    `);
+  }
+  return parts.join('');
+};
 
-  const handleGeneratePDF = async () => {
-    if (!invoice) return;
+const buildPdfTotalsHtml = (invoice: DbInvoice, gstEnabled: boolean): string => {
+  const discountHtml = (invoice.discount && invoice.discount > 0)
+    ? `
+              <div class="totals-row">
+                <span class="totals-label">Discount</span>
+                <span class="totals-value">- ₹${invoice.discount.toFixed(2)}</span>
+              </div>
+              ` : '';
+  const gstHtml = gstEnabled ? buildGstRowsHtml(invoice) : '';
 
-    try {
-      const items = invoiceItems.length > 0 ? invoiceItems : normalizeItems(invoice.items);
-      const title = invoice.invoice_number || `#${invoice.id.slice(0, 8)}`;
-      const pricingModeLabel = getPricingModeLabel(invoice.pricing_mode || 'sale');
-      const gstEnabled = invoice.gst_enabled !== false;
+  return `
+          <div class="totals">
+            <div class="totals-table">
+              <div class="totals-row">
+                <span class="totals-label">Subtotal</span>
+                <span class="totals-value">₹${(invoice.subtotal || 0).toFixed(2)}</span>
+              </div>
+              ${discountHtml}
+              ${gstHtml}
+              <div class="totals-row grand">
+                <span class="totals-label" style="font-size: 14px;">Grand Total</span>
+                <span class="totals-value grand">₹${(invoice.total || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          </div>`;
+};
 
-      // Generate items table rows
-      const itemRows = items.map((item, index) => {
-        const name = item.itemName || item.item_name || `Item ${index + 1}`;
-        const qty = item.quantity ?? 0;
-        const rate = item.rate ?? 0;
-        const amount = item.amount ?? (qty * rate);
-        const gstRate = item.gstRate || item.gst_rate || 0;
-        const hsn = item.hsn || '-';
+const getPricingModeLabel = (mode: string) => {
+  switch (mode) {
+    case 'wholesale': return 'Wholesale Price';
+    case 'quantity': return 'Quantity Price (Bulk)';
+    default: return 'Sale Price (MRP)';
+  }
+};
 
-        return `
-          <tr>
-            <td style="padding: 10px; border-bottom: 1px solid #E5E7EB;">${index + 1}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E5E7EB;">
-              <strong>${name}</strong>
-              ${hsn !== '-' ? `<br><small style="color: #6B7280;">HSN: ${hsn}</small>` : ''}
-            </td>
-            <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: center;">${qty}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: right;">₹${rate.toFixed(2)}</td>
-            ${gstEnabled ? `<td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: center;">${gstRate}%</td>` : ''}
-            <td style="padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: right;"><strong>₹${amount.toFixed(2)}</strong></td>
-          </tr>
-        `;
-      }).join('');
+const buildPdfHtml = (
+  invoice: DbInvoice,
+  items: InvoiceItem[],
+  gstEnabled: boolean
+): string => {
+  const title = invoice.invoice_number || `#${invoice.id.slice(0, 8)}`;
+  const pricingModeLabel = getPricingModeLabel(invoice.pricing_mode || 'sale');
+  const itemRows = items.map((item, index) => buildPdfItemRow(item, index, gstEnabled)).join('');
+  const gstHeader = gstEnabled ? '<th class="center" style="width: 60px;">GST</th>' : '';
+  const customerHtml = buildPdfCustomerHtml(invoice);
+  const dueDateHtml = invoice.due_date ? `<div>Due: ${formatDate(invoice.due_date)}</div>` : '';
+  const totalsHtml = buildPdfTotalsHtml(invoice, gstEnabled);
+  const notesHtml = invoice.notes
+    ? `
+          <div class="section" style="margin-top: 30px;">
+            <div class="section-title">Notes</div>
+            <p style="color: #6B7280; margin: 0;">${invoice.notes}</p>
+          </div>
+          ` : '';
 
-      const html = `
+  return `
         <!DOCTYPE html>
         <html>
         <head>
@@ -435,21 +413,14 @@ export default function InvoiceDetailScreen() {
               <span class="badge badge-${(invoice.status || 'unpaid').toLowerCase()}">${(invoice.status || 'UNPAID').toUpperCase()}</span>
               <div style="margin-top: 10px; color: #6B7280;">
                 <div>Date: ${formatDate(invoice.invoice_date || new Date().toISOString())}</div>
-                ${invoice.due_date ? `<div>Due: ${formatDate(invoice.due_date)}</div>` : ''}
+                ${dueDateHtml}
               </div>
             </div>
           </div>
 
           <div class="section">
             <div class="info-grid">
-              <div class="info-box">
-                <div class="section-title">Bill To</div>
-                <div class="customer-name">${invoice.customer_name || 'Walk-in Customer'}</div>
-                ${invoice.customer_phone ? `<div class="customer-detail">📞 ${invoice.customer_phone}</div>` : ''}
-                ${invoice.customer_email ? `<div class="customer-detail">✉️ ${invoice.customer_email}</div>` : ''}
-                ${invoice.customer_address ? `<div class="customer-detail">📍 ${invoice.customer_address}</div>` : ''}
-                ${invoice.customer_gst ? `<div class="customer-detail">GSTIN: ${invoice.customer_gst}</div>` : ''}
-              </div>
+              ${customerHtml}
               <div class="info-box">
                 <div class="section-title">Payment Info</div>
                 <div><strong>Total:</strong> ₹${(invoice.total || 0).toFixed(2)}</div>
@@ -468,7 +439,7 @@ export default function InvoiceDetailScreen() {
                   <th>Item</th>
                   <th class="center" style="width: 60px;">Qty</th>
                   <th class="right" style="width: 80px;">Rate</th>
-                  ${gstEnabled ? '<th class="center" style="width: 60px;">GST</th>' : ''}
+                  ${gstHeader}
                   <th class="right" style="width: 100px;">Amount</th>
                 </tr>
               </thead>
@@ -478,32 +449,9 @@ export default function InvoiceDetailScreen() {
             </table>
           </div>
 
-          <div class="totals">
-            <div class="totals-table">
-              <div class="totals-row">
-                <span class="totals-label">Subtotal</span>
-                <span class="totals-value">₹${(invoice.subtotal || 0).toFixed(2)}</span>
-              </div>
-              ${invoice.discount && invoice.discount > 0 ? `
-              <div class="totals-row">
-                <span class="totals-label">Discount</span>
-                <span class="totals-value">- ₹${invoice.discount.toFixed(2)}</span>
-              </div>
-              ` : ''}
-              ${gstEnabled ? buildGstRowsHtml(invoice) : ''}
-              <div class="totals-row grand">
-                <span class="totals-label" style="font-size: 14px;">Grand Total</span>
-                <span class="totals-value grand">₹${(invoice.total || 0).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
+          ${totalsHtml}
 
-          ${invoice.notes ? `
-          <div class="section" style="margin-top: 30px;">
-            <div class="section-title">Notes</div>
-            <p style="color: #6B7280; margin: 0;">${invoice.notes}</p>
-          </div>
-          ` : ''}
+          ${notesHtml}
 
           <div class="footer">
             <p>Thank you for your business!</p>
@@ -512,6 +460,114 @@ export default function InvoiceDetailScreen() {
         </body>
         </html>
       `;
+};
+
+const getPdfError = (err: unknown): string =>
+  err instanceof Error ? err.message : 'Failed to generate PDF';
+
+function parseItemsFromString(str: string): InvoiceItem[] {
+  try {
+    const parsed = JSON.parse(str);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function extractItemsFromObject(raw: object): InvoiceItem[] {
+  const obj = raw as Record<string, unknown>;
+  if (Array.isArray(obj.items)) return obj.items as InvoiceItem[];
+  return [];
+}
+
+function normalizeInvoiceItems(raw: unknown): InvoiceItem[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as InvoiceItem[];
+  if (typeof raw === 'string') return parseItemsFromString(raw);
+  if (typeof raw === 'object' && raw !== null) return extractItemsFromObject(raw);
+  return [];
+}
+
+export default function InvoiceDetailScreen() {
+  const route = useRoute<InvoiceDetailRouteProp>();
+  const navigation = useNavigation();
+  const { colors, shadows, isDark } = useTheme();
+  const { organizationId } = useAuth();
+  const { invoiceId } = route.params;
+
+  const [invoice, setInvoice] = useState<DbInvoice | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showItemsModal, setShowItemsModal] = useState(false);
+
+  const fetchInvoice = useCallback(async () => {
+    try {
+      if (!organizationId) {
+        setInvoice(null);
+        setInvoiceItems([]);
+        return;
+      }
+
+      // Fetch invoice data
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('id', invoiceId)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (error) throw error;
+      setInvoice(data as DbInvoice | null);
+
+      // Also try to fetch items from invoice_items table (web app stores items here)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoiceId);
+
+      const mappedItems = (!itemsError && itemsData?.length)
+      ? mapDetailDbItems(itemsData)
+      : [];
+    setInvoiceItems(mappedItems);
+    } catch (error) {
+      console.error('[INVOICE_DETAIL] fetchInvoice error:', error);
+      Alert.alert('Error', 'Failed to fetch invoice');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [organizationId, invoiceId]);
+
+  useEffect(() => {
+    fetchInvoice();
+  }, [fetchInvoice]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchInvoice();
+  };
+
+  const handleShare = async () => {
+    if (!invoice) return;
+    const items = normalizeInvoiceItems(invoice.items);
+    const message = buildShareMessage(invoice, items);
+
+    try {
+      await Share.share({ message });
+    } catch (err: unknown) {
+      Alert.alert('Error', getShareError(err));
+    }
+  };
+
+  const handleGeneratePDF = async () => {
+    if (!invoice) return;
+
+    try {
+      const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
+      const gstEnabled = invoice.gst_enabled !== false;
+      const html = buildPdfHtml(invoice, items, gstEnabled);
 
       const { uri } = await Print.printToFileAsync({
         html,
@@ -521,7 +577,7 @@ export default function InvoiceDetailScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: `Invoice ${title}`,
+          dialogTitle: `Invoice ${invoice.invoice_number || invoice.id.slice(0, 8)}`,
           UTI: 'com.adobe.pdf',
         });
       } else {
@@ -529,15 +585,7 @@ export default function InvoiceDetailScreen() {
       }
     } catch (err: unknown) {
       console.error('PDF generation error:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to generate PDF');
-    }
-  };
-
-  const getPricingModeLabel = (mode: string) => {
-    switch (mode) {
-      case 'wholesale': return 'Wholesale Price';
-      case 'quantity': return 'Quantity Price (Bulk)';
-      default: return 'Sale Price (MRP)';
+      Alert.alert('Error', getPdfError(err));
     }
   };
 
@@ -584,7 +632,7 @@ export default function InvoiceDetailScreen() {
   const docConfig = DOCUMENT_TYPES[docType] || DOCUMENT_TYPES.invoice;
   const statusStyle = getStatusStyle(invoice.status);
   // Use items from invoice_items table first, fallback to JSON items column
-  const items = invoiceItems.length > 0 ? invoiceItems : normalizeItems(invoice.items);
+  const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
   const balance = invoice.balance ?? ((invoice.total || 0) - (invoice.paid_amount || 0));
   const pricingMode = invoice.pricing_mode || 'sale';
   const billingMode = invoice.billing_mode || (invoice.gst_enabled === false ? 'non-gst' : 'gst');
@@ -1028,6 +1076,8 @@ export default function InvoiceDetailScreen() {
   );
 }
 
+const SPACE_BETWEEN = 'space-between' as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1035,7 +1085,7 @@ const styles = StyleSheet.create({
   backHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
     paddingBottom: 12,
@@ -1097,7 +1147,7 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -1220,7 +1270,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     gap: 10,
     marginBottom: 16,
   },
@@ -1281,7 +1331,7 @@ const styles = StyleSheet.create({
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingVertical: 14,
   },
   itemMain: {
@@ -1326,7 +1376,7 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingVertical: 10,
   },
   summaryLabel: {
@@ -1374,7 +1424,7 @@ const styles = StyleSheet.create({
   itemPreviewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingVertical: 12,
   },
   itemPreviewLeft: {
@@ -1412,7 +1462,7 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
@@ -1454,7 +1504,7 @@ const styles = StyleSheet.create({
   modalItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     marginBottom: 10,
   },
   modalItemNumber: {
@@ -1485,7 +1535,7 @@ const styles = StyleSheet.create({
   },
   modalItemDetailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
   },
   modalItemLabel: {
@@ -1497,7 +1547,7 @@ const styles = StyleSheet.create({
   },
   modalFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,

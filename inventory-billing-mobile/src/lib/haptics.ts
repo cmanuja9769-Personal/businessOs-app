@@ -1,7 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-const IS_IOS = Platform.OS === 'ios';
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 
 export function lightTap(): void {

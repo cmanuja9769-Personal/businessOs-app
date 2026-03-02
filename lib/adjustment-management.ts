@@ -13,6 +13,46 @@ export interface AdjustmentData {
   notes?: string
 }
 
+function parseNextAdjustmentNum(lastAdj: Record<string, unknown>[] | null): number {
+  if (!lastAdj || lastAdj.length === 0) return 1
+  const lastNo = (lastAdj[0] as Record<string, unknown>).adjustment_no as string
+  const parts = lastNo.split("-")
+  const parsed = parseInt(parts[parts.length - 1], 10)
+  return isNaN(parsed) ? 1 : parsed + 1
+}
+
+function buildAdjustmentNotes(adjustmentType: string, reason: string, notes?: string): string {
+  const base = `Stock ${adjustmentType}: ${reason}`
+  return notes ? `${base} - ${notes}` : base
+}
+
+async function recordApprovedMovement(
+  data: AdjustmentData,
+  organizationId: string,
+  adjustmentId: string,
+  adjustmentNo: string,
+  userId: string,
+) {
+  const stockQuantity = data.adjustmentType === "increase" ? data.quantity : -data.quantity
+  const movementResult = await logStockMovement({
+    itemId: data.itemId,
+    organizationId,
+    warehouseId: data.warehouseId,
+    transactionType: "ADJUSTMENT",
+    entryQuantity: stockQuantity,
+    entryUnit: "PCS",
+    referenceType: "adjustment",
+    referenceId: adjustmentId,
+    referenceNo: adjustmentNo,
+    notes: buildAdjustmentNotes(data.adjustmentType, data.reason, data.notes),
+  }, userId)
+
+  if (!movementResult.success) {
+    return { success: false, error: movementResult.error || "Failed to update stock" }
+  }
+  return { success: true }
+}
+
 export async function createAdjustment(
   organizationId: string,
   data: AdjustmentData,
@@ -28,14 +68,7 @@ export async function createAdjustment(
     .order("created_at", { ascending: false })
     .limit(1)
 
-  let nextNum = 1
-  if (lastAdj && lastAdj.length > 0) {
-    const lastNo = (lastAdj[0] as Record<string, unknown>).adjustment_no as string
-    const parts = lastNo.split("-")
-    const parsed = parseInt(parts[parts.length - 1], 10)
-    if (!isNaN(parsed)) nextNum = parsed + 1
-  }
-
+  const nextNum = parseNextAdjustmentNum(lastAdj)
   const adjustmentNo = `ADJ-${Date.now()}-${nextNum.toString().padStart(4, "0")}`
 
   const insertData: Record<string, unknown> = {
@@ -67,25 +100,10 @@ export async function createAdjustment(
     return { success: false, error: error.message }
   }
 
-  if (status === "approved") {
-    const stockQuantity = data.adjustmentType === "increase" ? data.quantity : -data.quantity
-    const movementResult = await logStockMovement({
-      itemId: data.itemId,
-      organizationId,
-      warehouseId: data.warehouseId,
-      transactionType: "ADJUSTMENT",
-      entryQuantity: stockQuantity,
-      entryUnit: "PCS",
-      referenceType: "adjustment",
-      referenceId: adjustment.id,
-      referenceNo: adjustmentNo,
-      notes: `Stock ${data.adjustmentType}: ${data.reason}${data.notes ? ` - ${data.notes}` : ""}`,
-    }, userId)
+  if (status !== "approved") return { success: true, adjustment }
 
-    if (!movementResult.success) {
-      return { success: false, error: movementResult.error || "Failed to update stock" }
-    }
-  }
+  const movementResult = await recordApprovedMovement(data, organizationId, adjustment.id, adjustmentNo, userId)
+  if (!movementResult.success) return { success: false, error: movementResult.error }
 
   return { success: true, adjustment }
 }

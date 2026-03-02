@@ -43,7 +43,8 @@ export async function withRetry<T>(
         throw error;
       }
 
-      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+      const jitter = (attempt + 1) * 100;
+      const delay = baseDelay * Math.pow(2, attempt) + jitter;
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }

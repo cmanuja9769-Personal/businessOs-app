@@ -24,9 +24,11 @@ import { eWayBillService, EWayBillUtils, type PortalEWayBill } from "@/lib/e-way
 import { toast } from "sonner"
 import { format } from "date-fns"
 
+const GST_DATE = "dd/MM/yyyy"
+
 export function PortalEWayBillsViewer() {
   const [loading, setLoading] = useState(false)
-  const [date, setDate] = useState(format(new Date(), "dd/MM/yyyy"))
+  const [date, setDate] = useState(format(new Date(), GST_DATE))
   const [eWayBills, setEWayBills] = useState<PortalEWayBill[]>([])
 
   const handleSearch = async () => {
@@ -197,7 +199,7 @@ export function PortalEWayBillsViewer() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setDate(format(new Date(), "dd/MM/yyyy"))}
+            onClick={() => setDate(format(new Date(), GST_DATE))}
           >
             Today
           </Button>
@@ -207,7 +209,7 @@ export function PortalEWayBillsViewer() {
             onClick={() => {
               const yesterday = new Date()
               yesterday.setDate(yesterday.getDate() - 1)
-              setDate(format(yesterday, "dd/MM/yyyy"))
+              setDate(format(yesterday, GST_DATE))
             }}
           >
             Yesterday
@@ -218,7 +220,7 @@ export function PortalEWayBillsViewer() {
             onClick={() => {
               const lastWeek = new Date()
               lastWeek.setDate(lastWeek.getDate() - 7)
-              setDate(format(lastWeek, "dd/MM/yyyy"))
+              setDate(format(lastWeek, GST_DATE))
             }}
           >
             Last Week

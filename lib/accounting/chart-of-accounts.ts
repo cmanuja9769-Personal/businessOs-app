@@ -43,9 +43,34 @@ const DEFAULT_ACCOUNTS = [
   { code: "1152", name: "Input IGST", type: "asset", parent: "1100", system: true },
 ]
 
-export async function seedChartOfAccounts(supabase: SupabaseClient, organizationId: string) {
+async function insertAccount(
+  supabase: SupabaseClient,
+  organizationId: string,
+  acc: (typeof DEFAULT_ACCOUNTS)[number],
+  parentId: string | null,
+  level: number,
+  accountMap: Map<string, string>,
+) {
+  const { data } = await supabase
+    .from("accounts")
+    .insert({
+      organization_id: organizationId,
+      account_code: acc.code,
+      account_name: acc.name,
+      account_type: acc.type,
+      parent_account_id: parentId,
+      level,
+      is_system_account: acc.system,
+    })
+    .select()
+    .single()
 
-  // Check if accounts already exist
+  if (data) {
+    accountMap.set(acc.code, data.id)
+  }
+}
+
+export async function seedChartOfAccounts(supabase: SupabaseClient, organizationId: string) {
   const { count } = await supabase
     .from("accounts")
     .select("*", { count: "exact", head: true })
@@ -55,52 +80,16 @@ export async function seedChartOfAccounts(supabase: SupabaseClient, organization
     return { success: true, message: "Accounts already exist" }
   }
 
-  // Create mapping of code to UUID for parent relationships
   const accountMap = new Map<string, string>()
 
-  // First pass: Create all parent accounts
   for (const acc of DEFAULT_ACCOUNTS.filter((a) => !a.parent)) {
-    const { data } = await supabase
-      .from("accounts")
-      .insert({
-        organization_id: organizationId,
-        account_code: acc.code,
-        account_name: acc.name,
-        account_type: acc.type,
-        parent_account_id: null,
-        level: 1,
-        is_system_account: acc.system,
-      })
-      .select()
-      .single()
-
-    if (data) {
-      accountMap.set(acc.code, data.id)
-    }
+    await insertAccount(supabase, organizationId, acc, null, 1, accountMap)
   }
 
-  // Second pass: Create child accounts
   for (const acc of DEFAULT_ACCOUNTS.filter((a) => a.parent)) {
-    const parentId = acc.parent ? accountMap.get(acc.parent) : null
+    const parentId = accountMap.get(acc.parent!) ?? null
     if (!parentId) continue
-
-    const { data } = await supabase
-      .from("accounts")
-      .insert({
-        organization_id: organizationId,
-        account_code: acc.code,
-        account_name: acc.name,
-        account_type: acc.type,
-        parent_account_id: parentId,
-        level: 2,
-        is_system_account: acc.system,
-      })
-      .select()
-      .single()
-
-    if (data) {
-      accountMap.set(acc.code, data.id)
-    }
+    await insertAccount(supabase, organizationId, acc, parentId, 2, accountMap)
   }
 
   return { success: true, message: "Chart of accounts created successfully", count: DEFAULT_ACCOUNTS.length }

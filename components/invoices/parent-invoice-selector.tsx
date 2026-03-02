@@ -28,8 +28,9 @@ export function ParentInvoiceSelector({
   onSelect,
   documentType,
 }: ParentInvoiceSelectorProps) {
-  const availableInvoices = invoices.filter(
-    (inv) => inv.documentType === "invoice"
+  const availableInvoices = useMemo(
+    () => invoices.filter((inv) => inv.documentType === "invoice"),
+    [invoices]
   );
 
   const selectedInvoice = useMemo(() => {
@@ -46,7 +47,7 @@ export function ParentInvoiceSelector({
         onSelect(invoice);
       }
     }
-  }, [selectedInvoiceId]);
+  }, [selectedInvoiceId, availableInvoices, onSelect]);
 
   const handleSelectInvoice = (invoiceId: string) => {
     const invoice = availableInvoices.find((inv) => inv.id === invoiceId);

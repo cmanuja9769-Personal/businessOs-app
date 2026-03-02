@@ -37,6 +37,50 @@ interface StockMovement {
   unit: string
 }
 
+function parseLedgerMap(
+  report: { data?: Array<{ itemId: string; totalIn?: number; totalOut?: number }> },
+): Record<string, { inward: number; outward: number }> {
+  const map: Record<string, { inward: number; outward: number }> = {}
+  const rows = Array.isArray(report?.data) ? report.data : []
+  for (const row of rows) {
+    map[row.itemId] = {
+      inward: row.totalIn ?? 0,
+      outward: row.totalOut ?? 0,
+    }
+  }
+  return map
+}
+
+function mapItemsToMovements(
+  allItems: Array<Record<string, unknown>>,
+  ledgerMap: Record<string, { inward: number; outward: number }>,
+): StockMovement[] {
+  return allItems.map((item) => {
+    const currentStock = Number(item.current_stock) || 0
+    const ledger = ledgerMap[item.id as string]
+    const inward = ledger?.inward ?? 0
+    const outward = ledger?.outward ?? 0
+    const opening = Math.max(currentStock - inward + outward, 0)
+
+    return {
+      id: item.id as string,
+      itemId: item.id as string,
+      itemName: (item.name as string) || "",
+      sku: (item.item_code as string) || "-",
+      openingQty: opening,
+      inwardQty: inward,
+      outwardQty: outward,
+      closingQty: currentStock,
+      unit: (item.unit as string) || "pcs",
+    }
+  })
+}
+
+function buildStockApiUrl(dateFrom: string, dateTo: string, warehouseFilter: string): string {
+  const base = `/api/reports/stock?dateFrom=${dateFrom}&dateTo=${dateTo}&includeZeroStock=true`
+  return warehouseFilter !== "all" ? `${base}&warehouseIds=${warehouseFilter}` : base
+}
+
 export default function StockDetailPage() {
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,45 +117,11 @@ export default function StockDetailPage() {
         return
       }
 
-      const ledgerRes = await fetch(
-        `/api/reports/stock?dateFrom=${dateFrom}&dateTo=${dateTo}&includeZeroStock=true` +
-        (warehouseFilter !== "all" ? `&warehouseIds=${warehouseFilter}` : "")
-      )
+      const ledgerRes = await fetch(buildStockApiUrl(dateFrom, dateTo, warehouseFilter))
+      const report = ledgerRes.ok ? await ledgerRes.json() : { data: [] }
+      const ledgerMap = parseLedgerMap(report)
 
-      const ledgerMap: Record<string, { inward: number; outward: number }> = {}
-      if (ledgerRes.ok) {
-        const report = await ledgerRes.json()
-        if (Array.isArray(report.data)) {
-          for (const row of report.data) {
-            ledgerMap[row.itemId] = {
-              inward: row.totalIn ?? 0,
-              outward: row.totalOut ?? 0,
-            }
-          }
-        }
-      }
-
-      const rows: StockMovement[] = allItems.map((item: Record<string, unknown>) => {
-        const currentStock = Number(item.current_stock) || 0
-        const ledger = ledgerMap[item.id as string]
-        const inward = ledger?.inward ?? 0
-        const outward = ledger?.outward ?? 0
-        const opening = currentStock - inward + outward
-
-        return {
-          id: item.id as string,
-          itemId: item.id as string,
-          itemName: (item.name as string) || "",
-          sku: (item.item_code as string) || "-",
-          openingQty: Math.max(opening, 0),
-          inwardQty: inward,
-          outwardQty: outward,
-          closingQty: currentStock,
-          unit: (item.unit as string) || "pcs",
-        }
-      })
-
-      setMovements(rows)
+      setMovements(mapItemsToMovements(allItems, ledgerMap))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch stock movements'
       console.error('Failed to fetch stock movements:', error)
@@ -312,22 +322,29 @@ export default function StockDetailPage() {
       {/* Data Table */}
       <Card>
         <CardContent className="pt-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : fetchError ? (
-            <DataEmptyState
-              icon={<AlertCircle className="h-12 w-12" />}
-              title="Failed to load stock data"
-              description={fetchError}
-              action={
-                <Button variant="outline" size="sm" onClick={() => void fetchStockMovements()}>
-                  Retry
-                </Button>
-              }
-            />
-          ) : (
+          {(() => {
+            if (loading) {
+              return (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              )
+            }
+            if (fetchError) {
+              return (
+                <DataEmptyState
+                  icon={<AlertCircle className="h-12 w-12" />}
+                  title="Failed to load stock data"
+                  description={fetchError}
+                  action={
+                    <Button variant="outline" size="sm" onClick={() => void fetchStockMovements()}>
+                      Retry
+                    </Button>
+                  }
+                />
+              )
+            }
+            return (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -396,7 +413,8 @@ export default function StockDetailPage() {
                 </TableBody>
               </Table>
             </div>
-          )}
+          )
+          })()}
         </CardContent>
       </Card>
     </div>

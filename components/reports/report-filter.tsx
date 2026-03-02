@@ -22,6 +22,9 @@ import { Filter, ChevronDown } from "lucide-react"
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns"
 import { cn } from "@/lib/utils"
 
+const ISO_DATE = "yyyy-MM-dd"
+const DATE_RANGE_FIELD = "date-range"
+
 type DatePreset = {
   readonly label: string
   readonly from: string
@@ -37,11 +40,11 @@ function getDatePresets(): readonly DatePreset[] {
   const lastMonth = subMonths(now, 1)
 
   return [
-    { label: "This Month", from: format(startOfMonth(now), "yyyy-MM-dd"), to: format(endOfMonth(now), "yyyy-MM-dd") },
-    { label: "Last Month", from: format(startOfMonth(lastMonth), "yyyy-MM-dd"), to: format(endOfMonth(lastMonth), "yyyy-MM-dd") },
-    { label: "This FY", from: format(fy, "yyyy-MM-dd"), to: format(fyEnd, "yyyy-MM-dd") },
-    { label: "Last FY", from: format(new Date(fy.getFullYear() - 1, 3, 1), "yyyy-MM-dd"), to: format(new Date(fy.getFullYear(), 2, 31), "yyyy-MM-dd") },
-    { label: "This Year", from: format(startOfYear(now), "yyyy-MM-dd"), to: format(now, "yyyy-MM-dd") },
+    { label: "This Month", from: format(startOfMonth(now), ISO_DATE), to: format(endOfMonth(now), ISO_DATE) },
+    { label: "Last Month", from: format(startOfMonth(lastMonth), ISO_DATE), to: format(endOfMonth(lastMonth), ISO_DATE) },
+    { label: "This FY", from: format(fy, ISO_DATE), to: format(fyEnd, ISO_DATE) },
+    { label: "Last FY", from: format(new Date(fy.getFullYear() - 1, 3, 1), ISO_DATE), to: format(new Date(fy.getFullYear(), 2, 31), ISO_DATE) },
+    { label: "This Year", from: format(startOfYear(now), ISO_DATE), to: format(now, ISO_DATE) },
   ] as const
 }
 
@@ -83,8 +86,8 @@ interface ReportFilterProps {
 export function getDefaultFilters(overrides?: Partial<ReportFilters>): ReportFilters {
   const now = new Date()
   return {
-    dateFrom: format(startOfMonth(now), "yyyy-MM-dd"),
-    dateTo: format(endOfMonth(now), "yyyy-MM-dd"),
+    dateFrom: format(startOfMonth(now), ISO_DATE),
+    dateTo: format(endOfMonth(now), ISO_DATE),
     search: "",
     warehouseIds: [],
     categories: [],
@@ -191,9 +194,9 @@ export function ReportFilter({
     [filters, onFiltersChange]
   )
 
-  const hasDateRange = fields.some((f) => f.type === "date-range")
+  const hasDateRange = fields.some((f) => f.type === DATE_RANGE_FIELD)
   const activeFilters = fields.filter((f) => {
-    if (f.type === "date-range") return false
+    if (f.type === DATE_RANGE_FIELD) return false
     if (f.type === "search") return !!filters[f.key]
     if (f.type === "multi-select") return (filters[f.key] as string[]).length > 0
     if (f.type === "select") return filters[f.key] !== "all"
@@ -246,7 +249,7 @@ export function ReportFilter({
           )}
 
           <div className="flex flex-wrap items-end gap-2">
-            {fields.filter((f) => f.type !== "date-range").map((field) => {
+            {fields.filter((f) => f.type !== DATE_RANGE_FIELD).map((field) => {
               if (field.type === "search") {
                 return (
                   <div key={field.key} className="flex-1 min-w-[12rem]">

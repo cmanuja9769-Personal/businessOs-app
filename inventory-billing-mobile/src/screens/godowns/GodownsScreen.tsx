@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -33,13 +33,8 @@ export default function GodownsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchGodowns();
-  }, [organizationId]);
-
-  const fetchGodowns = async () => {
+  const fetchGodowns = useCallback(async () => {
     try {
-      console.log('[GODOWNS] Fetching godowns for org:', organizationId);
       if (!organizationId) {
         console.warn('[GODOWNS] No organizationId available');
         setGodowns([]);
@@ -54,8 +49,6 @@ export default function GodownsScreen() {
         .order('is_default', { ascending: false })
         .order('name');
 
-      console.log('[GODOWNS] Query result:', { count: data?.length, error });
-
       if (error) throw error;
       setGodowns(data || []);
     } catch (error) {
@@ -65,7 +58,11 @@ export default function GodownsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchGodowns();
+  }, [fetchGodowns]);
 
   const onRefresh = () => {
     setRefreshing(true);

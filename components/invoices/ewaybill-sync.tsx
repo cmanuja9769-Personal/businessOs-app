@@ -21,6 +21,44 @@ interface SyncSummary {
   skipped: number
 }
 
+function buildSyncUrl(syncDate: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+  return syncDate
+    ? `${baseUrl}/api/v1/e-waybill/sync?date=${syncDate}`
+    : `${baseUrl}/api/v1/e-waybill/sync`
+}
+
+async function throwOnResponseError(response: Response): Promise<never> {
+  if (response.status === 401) {
+    throw new Error("Unauthorized. Please login again.")
+  }
+  if (response.status === 502) {
+    throw new Error("E-Way Bill portal is unavailable. Please try again later.")
+  }
+  const error = await response.json()
+  throw new Error(error.message || "Sync failed. Please try again.")
+}
+
+function notifySyncSuccess(summary: SyncSummary): void {
+  toast.success(
+    <div>
+      <p className="font-medium">E-Way Bills Synced Successfully!</p>
+      <p className="text-sm text-muted-foreground mt-1">
+        {summary.synced} new, {summary.updated} updated
+      </p>
+    </div>
+  )
+  if (summary.skipped > 0) {
+    toast.warning(
+      `${summary.skipped} E-Way Bills were skipped (no matching invoices)`
+    )
+  }
+}
+
+function extractErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Failed to sync E-Way Bills"
+}
+
 export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncSummary | null>(null)
@@ -31,11 +69,7 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
       setIsSyncing(true)
       setSyncResult(null)
 
-      // Build URL with optional date parameter
-      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
-      const url = syncDate 
-        ? `${baseUrl}/api/v1/e-waybill/sync?date=${syncDate}`
-        : `${baseUrl}/api/v1/e-waybill/sync`
+      const url = buildSyncUrl(syncDate)
 
       console.warn('🔄 Syncing E-Way Bills from portal...')
       console.warn('📅 Date filter:', syncDate || 'None (today)')
@@ -43,23 +77,14 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
 
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include", // Include cookies for backend auth
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
       })
 
       console.warn('📥 Response status:', response.status)
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Unauthorized. Please login again.")
-        }
-        if (response.status === 502) {
-          throw new Error("E-Way Bill portal is unavailable. Please try again later.")
-        }
-        const error = await response.json()
-        throw new Error(error.message || "Sync failed. Please try again.")
+        await throwOnResponseError(response)
       }
 
       const result = await response.json()
@@ -70,30 +95,11 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
       }
 
       setSyncResult(result.data.summary)
-
-      // Show success notification
-      toast.success(
-        <div>
-          <p className="font-medium">E-Way Bills Synced Successfully!</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {result.data.summary.synced} new, {result.data.summary.updated} updated
-          </p>
-        </div>
-      )
-
-      // Show warning if some were skipped
-      if (result.data.summary.skipped > 0) {
-        toast.warning(
-          `${result.data.summary.skipped} E-Way Bills were skipped (no matching invoices)`
-        )
-      }
-
-      // Callback to refresh parent list
+      notifySyncSuccess(result.data.summary)
       onSyncComplete?.()
-
     } catch (error: unknown) {
       console.error("❌ Sync failed:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to sync E-Way Bills")
+      toast.error(extractErrorMessage(error))
     } finally {
       setIsSyncing(false)
     }

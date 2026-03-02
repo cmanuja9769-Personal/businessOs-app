@@ -6,6 +6,8 @@ import { DOCUMENT_TYPE_CONFIG } from "@/types";
 import type { ISettings } from "@/app/settings/actions";
 import { numberToWords } from "@/lib/number-to-words";
 
+const DISPLAY_DATE = "dd MMM yyyy";
+
 interface MinimalTemplateProps {
   invoice: IInvoice;
   settings: ISettings;
@@ -67,16 +69,16 @@ export function MinimalTemplate({ invoice, settings }: MinimalTemplateProps) {
             <div className="mt-3 text-sm text-gray-600 space-y-1">
               <div>
                 <span className="text-gray-500">Date:</span>{" "}
-                {format(invoice.invoiceDate, "dd MMM yyyy")}
+                {format(invoice.invoiceDate, DISPLAY_DATE)}
               </div>
               <div>
                 <span className="text-gray-500">Due:</span>{" "}
-                {format(invoice.dueDate, "dd MMM yyyy")}
+                {format(invoice.dueDate, DISPLAY_DATE)}
               </div>
               {invoice.validityDate && (
                 <div>
                   <span className="text-gray-500">Validity:</span>{" "}
-                  {format(invoice.validityDate, "dd MMM yyyy")}
+                  {format(invoice.validityDate, DISPLAY_DATE)}
                 </div>
               )}
             </div>
@@ -290,7 +292,10 @@ export function MinimalTemplate({ invoice, settings }: MinimalTemplateProps) {
         {invoice.total > 0 && (
           <div className="mt-4">
             <p className="text-xs text-gray-600">
-              <span className="font-semibold text-gray-700">Amount in Words:</span>{" "}{numberToWords(invoice.total)}
+              <span className="font-semibold text-gray-700">
+                Amount in Words:
+              </span>{" "}
+              {numberToWords(invoice.total)}
             </p>
           </div>
         )}

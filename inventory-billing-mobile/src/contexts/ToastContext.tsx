@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import {
-  View,
   Text,
   StyleSheet,
   Animated,
@@ -47,8 +46,8 @@ interface ActiveToast extends Required<Pick<ToastConfig, 'message' | 'variant'>>
 export function ToastProvider({ children }: Readonly<{ children: ReactNode }>) {
   const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ActiveToast | null>(null);
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [translateY] = useState(() => new Animated.Value(-100));
+  const [opacity] = useState(() => new Animated.Value(0));
   const hideTimer = useRef<NodeJS.Timeout | null>(null);
   const idCounter = useRef(0);
 

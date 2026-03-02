@@ -21,18 +21,89 @@ const _defaultOptions: PDFOptions = {
   margin: { top: 20, right: 20, bottom: 20, left: 20 },
 }
 
-/**
- * Generate invoice HTML for PDF conversion
- * Used with html2pdf or similar tools
- */
+function buildCompanyInfoHtml(settings: ISettings): string {
+  const logoHtml = settings.businessLogoUrl
+    ? `<img src="${settings.businessLogoUrl}" alt="Logo" class="company-logo">`
+    : ""
+  return `${logoHtml}
+              <h1>${settings.businessName || "Invoice"}</h1>
+              <div class="company-details">
+                ${settings.businessAddress ? `<div>${settings.businessAddress}</div>` : ""}
+                ${settings.businessPhone ? `<div>Phone: ${settings.businessPhone}</div>` : ""}
+                ${settings.businessEmail ? `<div>Email: ${settings.businessEmail}</div>` : ""}
+                ${settings.businessGst ? `<div style="font-weight: bold; margin-top: 8px;">GSTIN: ${settings.businessGst}</div>` : ""}
+                ${settings.businessPan ? `<div>PAN: ${settings.businessPan}</div>` : ""}
+              </div>`
+}
+
+function buildBillToHtml(invoice: IInvoice): string {
+  return `<div class="bill-to">
+            <h3>BILL TO:</h3>
+            <p><strong>${invoice.customerName}</strong></p>
+            ${invoice.customerAddress ? `<p>${invoice.customerAddress}</p>` : ""}
+            ${invoice.customerPhone ? `<p>Phone: ${invoice.customerPhone}</p>` : ""}
+            ${invoice.customerGst ? `<p style="font-weight: bold; margin-top: 8px;">GSTIN: ${invoice.customerGst}</p>` : ""}
+          </div>`
+}
+
+function buildTotalsHtml(invoice: IInvoice): string {
+  const parts: string[] = []
+  if (invoice.gstEnabled) {
+    parts.push(`
+              <div class="totals-row">
+                <span>CGST (${((invoice.cgst / (invoice.subtotal * 0.5)) * 100).toFixed(1)}%):</span>
+                <span>₹${invoice.cgst.toFixed(2)}</span>
+              </div>
+              <div class="totals-row">
+                <span>SGST (${((invoice.sgst / (invoice.subtotal * 0.5)) * 100).toFixed(1)}%):</span>
+                <span>₹${invoice.sgst.toFixed(2)}</span>
+              </div>`)
+    if (invoice.igst > 0) {
+      parts.push(`
+              <div class="totals-row"><span>IGST:</span><span>₹${invoice.igst.toFixed(2)}</span></div>`)
+    }
+  }
+  if (invoice.discount > 0) {
+    parts.push(`
+              <div class="totals-row">
+                <span>Discount:</span>
+                <span>-₹${invoice.discount.toFixed(2)}</span>
+              </div>`)
+  }
+  return parts.join("")
+}
+
+function buildBankAndNotesHtml(settings: ISettings, invoice: IInvoice): string {
+  const parts: string[] = []
+  if (settings.bankName) {
+    const upiHtml = settings.upiId ? `<div><strong>UPI ID:</strong> ${settings.upiId}</div>` : ""
+    parts.push(`
+            <div class="bank-details">
+              <h3>Payment Details:</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                  <div><strong>Bank:</strong> ${settings.bankName}</div>
+                  <div><strong>Account:</strong> ${settings.bankAccountNo || "N/A"}</div>
+                </div>
+                <div>
+                  <div><strong>IFSC Code:</strong> ${settings.bankIfsc || "N/A"}</div>
+                  ${upiHtml}
+                </div>
+              </div>
+            </div>`)
+  }
+  if (invoice.notes) {
+    parts.push(`
+            <div class="terms">
+              <h3>Notes & Terms:</h3>
+              <p>${invoice.notes.replace(/\n/g, "<br>")}</p>
+            </div>`)
+  }
+  return parts.join("")
+}
+
 export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, _templateName = "classic"): string {
   const primaryColor = settings.templateColor || "#6366f1"
-  const igstHtml = invoice.igst > 0
-    ? `<div class="totals-row"><span>IGST:</span><span>₹${invoice.igst.toFixed(2)}</span></div>`
-    : ""
-  const upiHtml = settings.upiId ? `<div><strong>UPI ID:</strong> ${settings.upiId}</div>` : ""
-
-  // Base HTML structure with all invoice data
   return `
     <!DOCTYPE html>
     <html>
@@ -89,15 +160,7 @@ export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, _tem
           <!-- Header -->
           <div class="header">
             <div class="company-info">
-              ${settings.businessLogoUrl ? `<img src="${settings.businessLogoUrl}" alt="Logo" class="company-logo">` : ""}
-              <h1>${settings.businessName || "Invoice"}</h1>
-              <div class="company-details">
-                ${settings.businessAddress ? `<div>${settings.businessAddress}</div>` : ""}
-                ${settings.businessPhone ? `<div>Phone: ${settings.businessPhone}</div>` : ""}
-                ${settings.businessEmail ? `<div>Email: ${settings.businessEmail}</div>` : ""}
-                ${settings.businessGst ? `<div style="font-weight: bold; margin-top: 8px;">GSTIN: ${settings.businessGst}</div>` : ""}
-                ${settings.businessPan ? `<div>PAN: ${settings.businessPan}</div>` : ""}
-              </div>
+              ${buildCompanyInfoHtml(settings)}
             </div>
             <div style="text-align: right;">
               <div class="invoice-title">INVOICE</div>
@@ -110,14 +173,7 @@ export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, _tem
             </div>
           </div>
           
-          <!-- Bill To -->
-          <div class="bill-to">
-            <h3>BILL TO:</h3>
-            <p><strong>${invoice.customerName}</strong></p>
-            ${invoice.customerAddress ? `<p>${invoice.customerAddress}</p>` : ""}
-            ${invoice.customerPhone ? `<p>Phone: ${invoice.customerPhone}</p>` : ""}
-            ${invoice.customerGst ? `<p style="font-weight: bold; margin-top: 8px;">GSTIN: ${invoice.customerGst}</p>` : ""}
-          </div>
+          ${buildBillToHtml(invoice)}
           
           <!-- Items Table -->
           <table>
@@ -158,69 +214,14 @@ export function generateInvoiceHTML(invoice: IInvoice, settings: ISettings, _tem
               <span>Subtotal:</span>
               <span>₹${invoice.subtotal.toFixed(2)}</span>
             </div>
-            ${
-              invoice.gstEnabled
-                ? `
-              <div class="totals-row">
-                <span>CGST (${((invoice.cgst / (invoice.subtotal * 0.5)) * 100).toFixed(1)}%):</span>
-                <span>₹${invoice.cgst.toFixed(2)}</span>
-              </div>
-              <div class="totals-row">
-                <span>SGST (${((invoice.sgst / (invoice.subtotal * 0.5)) * 100).toFixed(1)}%):</span>
-                <span>₹${invoice.sgst.toFixed(2)}</span>
-              </div>
-              ${igstHtml}
-            `
-                : ""
-            }
-            ${
-              invoice.discount > 0
-                ? `
-              <div class="totals-row">
-                <span>Discount:</span>
-                <span>-₹${invoice.discount.toFixed(2)}</span>
-              </div>
-            `
-                : ""
-            }
+            ${buildTotalsHtml(invoice)}
             <div class="totals-row total">
               <span>TOTAL:</span>
               <span>₹${invoice.total.toFixed(2)}</span>
             </div>
           </div>
           
-          <!-- Bank Details -->
-          ${
-            settings.bankName
-              ? `
-            <div class="bank-details">
-              <h3>Payment Details:</h3>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div>
-                  <div><strong>Bank:</strong> ${settings.bankName}</div>
-                  <div><strong>Account:</strong> ${settings.bankAccountNo || "N/A"}</div>
-                </div>
-                <div>
-                  <div><strong>IFSC Code:</strong> ${settings.bankIfsc || "N/A"}</div>
-                  ${upiHtml}
-                </div>
-              </div>
-            </div>
-          `
-              : ""
-          }
-          
-          <!-- Terms -->
-          ${
-            invoice.notes
-              ? `
-            <div class="terms">
-              <h3>Notes & Terms:</h3>
-              <p>${invoice.notes.replace(/\n/g, "<br>")}</p>
-            </div>
-          `
-              : ""
-          }
+          ${buildBankAndNotesHtml(settings, invoice)}
           
           <!-- Footer -->
           <div class="footer">

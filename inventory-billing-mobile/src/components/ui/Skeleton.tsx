@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useState, useMemo, memo } from 'react';
 import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -15,8 +15,8 @@ export const Skeleton = memo(function Skeleton({
   borderRadius = 8,
   style,
 }: SkeletonProps) {
-  const { colors, isDark } = useTheme();
-  const shimmer = useRef(new Animated.Value(0)).current;
+  const { isDark } = useTheme();
+  const [shimmer] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -37,10 +37,10 @@ export const Skeleton = memo(function Skeleton({
     return () => animation.stop();
   }, [shimmer]);
 
-  const opacity = shimmer.interpolate({
+  const opacity = useMemo(() => shimmer.interpolate({
     inputRange: [0, 1],
     outputRange: [0.3, 0.7],
-  });
+  }), [shimmer]);
 
   const bg = isDark ? '#334155' : '#e2e8f0';
 
@@ -105,6 +105,8 @@ export const SkeletonDashboard = memo(function SkeletonDashboard() {
   );
 });
 
+const SPACE_BETWEEN = 'space-between' as const;
+
 const styles = StyleSheet.create({
   card: {
     padding: 16,
@@ -114,7 +116,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -123,7 +125,7 @@ const styles = StyleSheet.create({
   },
   cardMetrics: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     marginTop: 4,
   },
   list: {
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     marginBottom: 12,
   },
 });

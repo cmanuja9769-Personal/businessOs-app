@@ -65,54 +65,53 @@ export default function PurchaseDetailScreen() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
+    const loadPurchase = async () => {
+      if (!purchaseId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('purchases')
+          .select('*')
+          .eq('id', purchaseId)
+          .is('deleted_at', null)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          const { data: itemsData } = await supabase
+            .from('purchase_items')
+            .select('*')
+            .eq('purchase_id', purchaseId);
+
+          const items: PurchaseItem[] = (itemsData || []).map((item: Record<string, unknown>) => ({
+            itemId: (item.item_id as string) || '',
+            name: (item.item_name as string) || '',
+            hsn: (item.hsn as string) || '',
+            quantity: Number(item.quantity) || 0,
+            rate: Number(item.rate) || 0,
+            discount: Number(item.discount) || 0,
+            discountType: (item.discount_type as 'percentage' | 'flat') || 'percentage',
+            taxRate: Number(item.tax_rate) || 0,
+            amount: Number(item.amount) || 0,
+          }));
+
+          setPurchase({
+            ...data,
+            purchase_number: data.purchase_number,
+            purchase_date: data.purchase_date || data.created_at,
+            items,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading purchase:', error);
+        Alert.alert('Error', 'Failed to load purchase details');
+      } finally {
+        setLoading(false);
+      }
+    };
     loadPurchase();
   }, [purchaseId]);
-
-  const loadPurchase = async () => {
-    if (!purchaseId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('purchases')
-        .select('*')
-        .eq('id', purchaseId)
-        .is('deleted_at', null)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        const { data: itemsData } = await supabase
-          .from('purchase_items')
-          .select('*')
-          .eq('purchase_id', purchaseId);
-
-        const items: PurchaseItem[] = (itemsData || []).map((item: Record<string, unknown>) => ({
-          itemId: (item.item_id as string) || '',
-          name: (item.item_name as string) || '',
-          hsn: (item.hsn as string) || '',
-          quantity: Number(item.quantity) || 0,
-          rate: Number(item.rate) || 0,
-          discount: Number(item.discount) || 0,
-          discountType: (item.discount_type as 'percentage' | 'flat') || 'percentage',
-          taxRate: Number(item.tax_rate) || 0,
-          amount: Number(item.amount) || 0,
-        }));
-
-        setPurchase({
-          ...data,
-          purchase_number: data.purchase_number,
-          purchase_date: data.purchase_date || data.created_at,
-          items,
-        });
-      }
-    } catch (error) {
-      console.error('Error loading purchase:', error);
-      Alert.alert('Error', 'Failed to load purchase details');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleEdit = () => {
     navigation.navigate('CreatePurchase', { purchaseId });
@@ -360,6 +359,9 @@ Status: ${purchase.status.toUpperCase()}
   );
 }
 
+const SPACE_BETWEEN = 'space-between' as const;
+const BORDER_COLOR_LIGHT = 'rgba(0,0,0,0.1)';
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
@@ -371,25 +373,25 @@ const styles = StyleSheet.create({
   shareButton: { width: 40, alignItems: 'flex-end' },
   content: { flex: 1, padding: 16 },
   card: { borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER_COLOR_LIGHT },
   cardTitle: { fontSize: 16, fontWeight: '600', marginLeft: 8 },
   cardContent: { padding: 16 },
   supplierName: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
   detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   detailText: { fontSize: 14, marginLeft: 8 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  infoRow: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, marginBottom: 8 },
   infoLabel: { fontSize: 14 },
   infoValue: { fontSize: 14, fontWeight: '500' },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  itemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  itemRow: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, alignItems: 'center', paddingVertical: 12 },
+  itemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BORDER_COLOR_LIGHT },
   itemInfo: { flex: 1 },
   itemName: { fontSize: 15, fontWeight: '500' },
   itemMeta: { fontSize: 13, marginTop: 2 },
   itemAmount: { fontSize: 15, fontWeight: '600' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  summaryRow: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, marginBottom: 8 },
   summaryLabel: { fontSize: 14 },
   summaryValue: { fontSize: 14, fontWeight: '500' },
-  totalRow: { borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', paddingTop: 12, marginTop: 4 },
+  totalRow: { borderTopWidth: 1, borderTopColor: BORDER_COLOR_LIGHT, paddingTop: 12, marginTop: 4 },
   totalLabel: { fontSize: 18, fontWeight: '700' },
   totalValue: { fontSize: 20, fontWeight: '700' },
   notesText: { fontSize: 14, lineHeight: 20 },

@@ -30,6 +30,26 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+function resolveActiveOrganization(orgs: Organization[]): Organization | null {
+  if (orgs.length === 0) return null
+
+  try {
+    const savedId = localStorage.getItem("activeOrganizationId")
+    const saved = savedId ? orgs.find((o) => o.id === savedId) : null
+    if (saved) return saved
+  } catch {
+  }
+
+  return orgs[0]
+}
+
+function parseApiResponse(json: Record<string, unknown>) {
+  const user = (json.user ?? null) as User | null
+  const userRole = (json.userRole ?? null) as UserRole | null
+  const organizations: Organization[] = Array.isArray(json.organizations) ? json.organizations : []
+  return { user, userRole, organizations }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
@@ -37,7 +57,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Wrapper to persist active organization in localStorage
   const setOrganization = (org: Organization | null) => {
     setOrganizationState(org)
     try {
@@ -47,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem("activeOrganizationId")
       }
     } catch {
-      // ignore localStorage errors
     }
   }
 
@@ -60,44 +78,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const json = await res.json()
         if (!isMounted) return
 
-        setUser((json.user ?? null) as User | null)
-        setUserRole((json.userRole ?? null) as UserRole | null)
+        const parsed = parseApiResponse(json)
+        setUser(parsed.user)
+        setUserRole(parsed.userRole)
+        setOrganizations(parsed.organizations)
 
-        const orgs: Organization[] = Array.isArray(json.organizations) ? json.organizations : []
-        setOrganizations(orgs)
-
-        try {
-          const savedId = localStorage.getItem("activeOrganizationId")
-          const saved = savedId ? orgs.find((o) => o.id === savedId) : null
-          if (saved) {
-            setOrganizationState(saved)
-          } else if (orgs.length > 0) {
-            setOrganization(orgs[0])
-          } else {
-            setOrganization(null)
-          }
-        } catch {
-          if (orgs.length > 0) {
-            setOrganization(orgs[0])
-          } else {
-            setOrganization(null)
-          }
+        const activeOrg = resolveActiveOrganization(parsed.organizations)
+        if (activeOrg) {
+          setOrganization(activeOrg)
+        } else {
+          setOrganization(null)
         }
-
-        setLoading(false)
       } catch {
         if (!isMounted) return
         setUser(null)
         setUserRole(null)
         setOrganization(null)
         setOrganizations([])
-        setLoading(false)
+      } finally {
+        if (isMounted) setLoading(false)
       }
     }
 
     hydrateFromServer()
 
-    // Use Supabase client only for the auth change signal; data still comes from /api/me.
     const supabase = createClient()
     const {
       data: { subscription },
@@ -114,11 +118,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
-    // Also call server endpoint to clear server-side cookies used by SSR
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
     } catch {
-      // ignore
     }
 
     setUser(null)

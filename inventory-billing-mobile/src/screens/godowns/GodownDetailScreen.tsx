@@ -63,58 +63,58 @@ export default function GodownDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const loadGodownData = async () => {
+      if (!godownId || !organizationId) return;
+      setLoading(true);
+
+      try {
+        const { data: godownData, error: godownError } = await supabase
+          .from('warehouses')
+          .select('*')
+          .eq('id', godownId)
+          .is('deleted_at', null)
+          .single();
+
+        if (godownError) throw godownError;
+        setGodown(godownData);
+
+        const { data: stockData, error: stockError } = await supabase
+          .from('item_warehouse_stock')
+          .select('*, items(name, item_code, unit, purchase_price)')
+          .eq('warehouse_id', godownId);
+
+        if (stockError) throw stockError;
+
+        const formattedStock = (stockData || []).map(s => ({
+          id: s.id,
+          item_id: s.item_id,
+          item_name: s.items?.name || 'Unknown Item',
+          sku: s.items?.item_code,
+          quantity: s.quantity || 0,
+          unit: s.items?.unit || 'pcs',
+          value: (s.quantity || 0) * (s.items?.purchase_price || 0),
+        }));
+
+        setStock(formattedStock);
+
+        const lowStockCount = formattedStock.filter(s => s.quantity < 10).length;
+
+        setStats({
+          totalItems: formattedStock.length,
+          totalQuantity: formattedStock.reduce((sum, s) => sum + s.quantity, 0),
+          totalValue: formattedStock.reduce((sum, s) => sum + s.value, 0),
+          lowStock: lowStockCount,
+        });
+      } catch (error) {
+        console.error('Error loading godown:', error);
+        Alert.alert('Error', 'Failed to load godown details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadGodownData();
-  }, [godownId]);
-
-  const loadGodownData = async () => {
-    if (!godownId || !organizationId) return;
-    setLoading(true);
-
-    try {
-      const { data: godownData, error: godownError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('id', godownId)
-        .is('deleted_at', null)
-        .single();
-
-      if (godownError) throw godownError;
-      setGodown(godownData);
-
-      const { data: stockData, error: stockError } = await supabase
-        .from('item_warehouse_stock')
-        .select('*, items(name, item_code, unit, purchase_price)')
-        .eq('warehouse_id', godownId);
-
-      if (stockError) throw stockError;
-
-      const formattedStock = (stockData || []).map(s => ({
-        id: s.id,
-        item_id: s.item_id,
-        item_name: s.items?.name || 'Unknown Item',
-        sku: s.items?.item_code,
-        quantity: s.quantity || 0,
-        unit: s.items?.unit || 'pcs',
-        value: (s.quantity || 0) * (s.items?.purchase_price || 0),
-      }));
-
-      setStock(formattedStock);
-
-      const lowStockCount = formattedStock.filter(s => s.quantity < 10).length;
-
-      setStats({
-        totalItems: formattedStock.length,
-        totalQuantity: formattedStock.reduce((sum, s) => sum + s.quantity, 0),
-        totalValue: formattedStock.reduce((sum, s) => sum + s.value, 0),
-        lowStock: lowStockCount,
-      });
-    } catch (error) {
-      console.error('Error loading godown:', error);
-      Alert.alert('Error', 'Failed to load godown details');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [godownId, organizationId]);
 
   const handleEdit = () => {
     navigation.navigate('AddGodown', { godownId });

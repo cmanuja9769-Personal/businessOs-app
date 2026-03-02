@@ -3,7 +3,7 @@
 import { authorize, orgScope } from "@/lib/authorize"
 import { isDemoMode } from "@/app/demo/helpers"
 import { demoItems } from "@/app/demo/data"
-import type { IItem } from "@/types"
+import type { IItem, PackagingUnit } from "@/types"
 
 export interface LightweightItem {
   readonly id: string
@@ -13,7 +13,7 @@ export interface LightweightItem {
   readonly hsnCode: string
   readonly barcodeNo: string
   readonly unit: string
-  readonly packagingUnit: string
+  readonly packagingUnit: PackagingUnit
   readonly perCartonQuantity: number
   readonly purchasePrice: number
   readonly salePrice: number
@@ -38,7 +38,7 @@ function toLightweightItem(item: Record<string, unknown>): LightweightItem {
     hsnCode: String(item.hsn || ""),
     barcodeNo: String(item.barcode_no || ""),
     unit: String(item.unit || "PCS"),
-    packagingUnit: String(item.packaging_unit || "CTN"),
+    packagingUnit: (item.packaging_unit as PackagingUnit) || "CTN",
     perCartonQuantity: Number(item.per_carton_quantity) || 1,
     purchasePrice: Number(item.purchase_price) || 0,
     salePrice: Number(item.sale_price) || 0,

@@ -28,45 +28,40 @@ export default function OrganizationScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchOrganization();
-  }, [organizationId]);
+    const fetchOrganization = async () => {
+      try {
+        if (!organizationId) {
+          console.warn('[ORGANIZATION] No organizationId available');
+          return;
+        }
 
-  const fetchOrganization = async () => {
-    try {
-      console.log('[ORGANIZATION] Fetching org:', organizationId);
-      if (!organizationId) {
-        console.warn('[ORGANIZATION] No organizationId available');
-        return;
-      }
-
-      // Try app_organizations first
-      let { data, error } = await supabase
-        .from('app_organizations')
-        .select('*')
-        .eq('id', organizationId)
-        .single();
-
-      // Fallback to organizations table
-      if (error || !data) {
-        const result = await supabase
-          .from('organizations')
+        let { data, error } = await supabase
+          .from('app_organizations')
           .select('*')
           .eq('id', organizationId)
           .single();
-        data = result.data;
-        error = result.error;
+
+        if (error || !data) {
+          const result = await supabase
+            .from('organizations')
+            .select('*')
+            .eq('id', organizationId)
+            .single();
+          data = result.data;
+          error = result.error;
+        }
+
+        if (error) throw error;
+        setOrganization(data);
+      } catch (error) {
+        console.error('Error fetching organization:', error);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      console.log('[ORGANIZATION] Query result:', { data, error });
-
-      if (error) throw error;
-      setOrganization(data);
-    } catch (error) {
-      console.error('Error fetching organization:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchOrganization();
+  }, [organizationId]);
 
   if (loading) {
     return <Loading fullScreen />;
@@ -86,7 +81,7 @@ export default function OrganizationScreen() {
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       {organization.logo_url && (
         <View style={styles.logoContainer}>
-          <Image source={{ uri: organization.logo_url }} style={styles.logo} />
+          <Image source={{ uri: organization.logo_url }} style={styles.logo} alt="Organization logo" accessibilityLabel="Organization logo" />
         </View>
       )}
 

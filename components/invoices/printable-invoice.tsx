@@ -5,6 +5,9 @@ import { format } from "date-fns"
 import type { IInvoice } from "@/types"
 import type { ISettings } from "@/app/settings/actions"
 
+const FLEX_DISPLAY = "flex" as const
+const JUSTIFY_BETWEEN = "space-between" as const
+
 interface PrintableInvoiceProps {
   invoice: IInvoice
   settings: ISettings
@@ -38,8 +41,8 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
         {/* Header */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
+            display: FLEX_DISPLAY,
+            justifyContent: JUSTIFY_BETWEEN,
             alignItems: "flex-start",
             borderBottom: `2px solid ${primaryColor}`,
             paddingBottom: "12px",
@@ -239,10 +242,10 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
         </table>
 
         {/* Totals */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+        <div style={{ display: FLEX_DISPLAY, justifyContent: "flex-end", marginBottom: "16px" }}>
           <div style={{ width: "240px" }}>
             <div style={{ fontSize: "9px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", margin: "3px 0" }}>
+              <div style={{ display: FLEX_DISPLAY, justifyContent: JUSTIFY_BETWEEN, margin: "3px 0" }}>
                 <span style={{ color: "#666" }}>Subtotal:</span>
                 <span>
                   {settings.currencySymbol}
@@ -251,14 +254,14 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
               </div>
               {invoice.gstEnabled && (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", margin: "3px 0" }}>
+                  <div style={{ display: FLEX_DISPLAY, justifyContent: JUSTIFY_BETWEEN, margin: "3px 0" }}>
                     <span style={{ color: "#666" }}>CGST:</span>
                     <span>
                       {settings.currencySymbol}
                       {invoice.cgst.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", margin: "3px 0" }}>
+                  <div style={{ display: FLEX_DISPLAY, justifyContent: JUSTIFY_BETWEEN, margin: "3px 0" }}>
                     <span style={{ color: "#666" }}>SGST:</span>
                     <span>
                       {settings.currencySymbol}
@@ -266,7 +269,7 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
                     </span>
                   </div>
                   {invoice.igst > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", margin: "3px 0" }}>
+                    <div style={{ display: FLEX_DISPLAY, justifyContent: JUSTIFY_BETWEEN, margin: "3px 0" }}>
                       <span style={{ color: "#666" }}>IGST:</span>
                       <span>
                         {settings.currencySymbol}
@@ -277,7 +280,7 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
                 </>
               )}
               {invoice.discount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", margin: "3px 0", color: "#16a34a" }}>
+                <div style={{ display: FLEX_DISPLAY, justifyContent: JUSTIFY_BETWEEN, margin: "3px 0", color: "#16a34a" }}>
                   <span>Discount:</span>
                   <span>
                     -{settings.currencySymbol}
@@ -287,8 +290,8 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
               )}
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
+                  display: FLEX_DISPLAY,
+                  justifyContent: JUSTIFY_BETWEEN,
                   borderTop: `2px solid ${primaryColor}`,
                   paddingTop: "4px",
                   marginTop: "6px",
@@ -386,8 +389,8 @@ export function PrintableInvoice({ invoice, settings }: PrintableInvoiceProps) {
         {/* Footer */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
+            display: FLEX_DISPLAY,
+            justifyContent: JUSTIFY_BETWEEN,
             alignItems: "flex-end",
             borderTop: `1px solid #ddd`,
             paddingTop: "8px",

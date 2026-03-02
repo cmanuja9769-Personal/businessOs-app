@@ -27,7 +27,201 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface InvoiceFormProps {
-  invoice?: IInvoice // If provided, we're in edit mode
+  invoice?: IInvoice
+}
+
+function isCreditOrDebitNote(docType: DocumentType): docType is "credit_note" | "debit_note" {
+  return docType === "credit_note" || docType === "debit_note"
+}
+
+function resolveEditModeData(
+  inv: IInvoice,
+  customersData: ICustomer[],
+  invoicesData: IInvoice[]
+): { customer: ICustomer | null; parent: IInvoice | null } {
+  const customer = customersData.find((c) => c.id === inv.customerId) || null
+  const needsParent = inv.parentDocumentId && isCreditOrDebitNote(inv.documentType)
+  const parent = needsParent
+    ? invoicesData.find((i) => i.id === inv.parentDocumentId) || null
+    : null
+  return { customer, parent }
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
+function validateInvoiceFormData(
+  selectedCustomer: ICustomer | null,
+  invoiceItems: readonly IInvoiceItem[],
+  dueDate: string,
+  invoiceDate: string,
+  documentType: DocumentType,
+  parentInvoice: IInvoice | null,
+  existingParentDocId?: string
+): string | null {
+  if (!selectedCustomer) return "Please select a customer"
+  if (invoiceItems.length === 0) return "Please add at least one item"
+  const hasInvalidItems = invoiceItems.some(
+    (item) => !item.itemId || item.quantity <= 0 || item.rate <= 0
+  )
+  if (hasInvalidItems) return "Please ensure all items have valid quantity and rate"
+  if (new Date(dueDate) < new Date(invoiceDate)) return "Due date cannot be before invoice date"
+  const needsParent = isCreditOrDebitNote(documentType) && !parentInvoice && !existingParentDocId
+  if (needsParent) return `Please select an original invoice for this ${DOCUMENT_TYPE_CONFIG[documentType].label}`
+  return null
+}
+
+function buildInvoicePayload(params: {
+  invoiceNo: string
+  documentType: DocumentType
+  selectedCustomer: ICustomer
+  invoiceDate: string
+  dueDate: string
+  validityDate: string
+  billingMode: BillingMode
+  pricingMode: PricingMode
+  invoiceItems: IInvoiceItem[]
+  totals: ReturnType<typeof calculateInvoiceTotals>
+  paidAmount: number
+  notes: string
+  status: string
+  parentInvoice: IInvoice | null
+}) {
+  return {
+    invoiceNo: params.invoiceNo,
+    documentType: params.documentType,
+    customerId: params.selectedCustomer.id,
+    customerName: params.selectedCustomer.name,
+    customerPhone: params.selectedCustomer.contactNo,
+    customerAddress: params.selectedCustomer.address || "",
+    customerGst: params.selectedCustomer.gstinNo || "",
+    invoiceDate: new Date(params.invoiceDate),
+    dueDate: new Date(params.dueDate),
+    ...(DOCUMENT_TYPE_CONFIG[params.documentType].requiresValidity && {
+      validityDate: new Date(params.validityDate),
+    }),
+    billingMode: params.billingMode,
+    pricingMode: params.pricingMode,
+    items: params.invoiceItems,
+    ...params.totals,
+    paidAmount: params.paidAmount,
+    balance: params.totals.grandTotal - params.paidAmount,
+    gstEnabled: params.billingMode === "gst",
+    notes: params.notes,
+    status: params.status,
+    discountType: "percentage" as const,
+    ...(params.parentInvoice && { parentDocumentId: params.parentInvoice.id }),
+  }
+}
+
+async function persistInvoice(
+  isEditMode: boolean,
+  invoice: IInvoice | undefined,
+  invoiceData: unknown,
+  documentType: DocumentType,
+  status?: string
+): Promise<{ success: boolean; message: string; redirectTo: string }> {
+  if (isEditMode && invoice) {
+    const result = await updateInvoice(invoice.id, invoiceData)
+    if (!result.success) {
+      return { success: false, message: result.error || "Failed to update invoice", redirectTo: "" }
+    }
+    return {
+      success: true,
+      message: `${DOCUMENT_TYPE_CONFIG[documentType].label} updated successfully`,
+      redirectTo: `/invoices/${invoice.id}`,
+    }
+  }
+  const result = await createInvoice(invoiceData)
+  if (!result.success) {
+    return { success: false, message: result.error || "Failed to create invoice", redirectTo: "" }
+  }
+  const statusLabel = status === "draft" ? "saved as draft" : "created"
+  return {
+    success: true,
+    message: `${DOCUMENT_TYPE_CONFIG[documentType].label} ${statusLabel} successfully`,
+    redirectTo: "/invoices",
+  }
+}
+
+function GstTaxRows({ totals, interState }: {
+  readonly totals: ReturnType<typeof calculateInvoiceTotals>
+  readonly interState: boolean
+}) {
+  if (interState) {
+    return (
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">IGST:</span>
+        <span className="font-medium">₹{totals.igst.toFixed(2)}</span>
+      </div>
+    )
+  }
+  return (
+    <>
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">CGST:</span>
+        <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">SGST:</span>
+        <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
+      </div>
+    </>
+  )
+}
+
+function TotalsSummary({ totals, billingMode, interState }: {
+  readonly totals: ReturnType<typeof calculateInvoiceTotals>
+  readonly billingMode: BillingMode
+  readonly interState: boolean
+}) {
+  return (
+    <div className="space-y-3 bg-muted/50 p-4 rounded-lg">
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">Subtotal:</span>
+        <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
+      </div>
+      {billingMode === "gst" && (
+        <>
+          <GstTaxRows totals={totals} interState={interState} />
+          {totals.cess > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Cess:</span>
+              <span className="font-medium">₹{totals.cess.toFixed(2)}</span>
+            </div>
+          )}
+        </>
+      )}
+      {totals.discount > 0 && (
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Discount:</span>
+          <span className="font-medium text-green-600">-₹{totals.discount.toFixed(2)}</span>
+        </div>
+      )}
+      {totals.roundOff !== 0 && (
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Round Off:</span>
+          <span className="font-medium">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span>
+        </div>
+      )}
+      <div className="flex justify-between text-lg font-bold pt-3 border-t border-border">
+        <span>Total Amount:</span>
+        <span className="text-primary">₹{totals.grandTotal.toFixed(2)}</span>
+      </div>
+      {totals.grandTotal > 0 && (
+        <p className="text-xs text-muted-foreground italic pt-1">
+          {numberToWords(totals.grandTotal)}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function renderSaveIcon(isSaving: boolean, FallbackIcon: typeof Save) {
+  if (isSaving) return <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+  return <FallbackIcon className="w-4 h-4 mr-2" />
 }
 
 export function InvoiceForm({ invoice }: InvoiceFormProps) {
@@ -40,7 +234,6 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   const [items, setItems] = useState<(IItem | LightweightItem)[]>([])
   const [allInvoices, setAllInvoices] = useState<IInvoice[]>([])
 
-  // Invoice state
   const [documentType, setDocumentType] = useState<DocumentType>(invoice?.documentType || "invoice")
   const [invoiceNo, setInvoiceNo] = useState(invoice?.invoiceNo || "")
   const [selectedCustomer, setSelectedCustomer] = useState<ICustomer | null>(null)
@@ -95,21 +288,15 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
         })
 
         if (isEditMode && invoice) {
-          const customer = customersData.find((c) => c.id === invoice.customerId)
-          setSelectedCustomer(customer || null)
-          
-          if (invoice.parentDocumentId && (invoice.documentType === "credit_note" || invoice.documentType === "debit_note")) {
-            const parent = invoicesData.find((inv) => inv.id === invoice.parentDocumentId)
-            if (parent) {
-              setParentInvoice(parent)
-            }
-          }
+          const { customer, parent } = resolveEditModeData(invoice, customersData, invoicesData)
+          setSelectedCustomer(customer)
+          if (parent) setParentInvoice(parent)
         } else {
           const invoiceNumber = await generateInvoiceNumber(documentType)
           setInvoiceNo(invoiceNumber)
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load form data"
+        const message = extractErrorMessage(err, "Failed to load form data")
         setLoadError(message)
         toast.error(message)
       } finally {
@@ -127,9 +314,8 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
     }
   }, [documentType, isEditMode])
 
-  // When parent invoice is selected for credit/debit notes, load its items
   useEffect(() => {
-    if (parentInvoice && (documentType === "credit_note" || documentType === "debit_note")) {
+    if (parentInvoice && isCreditOrDebitNote(documentType)) {
       setSelectedCustomer(
         customers.find((c) => c.id === parentInvoice.customerId) || null
       )
@@ -157,84 +343,46 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   }, [isSaving])
 
   const handleSave = useCallback(async (status?: "draft" | "sent") => {
-    if (!selectedCustomer) {
-      toast.error("Please select a customer")
-      return
-    }
-
-    if (invoiceItems.length === 0) {
-      toast.error("Please add at least one item")
-      return
-    }
-
-    const hasInvalidItems = invoiceItems.some(
-      (item) => !item.itemId || item.quantity <= 0 || item.rate <= 0
+    const validationError = validateInvoiceFormData(
+      selectedCustomer, invoiceItems, dueDate, invoiceDate,
+      documentType, parentInvoice, invoice?.parentDocumentId
     )
-    if (hasInvalidItems) {
-      toast.error("Please ensure all items have valid quantity and rate")
+    if (validationError) {
+      toast.error(validationError)
       return
     }
 
-    if (new Date(dueDate) < new Date(invoiceDate)) {
-      toast.error("Due date cannot be before invoice date")
-      return
-    }
-
-    if ((documentType === "credit_note" || documentType === "debit_note") && !parentInvoice && !invoice?.parentDocumentId) {
-      toast.error(`Please select an original invoice for this ${DOCUMENT_TYPE_CONFIG[documentType].label}`)
-      return
-    }
-
+    const saveAction = isEditMode ? "update" : "save"
     setIsSaving(true)
     try {
-      const invoiceData = {
+      const invoiceData = buildInvoicePayload({
         invoiceNo,
         documentType,
-        customerId: selectedCustomer.id,
-        customerName: selectedCustomer.name,
-        customerPhone: selectedCustomer.contactNo,
-        customerAddress: selectedCustomer.address || "",
-        customerGst: selectedCustomer.gstinNo || "",
-        invoiceDate: new Date(invoiceDate),
-        dueDate: new Date(dueDate),
-        ...(DOCUMENT_TYPE_CONFIG[documentType].requiresValidity && {
-          validityDate: new Date(validityDate),
-        }),
+        selectedCustomer: selectedCustomer!,
+        invoiceDate,
+        dueDate,
+        validityDate,
         billingMode,
         pricingMode,
-        items: invoiceItems,
-        ...totals,
+        invoiceItems,
+        totals,
         paidAmount: invoice?.paidAmount || 0,
-        balance: totals.grandTotal - (invoice?.paidAmount || 0),
-        gstEnabled: billingMode === "gst",
         notes,
         status: status || invoice?.status || "draft",
-        discountType: "percentage" as const,
-        ...(parentInvoice && { parentDocumentId: parentInvoice.id }),
-      }
+        parentInvoice,
+      })
 
       isDirty.current = false
 
-      if (isEditMode && invoice) {
-        const result = await updateInvoice(invoice.id, invoiceData)
-        if (!result.success) {
-          toast.error(result.error || "Failed to update invoice")
-          return
-        }
-        toast.success(`${DOCUMENT_TYPE_CONFIG[documentType].label} updated successfully`)
-        router.push(`/invoices/${invoice.id}`)
-      } else {
-        const result = await createInvoice(invoiceData)
-        if (!result.success) {
-          toast.error(result.error || "Failed to create invoice")
-          return
-        }
-        toast.success(`${DOCUMENT_TYPE_CONFIG[documentType].label} ${status === "draft" ? "saved as draft" : "created"} successfully`)
-        router.push("/invoices")
+      const result = await persistInvoice(isEditMode, invoice, invoiceData, documentType, status)
+      if (!result.success) {
+        toast.error(result.message)
+        return
       }
-    } catch (error) {
-      console.error("Error in handleSave:", error)
-      toast.error(`Failed to ${isEditMode ? "update" : "save"} ${DOCUMENT_TYPE_CONFIG[documentType].label}`)
+      toast.success(result.message)
+      router.push(result.redirectTo)
+    } catch {
+      toast.error(`Failed to ${saveAction} ${DOCUMENT_TYPE_CONFIG[documentType].label}`)
     } finally {
       setIsSaving(false)
     }
@@ -242,17 +390,18 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      const hasModifier = e.ctrlKey || e.metaKey
+      if (!hasModifier || isSaving) return
+
+      if (e.key === "s") {
         e.preventDefault()
-        if (!isSaving) {
-          handleSave(isEditMode ? undefined : "draft")
-        }
+        handleSave(isEditMode ? undefined : "draft")
+        return
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+
+      if (e.shiftKey && e.key === "S" && !isEditMode) {
         e.preventDefault()
-        if (!isSaving && !isEditMode) {
-          handleSave("sent")
-        }
+        handleSave("sent")
       }
     }
     window.addEventListener("keydown", handleKeyDown)
@@ -278,7 +427,6 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   return (
     <ClientErrorBoundary fallbackTitle="Invoice form encountered an error">
     <div className="space-y-6">
-      {/* Document Type Selector - Only show for new documents */}
       {!isEditMode && (
         <Card>
           <CardContent className="pt-6">
@@ -290,8 +438,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
         </Card>
       )}
 
-      {/* Parent Invoice Selector - For credit/debit notes */}
-      {(documentType === "credit_note" || documentType === "debit_note") && !isEditMode && (
+      {isCreditOrDebitNote(documentType) && !isEditMode && (
         <Card>
           <CardContent className="pt-6">
             <ParentInvoiceSelector
@@ -329,7 +476,6 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             onPackingTypeChange={setPackingType}
           />
 
-          {/* Validity Date - For quotations and proforma invoices */}
           {DOCUMENT_TYPE_CONFIG[documentType].requiresValidity && (
             <div className="space-y-2">
               <Label htmlFor="validity-date">Validity Date</Label>
@@ -398,60 +544,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
               </div>
             </div>
 
-            <div className="space-y-3 bg-muted/50 p-4 rounded-lg">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
-              </div>
-              {billingMode === "gst" && (
-                <>
-                  {interState ? (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">IGST:</span>
-                      <span className="font-medium">₹{totals.igst.toFixed(2)}</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">CGST:</span>
-                        <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">SGST:</span>
-                        <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-                  {totals.cess > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Cess:</span>
-                      <span className="font-medium">₹{totals.cess.toFixed(2)}</span>
-                    </div>
-                  )}
-                </>
-              )}
-              {totals.discount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Discount:</span>
-                  <span className="font-medium text-green-600">-₹{totals.discount.toFixed(2)}</span>
-                </div>
-              )}
-              {totals.roundOff !== 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Round Off:</span>
-                  <span className="font-medium">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-lg font-bold pt-3 border-t border-border">
-                <span>Total Amount:</span>
-                <span className="text-primary">₹{totals.grandTotal.toFixed(2)}</span>
-              </div>
-              {totals.grandTotal > 0 && (
-                <p className="text-xs text-muted-foreground italic pt-1">
-                  {numberToWords(totals.grandTotal)}
-                </p>
-              )}
-            </div>
+            <TotalsSummary totals={totals} billingMode={billingMode} interState={interState} />
           </div>
         </CardContent>
       </Card>
@@ -485,17 +578,17 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
           </Button>
           {isEditMode ? (
             <Button onClick={() => handleSave()} disabled={isSaving}>
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {renderSaveIcon(isSaving, Save)}
               Update {DOCUMENT_TYPE_CONFIG[documentType].label}
             </Button>
           ) : (
             <>
               <Button variant="outline" onClick={() => handleSave("draft")} disabled={isSaving}>
-                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                {renderSaveIcon(isSaving, Save)}
                 Save as Draft
               </Button>
               <Button onClick={() => handleSave("sent")} disabled={isSaving}>
-                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                {renderSaveIcon(isSaving, Send)}
                 Create {DOCUMENT_TYPE_CONFIG[documentType].label}
               </Button>
             </>

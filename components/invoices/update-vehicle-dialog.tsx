@@ -40,19 +40,20 @@ interface UpdateVehicleDialogProps {
   onSuccess?: () => void
 }
 
+const initialFormData = {
+  vehicleNo: "",
+  fromPlace: "",
+  fromState: "",
+  reasonCode: "4" as VehicleCodeOption,
+  reasonRem: "",
+  transMode: "1" as VehicleCodeOption,
+  transDocNo: "",
+  transDocDate: "",
+}
+
 export function UpdateVehicleDialog({ ewbNo, currentVehicle, onSuccess }: UpdateVehicleDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const initialFormData = {
-    vehicleNo: "",
-    fromPlace: "",
-    fromState: "",
-    reasonCode: "4" as VehicleCodeOption,
-    reasonRem: "",
-    transMode: "1" as VehicleCodeOption,
-    transDocNo: "",
-    transDocDate: "",
-  }
   const [formData, setFormData] = useState(initialFormData)
 
   const isDirty = useMemo(() => {

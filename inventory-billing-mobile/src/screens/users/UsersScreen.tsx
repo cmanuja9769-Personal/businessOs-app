@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -45,11 +45,7 @@ export default function UsersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadUsers();
-  }, [organizationId]);
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     if (!organizationId) return;
     setLoading(true);
 
@@ -61,12 +57,12 @@ export default function UsersScreen() {
 
       if (error) throw error;
 
-      const usersList = (members || []).map(m => ({
-        id: m.user_id,
+      const usersList = (members || []).map((m: Record<string, unknown> & { profiles?: { email?: string; full_name?: string } }) => ({
+        id: String(m.user_id || ''),
         email: m.profiles?.email || 'Unknown',
         full_name: m.profiles?.full_name,
-        role: m.role || 'staff',
-        created_at: m.created_at,
+        role: String(m.role || 'staff'),
+        created_at: String(m.created_at || ''),
         is_active: true,
       }));
 
@@ -76,7 +72,11 @@ export default function UsersScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -107,29 +107,30 @@ export default function UsersScreen() {
 
   const handleChangeRole = (user: User) => {
     const roles = ['admin', 'manager', 'staff', 'viewer'];
+    const buttons: { text: string; onPress: () => void }[] = roles.map(role => ({
+      text: role.charAt(0).toUpperCase() + role.slice(1),
+      onPress: async () => {
+        try {
+          const { error } = await supabase
+            .from('organization_members')
+            .update({ role } as Record<string, unknown>)
+            .eq('organization_id', organizationId)
+            .eq('user_id', user.id);
+
+          if (error) throw error;
+          loadUsers();
+          Alert.alert('Success', 'Role updated successfully');
+        } catch (err: unknown) {
+          Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update role');
+        }
+      },
+    }));
     Alert.alert(
       'Change Role',
       `Select new role for ${user.full_name || user.email}`,
       [
-        ...roles.map(role => ({
-          text: role.charAt(0).toUpperCase() + role.slice(1),
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('organization_members')
-                .update({ role })
-                .eq('organization_id', organizationId)
-                .eq('user_id', user.id);
-
-              if (error) throw error;
-              loadUsers();
-              Alert.alert('Success', 'Role updated successfully');
-            } catch (err: unknown) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update role');
-            }
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
+        ...buttons,
+        { text: 'Cancel', style: 'cancel' as const },
       ]
     );
   };

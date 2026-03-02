@@ -68,6 +68,56 @@ const STEPS = [
   { key: 'review', label: 'Review', icon: 'checkmark-circle-outline' },
 ];
 
+const STEP_VALIDATION: Record<number, { title: string; message: string }> = {
+  0: { title: 'Select Supplier', message: 'Please select a supplier to continue' },
+  1: { title: 'Add Items', message: 'Please add at least one item to continue' },
+};
+
+function getStepValidationError(
+  step: number,
+  selectedSupplier: Supplier | null,
+  purchaseItemCount: number
+): { title: string; message: string } | null {
+  if (step === 0 && !selectedSupplier) return STEP_VALIDATION[0];
+  if (step === 1 && purchaseItemCount === 0) return STEP_VALIDATION[1];
+  return null;
+}
+
+function calculateItemBreakdown(
+  rate: number,
+  quantity: number,
+  discount: number,
+  discountType: 'percentage' | 'flat',
+  taxRate: number
+): { afterDiscount: number; taxAmount: number; total: number } {
+  const baseAmount = rate * quantity;
+  const discountAmount = discountType === 'percentage'
+    ? baseAmount * (discount / 100)
+    : discount;
+  const afterDiscount = baseAmount - discountAmount;
+  const taxAmount = afterDiscount * (taxRate / 100);
+  return { afterDiscount, taxAmount, total: afterDiscount + taxAmount };
+}
+
+function mapPurchaseItemFromRow(item: Record<string, unknown>): PurchaseItem {
+  return {
+    itemId: (item.item_id as string) || '',
+    name: (item.item_name as string) || '',
+    hsn: (item.hsn as string) || '',
+    quantity: Number(item.quantity) || 0,
+    rate: Number(item.rate) || 0,
+    discount: Number(item.discount) || 0,
+    discountType: ((item.discount_type as string) || 'percentage') as 'percentage' | 'flat',
+    taxRate: Number(item.tax_rate) || 0,
+    amount: Number(item.amount) || 0,
+  };
+}
+
+function computePurchaseAmounts(status: 'unpaid' | 'paid', total: number): { paidAmount: number; balance: number } {
+  if (status === 'paid') return { paidAmount: total, balance: 0 };
+  return { paidAmount: 0, balance: total };
+}
+
 export default function CreatePurchaseScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const route = useRoute();
@@ -114,78 +164,23 @@ export default function CreatePurchaseScreen() {
   });
 
   useEffect(() => {
-    loadData();
-  }, [organizationId]);
+    const loadExistingPurchase = async (suppliersList: Supplier[]) => {
+      if (!purchaseId) return;
 
-  const loadData = async () => {
-    if (!organizationId) return;
+      const { data } = await supabase
+        .from('purchases')
+        .select('*')
+        .eq('id', purchaseId)
+        .single();
 
-    try {
-      const [suppliersRes, itemsRes] = await Promise.all([
-        supabase
-          .from('suppliers')
-          .select('id, name, email, gst_number, phone, address')
-          .eq('organization_id', organizationId)
-          .is('deleted_at', null)
-          .order('name'),
-        supabase
-          .from('items')
-          .select('id, name, item_code, category, purchase_price, tax_rate, hsn, barcode_no, current_stock')
-          .eq('organization_id', organizationId)
-          .is('deleted_at', null)
-          .order('name'),
-      ]);
+      if (!data) return;
 
-      if (suppliersRes.data) {
-        setSuppliers(suppliersRes.data.map(s => ({
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          gstin: s.gst_number,
-          phone: s.phone,
-          address: s.address,
-        })));
-      }
-
-      if (itemsRes.data) {
-        setAvailableItems(itemsRes.data.map(i => ({
-          id: i.id,
-          name: i.name,
-          item_code: i.item_code,
-          category: i.category,
-          purchase_price: i.purchase_price,
-          tax_rate: i.tax_rate,
-          hsn: i.hsn,
-          barcode_no: i.barcode_no,
-        })));
-      }
-
-      if (isEditing) {
-        await loadExistingPurchase();
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setInitialLoading(false);
-    }
-  };
-
-  const loadExistingPurchase = async () => {
-    if (!purchaseId) return;
-
-    const { data } = await supabase
-      .from('purchases')
-      .select('*')
-      .eq('id', purchaseId)
-      .single();
-
-    if (data) {
       setExistingPurchaseNumber(data.purchase_number);
       setPurchaseDate(data.purchase_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
       setNotes(data.notes || '');
       setBillingMode(data.gst_enabled ? 'gst' : 'non-gst');
 
-      const supplier = suppliers.find(s => s.id === data.supplier_id);
+      const supplier = suppliersList.find(s => s.id === data.supplier_id);
       if (supplier) setSelectedSupplier(supplier);
 
       const { data: itemsData } = await supabase
@@ -194,20 +189,63 @@ export default function CreatePurchaseScreen() {
         .eq('purchase_id', purchaseId);
 
       if (itemsData && itemsData.length > 0) {
-        setPurchaseItems(itemsData.map((item: Record<string, unknown>) => ({
-          itemId: (item.item_id as string) || '',
-          name: (item.item_name as string) || '',
-          hsn: (item.hsn as string) || '',
-          quantity: Number(item.quantity) || 0,
-          rate: Number(item.rate) || 0,
-          discount: Number(item.discount) || 0,
-          discountType: ((item.discount_type as string) || 'percentage') as 'percentage' | 'flat',
-          taxRate: Number(item.tax_rate) || 0,
-          amount: Number(item.amount) || 0,
-        })));
+        setPurchaseItems(itemsData.map(mapPurchaseItemFromRow));
       }
-    }
-  };
+    };
+
+    const loadData = async () => {
+      if (!organizationId) return;
+
+      try {
+        const [suppliersRes, itemsRes] = await Promise.all([
+          supabase
+            .from('suppliers')
+            .select('id, name, email, gst_number, phone, address')
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null)
+            .order('name'),
+          supabase
+            .from('items')
+            .select('id, name, item_code, category, purchase_price, tax_rate, hsn, barcode_no, current_stock')
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null)
+            .order('name'),
+        ]);
+
+        const loadedSuppliers: Supplier[] = (suppliersRes.data || []).map(s => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          gstin: s.gst_number,
+          phone: s.phone,
+          address: s.address,
+        }));
+        setSuppliers(loadedSuppliers);
+
+        if (itemsRes.data) {
+          setAvailableItems(itemsRes.data.map(i => ({
+            id: i.id,
+            name: i.name,
+            item_code: i.item_code,
+            category: i.category,
+            purchase_price: i.purchase_price,
+            tax_rate: i.tax_rate,
+            hsn: i.hsn,
+            barcode_no: i.barcode_no,
+          })));
+        }
+
+        if (isEditing) {
+          await loadExistingPurchase(loadedSuppliers);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    loadData();
+  }, [organizationId, isEditing, purchaseId]);
 
   const animateStep = useCallback((direction: 'forward' | 'back') => {
     const toValue = direction === 'forward' ? -SCREEN_WIDTH : SCREEN_WIDTH;
@@ -225,12 +263,9 @@ export default function CreatePurchaseScreen() {
   }, [slideAnim, fadeAnim]);
 
   const goNext = () => {
-    if (step === 0 && !selectedSupplier) {
-      Alert.alert('Select Supplier', 'Please select a supplier to continue');
-      return;
-    }
-    if (step === 1 && purchaseItems.length === 0) {
-      Alert.alert('Add Items', 'Please add at least one item to continue');
+    const validation = getStepValidationError(step, selectedSupplier, purchaseItems.length);
+    if (validation) {
+      Alert.alert(validation.title, validation.message);
       return;
     }
     if (step < STEPS.length - 1) {
@@ -290,20 +325,13 @@ export default function CreatePurchaseScreen() {
   const updateItemQuantity = (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       setPurchaseItems(purchaseItems.filter(pi => pi.itemId !== itemId));
-    } else {
-      setPurchaseItems(purchaseItems.map(pi => {
-        if (pi.itemId === itemId) {
-          const baseAmount = pi.rate * quantity;
-          const discountAmount = pi.discountType === 'percentage'
-            ? baseAmount * (pi.discount / 100)
-            : pi.discount;
-          const afterDiscount = baseAmount - discountAmount;
-          const taxAmount = afterDiscount * (pi.taxRate / 100);
-          return { ...pi, quantity, amount: afterDiscount + taxAmount };
-        }
-        return pi;
-      }));
+      return;
     }
+    setPurchaseItems(purchaseItems.map(pi => {
+      if (pi.itemId !== itemId) return pi;
+      const { total } = calculateItemBreakdown(pi.rate, quantity, pi.discount, pi.discountType, pi.taxRate);
+      return { ...pi, quantity, amount: total };
+    }));
   };
 
   const calculateTotals = () => {
@@ -311,23 +339,14 @@ export default function CreatePurchaseScreen() {
     let totalTax = 0;
 
     purchaseItems.forEach(item => {
-      const baseAmount = item.rate * item.quantity;
-      const discountAmount = item.discountType === 'percentage'
-        ? baseAmount * (item.discount / 100)
-        : item.discount;
-      const afterDiscount = baseAmount - discountAmount;
-      const taxAmount = afterDiscount * (item.taxRate / 100);
-
+      const { afterDiscount, taxAmount } = calculateItemBreakdown(
+        item.rate, item.quantity, item.discount, item.discountType, item.taxRate
+      );
       subtotal += afterDiscount;
       totalTax += taxAmount;
     });
 
-    return {
-      subtotal,
-      cgst: totalTax / 2,
-      sgst: totalTax / 2,
-      total: subtotal + totalTax,
-    };
+    return { subtotal, cgst: totalTax / 2, sgst: totalTax / 2, total: subtotal + totalTax };
   };
 
   const totals = calculateTotals();
@@ -350,6 +369,8 @@ export default function CreatePurchaseScreen() {
     try {
       const purchaseNo = existingPurchaseNumber || await generatePurchaseNumber();
 
+      const { paidAmount, balance } = computePurchaseAmounts(status, totals.total);
+
       const purchaseData = {
         organization_id: organizationId,
         purchase_number: purchaseNo,
@@ -364,8 +385,8 @@ export default function CreatePurchaseScreen() {
         sgst: totals.sgst,
         igst: 0,
         total: totals.total,
-        paid_amount: status === 'paid' ? totals.total : 0,
-        balance: status === 'paid' ? 0 : totals.total,
+        paid_amount: paidAmount,
+        balance,
         status,
         gst_enabled: billingMode === 'gst',
         notes,
@@ -724,6 +745,8 @@ export default function CreatePurchaseScreen() {
   );
 }
 
+const SPACE_BETWEEN = 'space-between' as const;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
@@ -749,7 +772,7 @@ const styles = StyleSheet.create({
   supplierInfo: { flex: 1 },
   supplierName: { fontSize: 16, fontWeight: '600' },
   supplierDetail: { fontSize: 14, marginTop: 2 },
-  itemsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  itemsHeader: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, alignItems: 'center', marginBottom: 16 },
   addButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20 },
   addButtonText: { color: '#fff', fontWeight: '600', marginLeft: 4 },
   emptyItems: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -763,20 +786,20 @@ const styles = StyleSheet.create({
   qtyText: { fontSize: 16, fontWeight: '600', marginHorizontal: 12 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalContent: { height: '80%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '700' },
   modalList: { flex: 1 },
-  selectableItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
+  selectableItem: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 8 },
   itemCode: { fontSize: 14, marginTop: 2 },
   itemPrice: { fontSize: 16, fontWeight: '600' },
   reviewCard: { padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
   reviewLabel: { fontSize: 14, marginBottom: 8 },
   reviewValue: { fontSize: 18, fontWeight: '600' },
   reviewSubValue: { fontSize: 14, marginTop: 4 },
-  reviewItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  reviewItem: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
   reviewItemName: { fontSize: 14, flex: 1 },
   reviewItemAmount: { fontSize: 14, fontWeight: '500' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  totalRow: { flexDirection: 'row', justifyContent: SPACE_BETWEEN, paddingVertical: 8 },
   totalLabel: { fontSize: 14 },
   totalValue: { fontSize: 14, fontWeight: '500' },
   grandTotal: { borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)', marginTop: 8, paddingTop: 12 },

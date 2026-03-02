@@ -44,6 +44,23 @@ interface UseItemSearchReturn {
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+function classifyFetchError(err: unknown): { isNetwork: boolean; message: string } {
+  const message = err instanceof Error ? err.message : '';
+  const isNetwork = /network|fetch|Failed to fetch/i.test(message);
+  return { isNetwork, message: message || 'Failed to load items' };
+}
+
+function buildItemSearchFilter(query: string): string | null {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  const searchTerm = `%${trimmed}%`;
+  return `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`;
+}
+
 export function useItemSearch(organizationId: string | null): UseItemSearchReturn {
   const [items, setItems] = useState<Item[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,6 +77,40 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
+
+  const updateFetchLoadingState = useCallback((isFirstPage: boolean, isRefresh: boolean) => {
+    if (isFirstPage && !isRefresh) {
+      setStatus('loading');
+    }
+    if (!isFirstPage) {
+      setIsLoadingMore(true);
+    }
+  }, []);
+
+  const applyFetchResults = useCallback((fetchedItems: Item[], countResult: { count: number | null } | null, isFirstPage: boolean) => {
+    if (!isFirstPage) {
+      setItems((prev) => [...prev, ...fetchedItems]);
+      return;
+    }
+    setItems(fetchedItems);
+    const count = countResult?.count ?? null;
+    if (count !== null) {
+      setTotalCount(count);
+      totalCountRef.current = count;
+    }
+  }, []);
+
+  const handleFetchError = useCallback((err: unknown) => {
+    if (isAbortError(err)) return;
+    const { isNetwork, message } = classifyFetchError(err);
+    if (isNetwork) {
+      setIsOffline(true);
+      setError('Network error. Please check your connection and try again.');
+    } else {
+      setError(message);
+    }
+    setStatus('error');
+  }, []);
 
   const fetchItems = useCallback(
     async (query: string, pageNum: number, isRefresh: boolean = false) => {
@@ -78,18 +129,11 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
       }
       setIsOffline(false);
 
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
       const isFirstPage = pageNum === 0;
-      if (isFirstPage && !isRefresh) {
-        setStatus('loading');
-      }
-      if (!isFirstPage) {
-        setIsLoadingMore(true);
-      }
+      updateFetchLoadingState(isFirstPage, isRefresh);
 
       try {
         const from = pageNum * PAGE_SIZE;
@@ -109,14 +153,10 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
           .order('name', { ascending: true })
           .range(from, to);
 
-        if (query.trim()) {
-          const searchTerm = `%${query.trim()}%`;
-          countQuery = countQuery.or(
-            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`
-          );
-          dataQuery = dataQuery.or(
-            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`
-          );
+        const orFilter = buildItemSearchFilter(query);
+        if (orFilter) {
+          countQuery = countQuery.or(orFilter);
+          dataQuery = dataQuery.or(orFilter);
         }
 
         const [countResult, dataResult] = await Promise.all([
@@ -125,48 +165,22 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
         ]);
 
         if (currentQueryRef.current !== query) return;
-
         if (dataResult.error) throw dataResult.error;
 
         const fetchedItems = (dataResult.data || []) as Item[];
-
-        if (isFirstPage) {
-          setItems(fetchedItems);
-          if (countResult && 'count' in countResult && countResult.count !== null) {
-            setTotalCount(countResult.count);
-            totalCountRef.current = countResult.count;
-          }
-        } else {
-          setItems((prev) => [...prev, ...fetchedItems]);
-        }
-
+        applyFetchResults(fetchedItems, countResult as { count: number | null }, isFirstPage);
         setHasMore(fetchedItems.length === PAGE_SIZE);
         setPage(pageNum);
         setStatus('success');
         setError(null);
       } catch (err: unknown) {
-        const errorObj = err instanceof Error ? err : null;
-        if (errorObj?.name === 'AbortError') return;
-
-        const message = errorObj?.message ?? '';
-        const isNetworkError =
-          message.includes('network') ||
-          message.includes('fetch') ||
-          message.includes('Failed to fetch');
-
-        if (isNetworkError) {
-          setIsOffline(true);
-          setError('Network error. Please check your connection and try again.');
-        } else {
-          setError(message || 'Failed to load items');
-        }
-        setStatus('error');
+        handleFetchError(err);
       } finally {
         setIsLoadingMore(false);
         setIsRefreshing(false);
       }
     },
-    [organizationId]
+    [organizationId, updateFetchLoadingState, applyFetchResults, handleFetchError]
   );
 
   useEffect(() => {

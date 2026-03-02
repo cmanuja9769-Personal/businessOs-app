@@ -24,7 +24,6 @@ import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
-import { lightTap } from '@lib/haptics';
 
 interface Purchase {
   id: string;
@@ -39,6 +38,48 @@ interface Purchase {
 
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
+
+const STATUS_COLORS: Record<string, string> = {
+  paid: '#10B981',
+  unpaid: '#EF4444',
+  partial: '#F59E0B',
+};
+
+function getStatusColor(status: string, fallback: string): string {
+  return STATUS_COLORS[status] ?? fallback;
+}
+
+function extractPurchaseCount(
+  result: { count?: number | null; error: unknown } | null
+): number | null {
+  if (!result || !('count' in result) || result.count === null) return null;
+  return result.count ?? null;
+}
+
+function applyPurchasePageResults(
+  items: Purchase[],
+  isFirstPage: boolean,
+  countResult: { count?: number | null; error: unknown } | null,
+  setPurchases: (v: Purchase[] | ((prev: Purchase[]) => Purchase[])) => void,
+  setTotalCount: (v: number) => void,
+  totalCountRef: React.MutableRefObject<number>,
+): void {
+  if (isFirstPage) {
+    setPurchases(items);
+    const count = extractPurchaseCount(countResult);
+    if (count !== null) {
+      setTotalCount(count);
+      totalCountRef.current = count;
+    }
+    return;
+  }
+  setPurchases((prev) => [...prev, ...items]);
+}
+
+function getPurchaseErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return 'Failed to load purchases';
+}
 
 export default function PurchasesScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
@@ -64,7 +105,7 @@ export default function PurchasesScreen() {
   useFocusRefresh(useCallback(() => {
     fetchPurchases(searchQuery, 0, true);
     fetchStats();
-  }, [searchQuery]));
+  }, [searchQuery, fetchPurchases, fetchStats]));
 
   const fetchStats = useCallback(async () => {
     if (!organizationId) return;
@@ -147,21 +188,13 @@ export default function PurchasesScreen() {
 
       const items = (dataResult.data || []) as Purchase[];
 
-      if (isFirstPage) {
-        setPurchases(items);
-        if (countResult && 'count' in countResult && countResult.count !== null) {
-          setTotalCount(countResult.count);
-          totalCountRef.current = countResult.count;
-        }
-      } else {
-        setPurchases((prev) => [...prev, ...items]);
-      }
+      applyPurchasePageResults(items, isFirstPage, countResult, setPurchases, setTotalCount, totalCountRef);
 
       setHasMore(items.length === PAGE_SIZE);
       setPage(pageNum);
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load purchases');
+      setError(getPurchaseErrorMessage(err));
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -192,7 +225,7 @@ export default function PurchasesScreen() {
       fetchPurchases('', 0);
       fetchStats();
     }
-  }, [organizationId]);
+  }, [organizationId, fetchPurchases, fetchStats]);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && !loading) {
@@ -215,15 +248,6 @@ export default function PurchasesScreen() {
     return () => unsubscribe();
   }, [searchQuery, error, fetchPurchases]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid': return '#10B981';
-      case 'unpaid': return '#EF4444';
-      case 'partial': return '#F59E0B';
-      default: return colors.textSecondary;
-    }
-  };
-
   const renderPurchaseItem = useCallback(({ item }: { item: Purchase }) => (
     <TouchableOpacity
       style={[styles.purchaseCard, { backgroundColor: colors.card, ...shadows.sm }]}
@@ -239,7 +263,7 @@ export default function PurchasesScreen() {
             {item.supplier_name}
           </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, colors.textSecondary) }]}>
           <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
         </View>
       </View>

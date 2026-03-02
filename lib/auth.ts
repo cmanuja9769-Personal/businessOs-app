@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import type { User } from "@supabase/supabase-js"
+import type { User, SupabaseClient } from "@supabase/supabase-js"
 import { isDemoMode, DEMO_USER_ID } from "@/app/demo/helpers"
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -38,9 +38,32 @@ export async function getCurrentUser(): Promise<User | null> {
   return user || null
 }
 
-/**
- * Get user's role from database
- */
+async function tryCreateDefaultRole(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ role: string; permissions: Record<string, unknown> | null } | null> {
+  try {
+    const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
+    const isFirstUser = !existingRoles || existingRoles.length === 0
+    const defaultRole = isFirstUser ? "admin" : "user"
+
+    const { data: newRole, error: insertError } = await supabase
+      .from("user_roles")
+      .insert({
+        user_id: userId,
+        role: defaultRole,
+        permissions: {},
+      })
+      .select("role, permissions")
+      .single()
+
+    if (!insertError && newRole) return newRole
+  } catch {
+    return null
+  }
+  return null
+}
+
 export async function getUserRole(userId: string) {
   const supabase = await createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,47 +83,21 @@ export async function getUserRole(userId: string) {
 
   const { data, error } = await supabase.from("user_roles").select("role, permissions").eq("user_id", userId).single()
 
-  if (error) {
-    // Only log unexpected errors (not "not found" errors)
-    if (error.code !== "PGRST116") {
-      console.error("[v0] Error fetching user role:", {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        userId,
-      })
-    } else {
-      // User doesn't have a role yet - try to create one
-      try {
-        // Check if this is the first user (make them admin)
-        const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
-        const isFirstUser = !existingRoles || existingRoles.length === 0
-        const defaultRole = isFirstUser ? "admin" : "user"
+  if (!error) return data
 
-        const { data: newRole, error: insertError } = await supabase
-          .from("user_roles")
-          .insert({
-            user_id: userId,
-            role: defaultRole,
-            permissions: {},
-          })
-          .select("role, permissions")
-          .single()
-
-        if (!insertError && newRole) {
-          return newRole
-        }
-      } catch {
-        // Silently fail - will return default role
-      }
-    }
-
-    // Return default user role if table doesn't exist or user not found
+  if (error.code !== "PGRST116") {
+    console.error("[v0] Error fetching user role:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      userId,
+    })
     return { role: "user", permissions: null }
   }
 
-  return data
+  const newRole = await tryCreateDefaultRole(supabase, userId)
+  return newRole ?? { role: "user", permissions: null }
 }
 
 /**

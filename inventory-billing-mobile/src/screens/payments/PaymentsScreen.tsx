@@ -42,6 +42,62 @@ interface Payment {
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
 
+const PAYMENT_METHOD_ICONS: Record<string, string> = {
+  cash: '💵',
+  card: '💳',
+  upi: '📱',
+  bank_transfer: '🏦',
+  cheque: '📝',
+};
+
+function getPaymentMethodIcon(method: string): string {
+  return PAYMENT_METHOD_ICONS[method?.toLowerCase()] ?? '💰';
+}
+
+function normalizeJoinedField(field: unknown): unknown {
+  return Array.isArray(field) ? field[0] : field;
+}
+
+function normalizePaymentRows(rows: Record<string, unknown>[]): Payment[] {
+  return rows.map((row) => ({
+    ...row,
+    invoices: normalizeJoinedField(row.invoices),
+    purchases: normalizeJoinedField(row.purchases),
+  })) as Payment[];
+}
+
+function extractPaymentCount(
+  result: { count?: number | null; error: unknown } | null
+): number | null {
+  if (!result || !('count' in result) || result.count === null) return null;
+  return result.count ?? null;
+}
+
+function applyPaymentPageResults(
+  items: Payment[],
+  isFirstPage: boolean,
+  countResult: { count?: number | null; error: unknown } | null,
+  setPayments: (v: Payment[] | ((prev: Payment[]) => Payment[])) => void,
+  setTotalCount: (v: number) => void,
+  totalCountRef: React.MutableRefObject<number>,
+): void {
+  if (isFirstPage) {
+    setPayments(items);
+    const count = extractPaymentCount(countResult);
+    if (count !== null) {
+      setTotalCount(count);
+      totalCountRef.current = count;
+    }
+    return;
+  }
+  setPayments((prev) => [...prev, ...items]);
+}
+
+function getPaymentErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return 'Failed to load payments';
+}
+
 export default function PaymentsScreen() {
   const { colors } = useTheme();
   const { organizationId } = useAuth();
@@ -121,27 +177,15 @@ export default function PaymentsScreen() {
       if (currentQueryRef.current !== query) return;
       if (dataResult.error) throw dataResult.error;
 
-      const items = (dataResult.data || []).map((row: Record<string, unknown>) => ({
-        ...row,
-        invoices: Array.isArray(row.invoices) ? (row.invoices as unknown[])[0] : row.invoices,
-        purchases: Array.isArray(row.purchases) ? (row.purchases as unknown[])[0] : row.purchases,
-      })) as Payment[];
+      const items = normalizePaymentRows(dataResult.data || []);
 
-      if (isFirstPage) {
-        setPayments(items);
-        if (countResult && 'count' in countResult && countResult.count !== null) {
-          setTotalCount(countResult.count);
-          totalCountRef.current = countResult.count;
-        }
-      } else {
-        setPayments((prev) => [...prev, ...items]);
-      }
+      applyPaymentPageResults(items, isFirstPage, countResult, setPayments, setTotalCount, totalCountRef);
 
       setHasMore(items.length === PAGE_SIZE);
       setPage(pageNum);
       setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load payments');
+      setError(getPaymentErrorMessage(err));
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -169,7 +213,6 @@ export default function PaymentsScreen() {
 
   useEffect(() => {
     if (organizationId) fetchPayments('', 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, fetchPayments]);
 
   const handleEndReached = useCallback(() => {
@@ -191,17 +234,6 @@ export default function PaymentsScreen() {
     });
     return () => unsubscribe();
   }, [searchQuery, error, fetchPayments]);
-
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method?.toLowerCase()) {
-      case 'cash': return '💵';
-      case 'card': return '💳';
-      case 'upi': return '📱';
-      case 'bank_transfer': return '🏦';
-      case 'cheque': return '📝';
-      default: return '💰';
-    }
-  };
 
   const renderItem = useCallback(({ item }: { item: Payment }) => (
     <Card style={styles.paymentCard}>

@@ -45,6 +45,246 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const parseJsonItems = (str: string): IInvoiceItem[] => {
+  try {
+    const parsed = JSON.parse(str);
+    return Array.isArray(parsed) ? (parsed as IInvoiceItem[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const extractNestedItems = (raw: object): IInvoiceItem[] => {
+  if (!('items' in raw)) return [];
+  const items = (raw as { items?: unknown }).items;
+  return Array.isArray(items) ? (items as IInvoiceItem[]) : [];
+};
+
+const normalizeItems = (raw: unknown): IInvoiceItem[] => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as IInvoiceItem[];
+  if (typeof raw === 'string') return parseJsonItems(raw);
+  if (typeof raw === 'object' && raw !== null) return extractNestedItems(raw);
+  return [];
+};
+
+const computePackingQuantityForItem = (
+  invoiceItem: IInvoiceItem,
+  itemMap: Map<string, Item>,
+  currentPackingType: PackingType,
+  looseCacheMap: Record<string, number>,
+  cacheUpdates: Record<string, number>
+): IInvoiceItem => {
+  if (!invoiceItem.itemId) return invoiceItem;
+
+  const selectedItem = itemMap.get(invoiceItem.itemId);
+  if (!selectedItem) return invoiceItem;
+
+  let newQuantity = invoiceItem.quantity;
+
+  if (currentPackingType === 'carton') {
+    const perCartonQty = Math.floor(selectedItem.per_carton_quantity || 1);
+    cacheUpdates[invoiceItem.itemId] = Math.floor(invoiceItem.quantity);
+    newQuantity = perCartonQty;
+  } else {
+    const cached = looseCacheMap[invoiceItem.itemId];
+    if (cached) {
+      newQuantity = cached;
+    }
+  }
+
+  return {
+    ...invoiceItem,
+    quantity: newQuantity,
+    amount: newQuantity * invoiceItem.rate,
+  };
+};
+
+const getQuantityForPackingType = (item: Item, currentPackingType: PackingType): number =>
+  currentPackingType === 'carton' ? Math.floor(item.per_carton_quantity || 1) : 1;
+
+const buildNewInvoiceItem = (
+  item: Item,
+  quantity: number,
+  price: number,
+  gstRate: number
+): IInvoiceItem => ({
+  itemId: item.id,
+  itemName: item.name,
+  quantity,
+  unit: 'pcs',
+  rate: price,
+  gstRate,
+  cessRate: 0,
+  discount: 0,
+  amount: price * quantity,
+  hsnCode: item.hsn,
+});
+
+const mapInvoiceRowToCustomer = (invoice: InvoiceRow): Customer | null => {
+  if (!invoice.customer_id) return null;
+  return {
+    id: invoice.customer_id,
+    name: invoice.customer_name ?? 'Customer',
+    email: invoice.customer_email ?? undefined,
+    gstin: invoice.customer_gst ?? undefined,
+    phone: invoice.customer_phone ?? undefined,
+  };
+};
+
+const mapInvoiceItemsFromDb = (itemsData: InvoiceItemRow[]): IInvoiceItem[] =>
+  itemsData.map((item) => ({
+    itemId: item.item_id || '',
+    itemName: item.item_name || 'Item',
+    quantity: item.quantity || 1,
+    unit: item.unit || 'pcs',
+    rate: item.rate || 0,
+    amount: item.amount || 0,
+    gstRate: item.gst_rate || item.tax_rate || 0,
+    cessRate: item.cess_rate || 0,
+    discount: item.discount || 0,
+    hsnCode: item.hsn || '',
+  }));
+
+const resolveBillingMode = (invoice: InvoiceRow): BillingMode => {
+  if (invoice.billing_mode) return invoice.billing_mode;
+  return invoice.gst_enabled === false ? 'non-gst' : 'gst';
+};
+
+const INVOICE_NUMBER_PREFIXES: Record<string, string> = {
+  invoice: 'INV',
+  sales_order: 'SO',
+  quotation: 'QUO',
+  proforma: 'PRO',
+  delivery_challan: 'DC',
+  credit_note: 'CN',
+  debit_note: 'DN',
+};
+
+const generateInvoiceNumber = async (
+  organizationId: string,
+  documentType: DocumentType,
+  existingNumber: string | null
+): Promise<string> => {
+  if (existingNumber) return existingNumber;
+
+  const year = new Date().getFullYear();
+  const prefix = INVOICE_NUMBER_PREFIXES[documentType] || 'INV';
+
+  const { count } = await supabase
+    .from('invoices')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .like('invoice_number', `${prefix}/${year}/%`);
+
+  return `${prefix}/${year}/${((count || 0) + 1).toString().padStart(4, '0')}`;
+};
+
+const buildBaseInvoiceData = (params: {
+  organizationId: string;
+  documentType: DocumentType;
+  pricingMode: PricingMode;
+  billingMode: BillingMode;
+  customer: Customer;
+  invoiceDate: string;
+  totals: ReturnType<typeof calculateInvoiceTotals>;
+  notes: string;
+}) => ({
+  organization_id: params.organizationId,
+  document_type: params.documentType,
+  pricing_mode: params.pricingMode,
+  billing_mode: params.billingMode,
+  gst_enabled: params.billingMode === 'gst',
+  customer_id: params.customer.id,
+  customer_name: params.customer.name,
+  customer_phone: params.customer.phone || null,
+  customer_address: params.customer.address || null,
+  customer_gst: params.customer.gstin || null,
+  customer_email: params.customer.email || null,
+  invoice_date: params.invoiceDate,
+  subtotal: params.totals.subtotal,
+  cgst: params.billingMode === 'gst' ? params.totals.cgst : 0,
+  sgst: params.billingMode === 'gst' ? params.totals.sgst : 0,
+  igst: params.billingMode === 'gst' ? params.totals.igst : 0,
+  discount: params.totals.discount,
+  total: params.totals.total,
+  paid_amount: 0,
+  balance: params.totals.total,
+  status: 'unpaid',
+  notes: params.notes || null,
+});
+
+const buildItemsPayload = (invoiceId: string, items: IInvoiceItem[]) =>
+  items.map((item) => ({
+    invoice_id: invoiceId,
+    item_id: item.itemId || null,
+    item_name: item.itemName || 'Item',
+    hsn: item.hsnCode || null,
+    quantity: item.quantity || 1,
+    unit: item.unit || 'pcs',
+    rate: item.rate || 0,
+    discount: item.discount || 0,
+    discount_type: 'percentage',
+    tax_rate: item.gstRate || 0,
+    amount: (item.quantity || 1) * (item.rate || 0),
+  }));
+
+const updateExistingInvoice = async (
+  organizationId: string,
+  invoiceId: string,
+  baseData: ReturnType<typeof buildBaseInvoiceData>,
+  invoiceNumber: string,
+  items: IInvoiceItem[]
+) => {
+  const { error } = await supabase
+    .from('invoices')
+    .update({ ...baseData, invoice_number: invoiceNumber })
+    .eq('organization_id', organizationId)
+    .eq('id', invoiceId);
+
+  if (error) throw error;
+
+  await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId);
+
+  if (items.length > 0) {
+    await supabase.from('invoice_items').insert(buildItemsPayload(invoiceId, items));
+  }
+};
+
+const createNewInvoice = async (
+  baseData: ReturnType<typeof buildBaseInvoiceData>,
+  invoiceNumber: string,
+  items: IInvoiceItem[]
+) => {
+  const { data: newInvoice, error } = await supabase
+    .from('invoices')
+    .insert({ ...baseData, invoice_number: invoiceNumber })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  if (newInvoice && items.length > 0) {
+    const { error: itemsError } = await supabase
+      .from('invoice_items')
+      .insert(buildItemsPayload(newInvoice.id, items));
+
+    if (itemsError) {
+      console.error('Failed to save invoice items:', itemsError);
+    }
+  }
+};
+
+function computeHasUnsavedChanges(
+  savedSuccessfully: boolean,
+  selectedCustomer: Customer | null,
+  invoiceItems: IInvoiceItem[],
+  notes: string
+): boolean {
+  if (savedSuccessfully) return false;
+  return selectedCustomer !== null || invoiceItems.length > 0 || notes.length > 0;
+}
+
 export default function CreateInvoiceScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
   const route = useRoute<RouteProp<Record<string, CreateInvoiceRouteParams | undefined>, string>>();
@@ -95,39 +335,18 @@ export default function CreateInvoiceScreen() {
 
   const docConfig = DOCUMENT_TYPES[documentType];
 
-  // Track unsaved changes - true if user has selected a customer or added items
-  // But false if we've just saved successfully (to avoid prompt after save)
-  const hasUnsavedChanges = useMemo(() => {
-    if (savedSuccessfully) return false;
-    return selectedCustomer !== null || invoiceItems.length > 0 || notes.length > 0;
-  }, [selectedCustomer, invoiceItems, notes, savedSuccessfully]);
+  const hasUnsavedChanges = useMemo(
+    () => computeHasUnsavedChanges(savedSuccessfully, selectedCustomer, invoiceItems, notes),
+    [selectedCustomer, invoiceItems, notes, savedSuccessfully]
+  );
 
-  // Warn user when navigating away with unsaved changes
   useUnsavedChanges({
-    hasUnsavedChanges: hasUnsavedChanges, // savedSuccessfully already handled in memo
+    hasUnsavedChanges,
     title: 'Discard Invoice?',
     message: `You have unsaved changes to this ${docConfig.label.toLowerCase()}. Are you sure you want to discard them?`,
     confirmText: 'Discard',
     cancelText: 'Keep Editing',
   });
-
-  const normalizeItems = (raw: unknown): IInvoiceItem[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as IInvoiceItem[];
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? (parsed as IInvoiceItem[]) : [];
-      } catch {
-        return [];
-      }
-    }
-    if (typeof raw === 'object' && raw !== null && 'items' in raw) {
-      const items = (raw as { items?: unknown }).items;
-      if (Array.isArray(items)) return items as IInvoiceItem[];
-    }
-    return [];
-  };
 
   const animateStep = useCallback((direction: 'forward' | 'back') => {
     const toValue = direction === 'forward' ? -SCREEN_WIDTH : SCREEN_WIDTH;
@@ -162,50 +381,107 @@ export default function CreateInvoiceScreen() {
   }, [slideAnim, fadeAnim]);
 
   useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        if (!organizationId) {
+          setCustomers([]);
+          return;
+        }
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .is('deleted_at', null)
+          .order('name');
+
+        if (!error && data) {
+          setCustomers(data);
+        }
+      } catch (error) {
+        console.error('Error fetching customers:', error);
+      }
+    };
+
+    const fetchItems = async () => {
+      try {
+        if (!organizationId) {
+          setAvailableItems([]);
+          return;
+        }
+        const { count, error: countError } = await supabase
+          .from('items')
+          .select('*', { count: 'exact', head: true })
+          .eq('organization_id', organizationId)
+          .is('deleted_at', null);
+
+        if (countError) {
+          console.error('[ITEMS] Count error:', countError);
+          return;
+        }
+
+        if (!count || count === 0) {
+          setAvailableItems([]);
+          return;
+        }
+
+        const PAGE_SIZE = 1000;
+        const totalPages = Math.ceil(count / PAGE_SIZE);
+        const allItems: Item[] = [];
+
+        for (let page = 0; page < totalPages; page++) {
+          const from = page * PAGE_SIZE;
+          const to = from + PAGE_SIZE - 1;
+
+          const { data, error } = await supabase
+            .from('items')
+            .select('*')
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null)
+            .order('name')
+            .range(from, to);
+
+          if (error) {
+            console.error('[ITEMS] Batch error:', error);
+            break;
+          }
+
+          if (data) {
+            allItems.push(...data);
+          }
+        }
+
+        setAvailableItems(allItems);
+      } catch (error) {
+        console.error('[ITEMS] Fetch error:', error);
+      }
+    };
+
     fetchCustomers();
     fetchItems();
   }, [organizationId]);
 
-  // Handle packing type changes with quantity caching
+  const availableItemsRef = useRef(availableItems);
+  availableItemsRef.current = availableItems;
+
+  const looseQuantityCacheRef = useRef(looseQuantityCache);
+  looseQuantityCacheRef.current = looseQuantityCache;
+
   useEffect(() => {
-    if (invoiceItems.length === 0) return;
+    const cacheUpdates: Record<string, number> = {};
+    const currentItems = availableItemsRef.current;
+    const itemMap = new Map(currentItems.map(i => [i.id, i]));
 
-    const updatedItems = invoiceItems.map((invoiceItem) => {
-      if (!invoiceItem.itemId) return invoiceItem;
-
-      const selectedItem = availableItems.find((i) => i.id === invoiceItem.itemId);
-      if (!selectedItem) return invoiceItem;
-
-      let newQuantity = invoiceItem.quantity;
-
-      if (packingType === 'carton') {
-        // Switching to carton mode - cache loose quantity and convert to cartons
-        const perCartonQty = Math.floor(selectedItem.per_carton_quantity || 1);
-        
-        // Save current loose quantity to cache (as integer)
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [invoiceItem.itemId]: Math.floor(invoiceItem.quantity)
-        }));
-
-        // Convert to cartons (use per carton quantity)
-        newQuantity = perCartonQty;
-      } else {
-        // Switching to loose mode - restore cached quantity if available
-        if (looseQuantityCache[invoiceItem.itemId]) {
-          newQuantity = looseQuantityCache[invoiceItem.itemId];
-        }
-      }
-
-      return {
-        ...invoiceItem,
-        quantity: newQuantity,
-        amount: newQuantity * invoiceItem.rate,
-      };
+    setInvoiceItems(prevItems => {
+      if (prevItems.length === 0) return prevItems;
+      return prevItems.map((invoiceItem) =>
+        computePackingQuantityForItem(invoiceItem, itemMap, packingType, looseQuantityCacheRef.current, cacheUpdates)
+      );
     });
 
-    setInvoiceItems(updatedItems);
-  }, [packingType]); // Only re-run when packing type changes
+    if (Object.keys(cacheUpdates).length > 0) {
+      setLooseQuantityCache(prev => ({ ...prev, ...cacheUpdates }));
+    }
+  }, [packingType]);
 
   useEffect(() => {
     const title = isEditing 
@@ -217,8 +493,62 @@ export default function CreateInvoiceScreen() {
   useEffect(() => {
     if (!isEditing) return;
     if (!organizationId) return;
+
+    const fetchInvoiceForEdit = async () => {
+      try {
+        if (!invoiceId) return;
+        setInitialLoading(true);
+
+        const { data, error } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('id', invoiceId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+          Alert.alert('Error', 'Invoice not found');
+          navigation.goBack();
+          return;
+        }
+
+        const invoice = data as InvoiceRow;
+
+        setDocumentType(invoice.document_type || 'invoice');
+        setExistingInvoiceNumber(invoice.invoice_number ?? null);
+        setInvoiceDate(invoice.invoice_date ?? new Date().toISOString().split('T')[0]);
+        setNotes(invoice.notes ?? '');
+        setPricingMode(invoice.pricing_mode || 'sale');
+        setBillingMode(resolveBillingMode(invoice));
+
+        const customerFromInvoice = mapInvoiceRowToCustomer(invoice);
+        if (customerFromInvoice) {
+          setSelectedCustomer(customerFromInvoice);
+        }
+
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('invoice_items')
+          .select('*')
+          .eq('invoice_id', invoiceId);
+
+        const mappedItems = (!itemsError && itemsData?.length)
+          ? mapInvoiceItemsFromDb(itemsData as InvoiceItemRow[])
+          : normalizeItems(invoice.items);
+        setInvoiceItems(mappedItems);
+        
+        setStep(2);
+      } catch (error: unknown) {
+        console.error('[CREATE_INVOICE] fetchInvoiceForEdit error:', error);
+        Alert.alert('Error', getErrorMessage(error, 'Failed to load invoice'));
+        navigation.goBack();
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
     fetchInvoiceForEdit();
-  }, [isEditing, organizationId, invoiceId]);
+  }, [isEditing, organizationId, invoiceId, navigation]);
 
   useEffect(() => {
     if (!preselectedCustomerId) return;
@@ -231,222 +561,30 @@ export default function CreateInvoiceScreen() {
     }
   }, [preselectedCustomerId, customers, isEditing]);
 
-  const fetchInvoiceForEdit = async () => {
-    try {
-      if (!invoiceId) return;
-      setInitialLoading(true);
-
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .eq('id', invoiceId)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!data) {
-        Alert.alert('Error', 'Invoice not found');
-        navigation.goBack();
-        return;
-      }
-
-      const invoice = data as InvoiceRow;
-
-      setDocumentType(invoice.document_type || 'invoice');
-      setExistingInvoiceNumber(invoice.invoice_number ?? null);
-      setInvoiceDate(invoice.invoice_date ?? new Date().toISOString().split('T')[0]);
-      setNotes(invoice.notes ?? '');
-      
-      setPricingMode(invoice.pricing_mode || 'sale');
-      if (invoice.billing_mode) {
-        setBillingMode(invoice.billing_mode);
-      } else {
-        setBillingMode(invoice.gst_enabled === false ? 'non-gst' : 'gst');
-      }
-
-      const customerFromInvoice: Customer | null = invoice.customer_id
-        ? {
-            id: invoice.customer_id,
-            name: invoice.customer_name ?? 'Customer',
-            email: invoice.customer_email ?? undefined,
-            gstin: invoice.customer_gst ?? undefined,
-            phone: invoice.customer_phone ?? undefined,
-          }
-        : null;
-
-      if (customerFromInvoice) {
-        setSelectedCustomer(customerFromInvoice);
-      }
-
-      // Try to fetch items from invoice_items table first (web app structure)
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .eq('invoice_id', invoiceId);
-
-      if (!itemsError && itemsData && itemsData.length > 0) {
-        // Map invoice_items table columns to our IInvoiceItem interface
-        const mappedItems: IInvoiceItem[] = (itemsData as InvoiceItemRow[]).map((item) => ({
-          itemId: item.item_id || '',
-          itemName: item.item_name || 'Item',
-          quantity: item.quantity || 1,
-          unit: item.unit || 'pcs',
-          rate: item.rate || 0,
-          amount: item.amount || 0,
-          gstRate: item.gst_rate || item.tax_rate || 0,
-          cessRate: item.cess_rate || 0,
-          discount: item.discount || 0,
-          hsnCode: item.hsn || '',
-        }));
-        setInvoiceItems(mappedItems);
-      } else {
-        const items = normalizeItems(invoice.items);
-        setInvoiceItems(items);
-      }
-      
-      setStep(2); // Go to items step when editing
-    } catch (error: unknown) {
-      console.error('[CREATE_INVOICE] fetchInvoiceForEdit error:', error);
-      Alert.alert('Error', getErrorMessage(error, 'Failed to load invoice'));
-      navigation.goBack();
-    } finally {
-      setInitialLoading(false);
-    }
-  };
-
-  const fetchCustomers = async () => {
-    try {
-      if (!organizationId) {
-        setCustomers([]);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .is('deleted_at', null)
-        .order('name');
-
-      if (!error && data) {
-        setCustomers(data);
-      }
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-    }
-  };
-
-  const fetchItems = async () => {
-    try {
-      if (!organizationId) {
-        setAvailableItems([]);
-        return;
-      }
-      const { count, error: countError } = await supabase
-        .from('items')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .is('deleted_at', null);
-
-      if (countError) {
-        console.error('[ITEMS] Count error:', countError);
-        return;
-      }
-
-      if (!count || count === 0) {
-        setAvailableItems([]);
-        return;
-      }
-
-      const PAGE_SIZE = 1000;
-      const totalPages = Math.ceil(count / PAGE_SIZE);
-      const allItems: Item[] = [];
-
-      for (let page = 0; page < totalPages; page++) {
-        const from = page * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
-
-        const { data, error } = await supabase
-          .from('items')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .is('deleted_at', null)
-          .order('name')
-          .range(from, to);
-
-        if (error) {
-          console.error('[ITEMS] Batch error:', error);
-          break;
-        }
-
-        if (data) {
-          allItems.push(...data);
-        }
-      }
-
-      setAvailableItems(allItems);
-    } catch (error) {
-      console.error('[ITEMS] Fetch error:', error);
-    }
-  };
-
   const getItemPrice = (item: Item): number => getItemPriceUtil(item, pricingMode);
 
   const addItem = (item: Item) => {
-    // Use price based on selected pricing mode
     const price = getItemPrice(item);
     const gstRate = billingMode === 'gst' ? (item.tax_rate ?? 0) : 0;
-    const hsnCode = item.hsn;
-    
+    const quantityStep = getQuantityForPackingType(item, packingType);
     const existingIndex = invoiceItems.findIndex(i => i.itemId === item.id);
-    
+
     if (existingIndex >= 0) {
       const updated = [...invoiceItems];
-      
-      // Determine increment based on packing type (always integer)
-      const increment = packingType === 'carton' 
-        ? Math.floor(item.per_carton_quantity || 1)
-        : 1;
-      
-      updated[existingIndex].quantity += increment;
+      updated[existingIndex].quantity += quantityStep;
       updated[existingIndex].amount = updated[existingIndex].quantity * updated[existingIndex].rate;
-      
-      // Update cache if in loose mode
+
       if (packingType === 'loose') {
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [item.id]: updated[existingIndex].quantity
-        }));
+        setLooseQuantityCache(prev => ({ ...prev, [item.id]: updated[existingIndex].quantity }));
       }
-      
       setInvoiceItems(updated);
-    } else {
-      // Determine initial quantity based on packing type (always integer)
-      const initialQuantity = packingType === 'carton' 
-        ? Math.floor(item.per_carton_quantity || 1)
-        : 1;
-      
-      // Cache initial loose quantity
-      if (packingType === 'loose') {
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [item.id]: initialQuantity
-        }));
-      }
-      
-      const newItem: IInvoiceItem = {
-        itemId: item.id,
-        itemName: item.name,
-        quantity: initialQuantity,
-        unit: 'pcs',
-        rate: price,
-        gstRate: gstRate,
-        cessRate: 0,
-        discount: 0,
-        amount: price * initialQuantity,
-        hsnCode: hsnCode,
-      };
-      setInvoiceItems([...invoiceItems, newItem]);
+      return;
     }
+
+    if (packingType === 'loose') {
+      setLooseQuantityCache(prev => ({ ...prev, [item.id]: quantityStep }));
+    }
+    setInvoiceItems([...invoiceItems, buildNewInvoiceItem(item, quantityStep, price, gstRate)]);
   };
 
   const updateItemQuantity = (index: number, quantity: number) => {
@@ -507,144 +645,27 @@ export default function CreateInvoiceScreen() {
       return;
     }
 
+    const actionLabel = isEditing ? 'updated' : 'created';
     setLoading(true);
 
     try {
       const totals = calculateInvoiceTotals(invoiceItems, billingMode, false);
-      
-      // Generate proper invoice number based on document type
-      const generateProperInvoiceNumber = async () => {
-        if (existingInvoiceNumber) return existingInvoiceNumber;
-        
-        const year = new Date().getFullYear();
-        const prefixMap: Record<string, string> = {
-          invoice: 'INV',
-          sales_order: 'SO',
-          quotation: 'QUO',
-          proforma: 'PRO',
-          delivery_challan: 'DC',
-          credit_note: 'CN',
-          debit_note: 'DN',
-        };
-        
-        const prefix = prefixMap[documentType] || 'INV';
-        
-        // Get count of invoices with this prefix and year
-        const { count } = await supabase
-          .from('invoices')
-          .select('*', { count: 'exact', head: true })
-          .eq('organization_id', organizationId)
-          .like('invoice_number', `${prefix}/${year}/%`);
-        
-        return `${prefix}/${year}/${((count || 0) + 1).toString().padStart(4, '0')}`;
-      };
+      const invoice_number = await generateInvoiceNumber(organizationId, documentType, existingInvoiceNumber);
+      const baseData = buildBaseInvoiceData({
+        organizationId, documentType, pricingMode, billingMode,
+        customer: selectedCustomer, invoiceDate, totals, notes,
+      });
 
-      // Only include columns that exist in the database schema
-      const baseInvoiceData = {
-        organization_id: organizationId,
-        document_type: documentType,
-        pricing_mode: pricingMode,
-        billing_mode: billingMode,
-        gst_enabled: billingMode === 'gst',
-        customer_id: selectedCustomer.id,
-        customer_name: selectedCustomer.name,
-        customer_phone: selectedCustomer.phone || null,
-        customer_address: selectedCustomer.address || null,
-        customer_gst: selectedCustomer.gstin || null,
-        customer_email: selectedCustomer.email || null,
-        invoice_date: invoiceDate,
-        subtotal: totals.subtotal,
-        cgst: billingMode === 'gst' ? totals.cgst : 0,
-        sgst: billingMode === 'gst' ? totals.sgst : 0,
-        igst: billingMode === 'gst' ? totals.igst : 0,
-        discount: totals.discount,
-        total: totals.total,
-        paid_amount: 0,
-        balance: totals.total,
-        status: 'unpaid',
-        notes: notes || null,
-      };
-
-      if (isEditing && invoiceId) {
-        const invoice_number = await generateProperInvoiceNumber();
-        const { error } = await supabase
-          .from('invoices')
-          .update({ ...baseInvoiceData, invoice_number })
-          .eq('organization_id', organizationId)
-          .eq('id', invoiceId);
-
-        if (error) throw error;
-
-        // Delete old items and insert new ones
-        await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', invoiceId);
-
-        if (invoiceItems.length > 0) {
-          const itemsToInsert = invoiceItems.map((item) => ({
-            invoice_id: invoiceId,
-            item_id: item.itemId || null,
-            item_name: item.itemName || 'Item',
-            hsn: item.hsnCode || null,
-            quantity: item.quantity || 1,
-            unit: item.unit || 'pcs',
-            rate: item.rate || 0,
-            discount: item.discount || 0,
-            discount_type: 'percentage',
-            tax_rate: item.gstRate || 0,
-            amount: (item.quantity || 1) * (item.rate || 0),
-          }));
-
-          await supabase
-            .from('invoice_items')
-            .insert(itemsToInsert);
-        }
-
-        setSavedSuccessfully(true);
-        Alert.alert('Success', `${docConfig.label} updated!`, [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+      if (isEditing) {
+        await updateExistingInvoice(organizationId, invoiceId!, baseData, invoice_number, invoiceItems);
       } else {
-        const invoice_number = await generateProperInvoiceNumber();
-        const { data: newInvoice, error } = await supabase
-          .from('invoices')
-          .insert({ ...baseInvoiceData, invoice_number })
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Save items to invoice_items table
-        if (newInvoice && invoiceItems.length > 0) {
-          const itemsToInsert = invoiceItems.map((item) => ({
-            invoice_id: newInvoice.id,
-            item_id: item.itemId || null,
-            item_name: item.itemName || 'Item',
-            hsn: item.hsnCode || null,
-            quantity: item.quantity || 1,
-            unit: item.unit || 'pcs',
-            rate: item.rate || 0,
-            discount: item.discount || 0,
-            discount_type: 'percentage',
-            tax_rate: item.gstRate || 0,
-            amount: (item.quantity || 1) * (item.rate || 0),
-          }));
-
-          const { error: itemsError } = await supabase
-            .from('invoice_items')
-            .insert(itemsToInsert);
-
-          if (itemsError) {
-            console.error('Failed to save invoice items:', itemsError);
-          }
-        }
-
-        setSavedSuccessfully(true);
-        Alert.alert('Success', `${docConfig.label} created!`, [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+        await createNewInvoice(baseData, invoice_number, invoiceItems);
       }
+
+      setSavedSuccessfully(true);
+      Alert.alert('Success', `${docConfig.label} ${actionLabel}!`, [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
     } catch (error: unknown) {
       Alert.alert('Error', getErrorMessage(error, 'Failed to save'));
     } finally {
@@ -831,193 +852,190 @@ export default function CreateInvoiceScreen() {
     </View>
   );
 
-  const renderItemsStep = () => (
-    <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={[styles.stepTitle, { color: colors.text }]}>
-        Add Items
+  const renderPricingModeSection = () => (
+    <View style={styles.modeSection}>
+      <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
+        Pricing Mode <Text style={{ color: colors.error }}>*</Text>
       </Text>
-      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-        Select products or services for your {docConfig.label.toLowerCase()}
+      <View style={styles.modeButtonsRow}>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            { backgroundColor: colors.card, ...shadows.sm },
+            pricingMode === 'sale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
+          ]}
+          onPress={() => setPricingMode('sale')}
+        >
+          <Text style={[
+            styles.modeButtonText,
+            { color: pricingMode === 'sale' ? colors.primary : colors.text }
+          ]}>
+            Sale Price (MRP)
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            { backgroundColor: colors.card, ...shadows.sm },
+            pricingMode === 'wholesale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
+          ]}
+          onPress={() => setPricingMode('wholesale')}
+        >
+          <Text style={[
+            styles.modeButtonText,
+            { color: pricingMode === 'wholesale' ? colors.primary : colors.text }
+          ]}>
+            Wholesale
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            { backgroundColor: colors.card, ...shadows.sm },
+            pricingMode === 'quantity' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
+          ]}
+          onPress={() => setPricingMode('quantity')}
+        >
+          <Text style={[
+            styles.modeButtonText,
+            { color: pricingMode === 'quantity' ? colors.primary : colors.text }
+          ]}>
+            Bulk/Quantity
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderBillingModeSection = () => (
+    <View style={styles.modeSection}>
+      <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
+        Billing Mode
       </Text>
-
-      {/* Pricing Mode Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Pricing Mode <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'sale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('sale')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'sale' ? colors.primary : colors.text }
-            ]}>
-              Sale Price (MRP)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'wholesale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('wholesale')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'wholesale' ? colors.primary : colors.text }
-            ]}>
-              Wholesale
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'quantity' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('quantity')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'quantity' ? colors.primary : colors.text }
-            ]}>
-              Bulk/Quantity
-            </Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.modeButtonsRow}>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            styles.modeButtonWide,
+            { backgroundColor: colors.card, ...shadows.sm },
+            billingMode === 'gst' && { borderWidth: 2, borderColor: colors.success, backgroundColor: colors.successLight }
+          ]}
+          onPress={() => setBillingMode('gst')}
+        >
+          <Ionicons 
+            name="receipt-outline" 
+            size={16} 
+            color={billingMode === 'gst' ? colors.success : colors.textSecondary} 
+          />
+          <Text style={[
+            styles.modeButtonText,
+            { color: billingMode === 'gst' ? colors.success : colors.text }
+          ]}>
+            GST Billing
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            styles.modeButtonWide,
+            { backgroundColor: colors.card, ...shadows.sm },
+            billingMode === 'non-gst' && { borderWidth: 2, borderColor: colors.warning, backgroundColor: colors.warningLight }
+          ]}
+          onPress={() => setBillingMode('non-gst')}
+        >
+          <Ionicons 
+            name="document-outline" 
+            size={16} 
+            color={billingMode === 'non-gst' ? colors.warning : colors.textSecondary} 
+          />
+          <Text style={[
+            styles.modeButtonText,
+            { color: billingMode === 'non-gst' ? colors.warning : colors.text }
+          ]}>
+            Non-GST
+          </Text>
+        </TouchableOpacity>
       </View>
+    </View>
+  );
 
-      {/* Billing Mode Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Billing Mode
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              billingMode === 'gst' && { borderWidth: 2, borderColor: colors.success, backgroundColor: colors.successLight }
-            ]}
-            onPress={() => setBillingMode('gst')}
-          >
-            <Ionicons 
-              name="receipt-outline" 
-              size={16} 
-              color={billingMode === 'gst' ? colors.success : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: billingMode === 'gst' ? colors.success : colors.text }
-            ]}>
-              GST Billing
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              billingMode === 'non-gst' && { borderWidth: 2, borderColor: colors.warning, backgroundColor: colors.warningLight }
-            ]}
-            onPress={() => setBillingMode('non-gst')}
-          >
-            <Ionicons 
-              name="document-outline" 
-              size={16} 
-              color={billingMode === 'non-gst' ? colors.warning : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: billingMode === 'non-gst' ? colors.warning : colors.text }
-            ]}>
-              Non-GST
-            </Text>
-          </TouchableOpacity>
-        </View>
+  const renderPackingTypeSection = () => (
+    <View style={styles.modeSection}>
+      <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
+        Packing Type <Text style={{ color: colors.error }}>*</Text>
+      </Text>
+      <View style={styles.modeButtonsRow}>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            styles.modeButtonWide,
+            { backgroundColor: colors.card, ...shadows.sm },
+            packingType === 'loose' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+          ]}
+          onPress={() => setPackingType('loose')}
+        >
+          <Ionicons 
+            name="cube-outline" 
+            size={16} 
+            color={packingType === 'loose' ? colors.info : colors.textSecondary} 
+          />
+          <Text style={[
+            styles.modeButtonText,
+            { color: packingType === 'loose' ? colors.info : colors.text }
+          ]}>
+            Loose Quantity
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            styles.modeButtonWide,
+            { backgroundColor: colors.card, ...shadows.sm },
+            packingType === 'carton' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
+          ]}
+          onPress={() => setPackingType('carton')}
+        >
+          <Ionicons 
+            name="apps-outline" 
+            size={16} 
+            color={packingType === 'carton' ? colors.info : colors.textSecondary} 
+          />
+          <Text style={[
+            styles.modeButtonText,
+            { color: packingType === 'carton' ? colors.info : colors.text }
+          ]}>
+            Pack Cartons
+          </Text>
+        </TouchableOpacity>
       </View>
+    </View>
+  );
 
-      {/* Packing Type Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Packing Type <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              packingType === 'loose' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
-            ]}
-            onPress={() => setPackingType('loose')}
-          >
-            <Ionicons 
-              name="cube-outline" 
-              size={16} 
-              color={packingType === 'loose' ? colors.info : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: packingType === 'loose' ? colors.info : colors.text }
-            ]}>
-              Loose Quantity
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              packingType === 'carton' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
-            ]}
-            onPress={() => setPackingType('carton')}
-          >
-            <Ionicons 
-              name="apps-outline" 
-              size={16} 
-              color={packingType === 'carton' ? colors.info : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: packingType === 'carton' ? colors.info : colors.text }
-            ]}>
-              Pack Cartons
-            </Text>
-          </TouchableOpacity>
+  const renderSelectedItemsSection = () => {
+    if (invoiceItems.length === 0) {
+      return (
+        <View style={[styles.emptyItemsState, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <View style={[styles.emptyItemsIconContainer, { backgroundColor: colors.primaryLight }]}>
+            <Ionicons name="cube-outline" size={40} color={colors.primary} />
+          </View>
+          <Text style={[styles.emptyItemsTitle, { color: colors.text }]}>No items added yet</Text>
+          <Text style={[styles.emptyItemsText, { color: colors.textSecondary }]}>
+            Tap &quot;Add Items&quot; above to select products or services
+          </Text>
         </View>
-      </View>
+      );
+    }
 
-      {/* Add Items Button */}
-      <TouchableOpacity
-        style={[styles.addItemsButton, { backgroundColor: colors.primary, ...shadows.md }]}
-        onPress={() => setShowItemsModal(true)}
-      >
-        <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
-        <Text style={styles.addItemsButtonText}>
-          {invoiceItems.length > 0 ? 'Add More Items' : 'Add Items'}
-        </Text>
-        <View style={styles.addItemsButtonBadge}>
-          <Text style={styles.addItemsButtonBadgeText}>{availableItems.length}</Text>
-        </View>
-      </TouchableOpacity>
+    const pluralSuffix = invoiceItems.length > 1 ? 's' : '';
 
-      {/* Selected Items Summary */}
-      {invoiceItems.length > 0 && (
+    return (
+      <>
         <View style={[styles.selectedItemsSummaryCard, { backgroundColor: colors.primaryLight }]}>
           <View style={styles.summaryCardHeader}>
             <View style={styles.summaryCardLeft}>
               <Ionicons name="cube-outline" size={20} color={colors.primary} />
               <Text style={[styles.summaryCardTitle, { color: colors.primary }]}>
-                {invoiceItems.length} item{invoiceItems.length > 1 ? 's' : ''} selected
+                {invoiceItems.length} item{pluralSuffix} selected
               </Text>
             </View>
             <Text style={[styles.summaryCardTotal, { color: colors.primary }]}>
@@ -1025,10 +1043,6 @@ export default function CreateInvoiceScreen() {
             </Text>
           </View>
         </View>
-      )}
-
-      {/* Selected Items List */}
-      {invoiceItems.length > 0 && (
         <View style={[styles.selectedItemsCard, { backgroundColor: colors.card, ...shadows.sm }]}>
           <Text style={[styles.selectedItemsCardTitle, { color: colors.text }]}>
             Selected Items
@@ -1070,22 +1084,20 @@ export default function CreateInvoiceScreen() {
             </View>
           ))}
         </View>
-      )}
+      </>
+    );
+  };
 
-      {/* Empty State */}
-      {invoiceItems.length === 0 && (
-        <View style={[styles.emptyItemsState, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <View style={[styles.emptyItemsIconContainer, { backgroundColor: colors.primaryLight }]}>
-            <Ionicons name="cube-outline" size={40} color={colors.primary} />
-          </View>
-          <Text style={[styles.emptyItemsTitle, { color: colors.text }]}>No items added yet</Text>
-          <Text style={[styles.emptyItemsText, { color: colors.textSecondary }]}>
-            Tap &quot;Add Items&quot; above to select products or services
-          </Text>
-        </View>
-      )}
+  const renderItemsSelectionModal = () => {
+    const emptyMessage = availableItems.length === 0
+      ? 'No items in inventory. Add items from the web app first.'
+      : 'No items match your search';
+    const itemsPlural = invoiceItems.length > 1 ? 's' : '';
+    const selectedBadgeText = invoiceItems.length > 0
+      ? `${invoiceItems.length} item${itemsPlural} selected • ${formatCurrency(totals?.total || 0)}`
+      : '';
 
-      {/* Items Selection Modal */}
+    return (
       <Modal
         visible={showItemsModal}
         animationType="slide"
@@ -1093,7 +1105,6 @@ export default function CreateInvoiceScreen() {
         onRequestClose={() => setShowItemsModal(false)}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
-          {/* Modal Header */}
           <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <TouchableOpacity 
               onPress={() => setShowItemsModal(false)}
@@ -1115,7 +1126,6 @@ export default function CreateInvoiceScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Barcode Scanner */}
           <View style={[styles.modalBarcodeContainer, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
             <Ionicons name="barcode-outline" size={20} color={colors.primary} />
             <TextInput
@@ -1136,7 +1146,6 @@ export default function CreateInvoiceScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Search */}
           <View style={[styles.modalSearchContainer, { backgroundColor: colors.card, ...shadows.sm }]}>
             <Ionicons name="search" size={20} color={colors.textTertiary} />
             <TextInput
@@ -1154,17 +1163,15 @@ export default function CreateInvoiceScreen() {
             )}
           </View>
 
-          {/* Selected Count Badge */}
-          {invoiceItems.length > 0 && (
+          {selectedBadgeText.length > 0 && (
             <View style={[styles.modalSelectedBadge, { backgroundColor: colors.successLight }]}>
               <Ionicons name="checkmark-circle" size={18} color={colors.success} />
               <Text style={[styles.modalSelectedBadgeText, { color: colors.success }]}>
-                {invoiceItems.length} item{invoiceItems.length > 1 ? 's' : ''} selected • {formatCurrency(totals?.total || 0)}
+                {selectedBadgeText}
               </Text>
             </View>
           )}
 
-          {/* Items List */}
           <FlatList
             data={filteredItems}
             renderItem={renderItemCard}
@@ -1173,10 +1180,7 @@ export default function CreateInvoiceScreen() {
               <View style={styles.modalEmptyState}>
                 <Ionicons name="cube-outline" size={48} color={colors.textTertiary} />
                 <Text style={[styles.modalEmptyStateText, { color: colors.textSecondary }]}>
-                  {availableItems.length === 0 
-                    ? 'No items in inventory. Add items from the web app first.'
-                    : 'No items match your search'
-                  }
+                  {emptyMessage}
                 </Text>
               </View>
             }
@@ -1188,8 +1192,43 @@ export default function CreateInvoiceScreen() {
           />
         </View>
       </Modal>
-    </ScrollView>
-  );
+    );
+  };
+
+  const renderItemsStep = () => {
+    const addButtonLabel = invoiceItems.length > 0 ? 'Add More Items' : 'Add Items';
+
+    return (
+      <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.stepTitle, { color: colors.text }]}>
+          Add Items
+        </Text>
+        <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
+          Select products or services for your {docConfig.label.toLowerCase()}
+        </Text>
+
+        {renderPricingModeSection()}
+        {renderBillingModeSection()}
+        {renderPackingTypeSection()}
+
+        <TouchableOpacity
+          style={[styles.addItemsButton, { backgroundColor: colors.primary, ...shadows.md }]}
+          onPress={() => setShowItemsModal(true)}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
+          <Text style={styles.addItemsButtonText}>
+            {addButtonLabel}
+          </Text>
+          <View style={styles.addItemsButtonBadge}>
+            <Text style={styles.addItemsButtonBadgeText}>{availableItems.length}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {renderSelectedItemsSection()}
+        {renderItemsSelectionModal()}
+      </ScrollView>
+    );
+  };
 
   const renderReviewStep = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
@@ -1489,6 +1528,8 @@ export default function CreateInvoiceScreen() {
   );
 }
 
+const SPACE_BETWEEN = 'space-between' as const;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1496,7 +1537,7 @@ const styles = StyleSheet.create({
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
     paddingBottom: 12,
@@ -1697,7 +1738,7 @@ const styles = StyleSheet.create({
   selectedCustomerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     padding: 16,
     borderRadius: 16,
     borderWidth: 2,
@@ -1804,7 +1845,7 @@ const styles = StyleSheet.create({
   },
   summaryInfo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     alignItems: 'center',
   },
   summaryCount: {
@@ -1887,7 +1928,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
   },
   itemCardInfo: {
     flex: 1,
@@ -2003,7 +2044,7 @@ const styles = StyleSheet.create({
   reviewItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingVertical: 10,
   },
   reviewItemInfo: {
@@ -2023,7 +2064,7 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingVertical: 8,
   },
   summaryLabel: {
@@ -2139,7 +2180,7 @@ const styles = StyleSheet.create({
   summaryCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
   },
   summaryCardLeft: {
     flexDirection: 'row',
@@ -2212,7 +2253,7 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: SPACE_BETWEEN,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,

@@ -12,18 +12,21 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2, Barcode } from "lucide-react";
 import type { IItem, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types";
+import type { LightweightItem } from "@/app/items/lightweight-actions";
 import { calculateItemAmount } from "@/lib/invoice-calculations";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { ItemSelect } from "@/components/items/item-select";
 import { toast } from "sonner";
 
+type InvoiceItem = IItem | LightweightItem;
+
 interface InvoiceTableProps {
-  items: IItem[];
+  items: InvoiceItem[];
   invoiceItems: IInvoiceItem[];
   onItemsChange: (items: IInvoiceItem[]) => void;
   billingMode: BillingMode;
-  pricingMode: PricingMode; // Added pricing mode prop
-  packingType: PackingType; // Added packing type prop
+  pricingMode: PricingMode;
+  packingType: PackingType;
   customField1Enabled?: boolean;
   customField1Label?: string;
   customField2Enabled?: boolean;
@@ -45,11 +48,10 @@ export function InvoiceTable({
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   
-  // Cache for storing loose quantities when switching to carton mode
-  const [looseQuantityCache, setLooseQuantityCache] = useState<Record<string, number>>({});
+  const looseQuantityCacheRef = useRef<Record<string, number>>({});
 
-  const getPriceByMode = (item: IItem): number => {
-    switch (pricingMode) {
+  const getPriceByMode = useCallback((item: InvoiceItem, mode: PricingMode): number => {
+    switch (mode) {
       case "wholesale":
         return item.wholesalePrice || item.salePrice;
       case "quantity":
@@ -58,9 +60,12 @@ export function InvoiceTable({
       default:
         return item.salePrice;
     }
-  };
+  }, []);
 
+  const prevPricingModeRef = useRef(pricingMode);
   useEffect(() => {
+    if (prevPricingModeRef.current === pricingMode) return;
+    prevPricingModeRef.current = pricingMode;
     if (invoiceItems.length === 0) return;
 
     const updatedItems = invoiceItems.map((invoiceItem) => {
@@ -69,7 +74,9 @@ export function InvoiceTable({
       const selectedItem = items.find((i) => i.id === invoiceItem.itemId);
       if (!selectedItem) return invoiceItem;
 
-      const newRate = getPriceByMode(selectedItem);
+      const newRate = getPriceByMode(selectedItem, pricingMode);
+      if (newRate === invoiceItem.rate) return invoiceItem;
+
       const newAmount = calculateItemAmount(
         invoiceItem.quantity,
         newRate,
@@ -87,12 +94,15 @@ export function InvoiceTable({
     });
 
     onItemsChange(updatedItems);
-  }, [pricingMode]); // Only re-run when pricing mode changes
+  }, [pricingMode, invoiceItems, items, billingMode, getPriceByMode, onItemsChange]);
 
-  // Handle packing type changes with quantity caching
+  const prevPackingTypeRef = useRef(packingType);
   useEffect(() => {
+    if (prevPackingTypeRef.current === packingType) return;
+    prevPackingTypeRef.current = packingType;
     if (invoiceItems.length === 0) return;
 
+    const cache = looseQuantityCacheRef.current;
     const updatedItems = invoiceItems.map((invoiceItem) => {
       if (!invoiceItem.itemId) return invoiceItem;
 
@@ -102,21 +112,12 @@ export function InvoiceTable({
       let newQuantity = invoiceItem.quantity;
 
       if (packingType === "carton") {
-        // Switching to carton mode - cache loose quantity and convert to cartons
         const perCartonQty = Math.floor(selectedItem.perCartonQuantity || 1);
-        
-        // Save current loose quantity to cache
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [invoiceItem.itemId]: Math.floor(invoiceItem.quantity)
-        }));
-
-        // Convert to cartons (use per carton quantity)
+        cache[invoiceItem.itemId] = Math.floor(invoiceItem.quantity);
         newQuantity = perCartonQty;
       } else {
-        // Switching to loose mode - restore cached quantity if available
-        if (looseQuantityCache[invoiceItem.itemId]) {
-          newQuantity = looseQuantityCache[invoiceItem.itemId];
+        if (cache[invoiceItem.itemId]) {
+          newQuantity = cache[invoiceItem.itemId];
         }
       }
 
@@ -137,7 +138,7 @@ export function InvoiceTable({
     });
 
     onItemsChange(updatedItems);
-  }, [packingType]); // Only re-run when packing type changes
+  }, [packingType, invoiceItems, items, billingMode, onItemsChange]);
 
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,10 +174,7 @@ export function InvoiceTable({
       
       // Update cache if in loose mode
       if (packingType === "loose") {
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [item.id]: newQuantity
-        }));
+        looseQuantityCacheRef.current[item.id] = newQuantity;
       }
       
       updatedItems[existingItemIndex] = {
@@ -196,17 +194,13 @@ export function InvoiceTable({
       toast.success(`Updated quantity for ${item.name}`);
     } else {
       // Add new item to invoice with initial quantity based on packing type
-      const rate = getPriceByMode(item);
+      const rate = getPriceByMode(item, pricingMode);
       const initialQuantity = packingType === "carton" 
         ? Math.floor(item.perCartonQuantity || 1)
         : 1;
       
-      // Cache initial loose quantity
       if (packingType === "loose") {
-        setLooseQuantityCache(prev => ({
-          ...prev,
-          [item.id]: initialQuantity
-        }));
+        looseQuantityCacheRef.current[item.id] = initialQuantity;
       }
       
       const amount = calculateItemAmount(
@@ -271,7 +265,7 @@ export function InvoiceTable({
     field: keyof IInvoiceItem,
     value: unknown
   ) => {
-    let cacheUpdate: { id: string; qty: number } | null = null;
+    let cacheUpdate: { id: string; qty: number } | null = null as { id: string; qty: number } | null;
 
     const updatedItems = invoiceItems.map((item, i) => {
       if (i !== index) return item;
@@ -299,7 +293,7 @@ export function InvoiceTable({
         if (selectedItem) {
           updated.itemName = selectedItem.name;
           updated.unit = selectedItem.unit;
-          updated.rate = getPriceByMode(selectedItem);
+          updated.rate = getPriceByMode(selectedItem, pricingMode);
           updated.gstRate = selectedItem.gstRate;
           updated.cessRate = selectedItem.cessRate;
           updated.packagingUnit = selectedItem.packagingUnit;
@@ -317,7 +311,7 @@ export function InvoiceTable({
 
           updated.amount = calculateItemAmount(
             updated.quantity,
-            getPriceByMode(selectedItem),
+            getPriceByMode(selectedItem, pricingMode),
             selectedItem.gstRate,
             selectedItem.cessRate,
             updated.discount,
@@ -329,11 +323,9 @@ export function InvoiceTable({
       return updated;
     });
 
-    if (cacheUpdate) {
-      setLooseQuantityCache(prev => ({
-        ...prev,
-        [cacheUpdate!.id]: cacheUpdate!.qty
-      }));
+    const resolvedCache = cacheUpdate;
+    if (resolvedCache) {
+      looseQuantityCacheRef.current[resolvedCache.id] = resolvedCache.qty;
     }
 
     onItemsChange(updatedItems);
@@ -352,7 +344,6 @@ export function InvoiceTable({
             onChange={(e) => setBarcodeInput(e.target.value)}
             placeholder="Scan barcode or enter item code here..."
             className="pl-10 h-10 text-base"
-            autoFocus
           />
         </div>
         <Button type="submit" className="gap-2" disabled={!barcodeInput.trim()}>

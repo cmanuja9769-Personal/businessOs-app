@@ -6,7 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RootNavigator from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
-import { NavigationProvider } from './src/contexts/NavigationContext';
+import { ToastProvider } from './src/contexts/ToastContext';
+import { ErrorBoundary } from './src/components/ui/ErrorBoundary';
 import { initDatabase } from './src/lib/offline-storage';
 import SplashScreen from './src/screens/SplashScreen';
 import 'react-native-url-polyfill/auto';
@@ -17,13 +18,11 @@ export default function App() {
   const [splashAnimationDone, setSplashAnimationDone] = useState(false);
 
   useEffect(() => {
-    // Initialize offline database on app start
     const initialize = async () => {
       try {
         await initDatabase();
-        console.log('Offline database initialized successfully');
       } catch (error) {
-        console.error('Failed to initialize offline database:', error);
+        console.error('Failed to initialize:', error);
       } finally {
         setIsReady(true);
       }
@@ -49,11 +48,13 @@ export default function App() {
         <ThemeProvider>
           <PaperProvider>
             <AuthProvider>
-              <NavigationProvider>
-                <StatusBar style="auto" />
-                <RootNavigator />
-                {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
-              </NavigationProvider>
+              <ErrorBoundary>
+                <ToastProvider>
+                  <StatusBar style="auto" />
+                  <RootNavigator />
+                  {showSplash && <SplashScreen onFinish={handleSplashFinish} />}
+                </ToastProvider>
+              </ErrorBoundary>
             </AuthProvider>
           </PaperProvider>
         </ThemeProvider>

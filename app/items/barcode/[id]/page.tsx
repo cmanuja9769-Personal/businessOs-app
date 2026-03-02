@@ -9,14 +9,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Loader2, Info, Download, Printer, Package } from "lucide-react";
 import Link from "next/link";
 import { BarcodeDisplay } from "@/components/items/barcode-display";
-import { getItemById, assignBarcodeToItem } from "@/app/items/actions";
+import { getItemById } from "@/app/items/item-details-actions"
+import { assignBarcodeToItem } from "@/app/items/barcode-actions"
 import type { IItem } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LABEL_LAYOUTS, getLayoutById, calculateSheetsNeeded, calculateWastedLabels } from "@/lib/label-layouts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { translateToHindi } from "@/lib/translate";
-import { pdf } from "@react-pdf/renderer";
-import { BarcodePDFDocument } from "@/components/pdf/barcode-pdf-document";
 import { BarcodeQueueModal } from "@/components/items/barcode-queue-modal";
 import { useBarcodeQueueStore } from "@/store/use-barcode-queue-store";
 import { logBarcodePrint } from "@/app/barcode-logs/actions";
@@ -106,6 +105,8 @@ export default function BarcodePage({ params }: BarcodePageProps) {
     if (!item) return;
     setIsGenerating(true);
     try {
+      const { pdf } = await import("@react-pdf/renderer");
+      const { BarcodePDFDocument } = await import("@/components/pdf/barcode-pdf-document");
       const blob = await pdf(
         <BarcodePDFDocument
           item={item}
@@ -147,6 +148,8 @@ export default function BarcodePage({ params }: BarcodePageProps) {
     if (!item) return;
     setIsGenerating(true);
     try {
+      const { pdf } = await import("@react-pdf/renderer");
+      const { BarcodePDFDocument } = await import("@/components/pdf/barcode-pdf-document");
       const blob = await pdf(
         <BarcodePDFDocument
           item={item}
@@ -293,13 +296,13 @@ export default function BarcodePage({ params }: BarcodePageProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
+              <p className="text-[0.625rem] sm:text-xs text-muted-foreground">
                 {selectedLayout.description}
                 {selectedLayout.averyCode && ` • Compatible with Avery ${selectedLayout.averyCode}`}
               </p>
             </div>
 
-            <div className="bg-muted rounded-lg p-2 sm:p-3 space-y-1 text-[10px] sm:text-xs">
+            <div className="bg-muted rounded-lg p-2 sm:p-3 space-y-1 text-[0.625rem] sm:text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Layout:</span>
                 <span className="font-medium">{selectedLayout.columns} × {selectedLayout.rows} grid</span>
@@ -361,7 +364,7 @@ export default function BarcodePage({ params }: BarcodePageProps) {
                 }
                 className="h-9 sm:h-10 text-xs sm:text-sm"
               />
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
+              <p className="text-[0.625rem] sm:text-xs text-muted-foreground">
                 Use for partial label sheets (e.g., start at position 5 if first 4 are used)
               </p>
             </div>

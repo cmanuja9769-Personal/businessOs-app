@@ -76,8 +76,8 @@ export default function SupplierDetailScreen() {
 
     try {
       const [supplierRes, purchasesRes] = await Promise.all([
-        supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-        supabase.from('purchases').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }).limit(10),
+        supabase.from('suppliers').select('*').eq('id', supplierId).eq('organization_id', organizationId).is('deleted_at', null).single(),
+        supabase.from('purchases').select('*').eq('supplier_id', supplierId).is('deleted_at', null).order('created_at', { ascending: false }).limit(10),
       ]);
 
       if (supplierRes.error) throw supplierRes.error;
@@ -127,10 +127,10 @@ export default function SupplierDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('suppliers').delete().eq('id', supplierId);
+              const { error } = await supabase.from('suppliers').update({ deleted_at: new Date().toISOString() }).eq('id', supplierId);
               if (error) throw error;
               navigation.goBack();
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete supplier');
             }
           },

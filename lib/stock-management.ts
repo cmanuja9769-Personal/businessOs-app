@@ -53,26 +53,47 @@ export interface StockLedgerEntry {
   createdBy?: string
 }
 
-/**
- * Calculate base quantity from entry quantity and unit
- */
+const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
+  KG:    { G: 1000, GM: 1000, GMS: 1000, GRAM: 1000, GRAMS: 1000 },
+  G:     { KG: 0.001 },
+  GM:    { KG: 0.001 },
+  L:     { ML: 1000, LTR: 1, LITRE: 1 },
+  ML:    { L: 0.001, LTR: 0.001 },
+  LTR:   { ML: 1000, L: 1 },
+  M:     { CM: 100, MM: 1000, FT: 3.28084 },
+  CM:    { M: 0.01, MM: 10 },
+  MM:    { M: 0.001, CM: 0.1 },
+  FT:    { M: 0.3048, IN: 12 },
+  IN:    { FT: 1 / 12, CM: 2.54 },
+  DOZ:   { PCS: 12, NOS: 12 },
+  PCS:   { DOZ: 1 / 12 },
+  NOS:   { DOZ: 1 / 12 },
+}
+
 export function calculateBaseQuantity(
   entryQuantity: number,
   entryUnit: string,
   itemUnit: string,
   packagingUnit: string | null,
-  _perCartonQuantity: number | null
+  perCartonQuantity: number | null
 ): number {
-  // Stock is maintained in packaging units (e.g., CTN) in this app.
-  // So if the user enters in packagingUnit, keep it as-is.
-  if (entryUnit === packagingUnit) {
-    return Math.round(entryQuantity)
+  if (!entryUnit || entryUnit === itemUnit) {
+    return entryQuantity
   }
 
-  // If user enters in inner/base units (PKT/BOX/PCS), this helper does not
-  // have enough info to reliably convert back to cartons without business rules.
-  // Keep it as-is.
-  return Math.round(entryQuantity)
+  if (packagingUnit && entryUnit === packagingUnit && perCartonQuantity && perCartonQuantity > 1) {
+    return entryQuantity * perCartonQuantity
+  }
+
+  const upperEntry = entryUnit.toUpperCase()
+  const upperBase = itemUnit.toUpperCase()
+  const conversionMap = UNIT_CONVERSIONS[upperEntry]
+  if (conversionMap && conversionMap[upperBase] !== undefined) {
+    return entryQuantity * conversionMap[upperBase]
+  }
+
+  console.warn(`[stock] No conversion found from "${entryUnit}" to "${itemUnit}" — using entry quantity as-is`)
+  return entryQuantity
 }
 
 /**
@@ -123,14 +144,52 @@ export function formatStockDisplay(
   return `${converted.packagingQty} ${packagingUnit} + ${converted.remainingBaseQty} ${baseUnit}`
 }
 
-/**
- * PRODUCTION-READY: Log stock movement to the ledger with atomic operations
- * This function ensures stock changes are recorded in the audit trail
- */
+const INBOUND_TYPES = new Set(["IN", "PURCHASE", "RETURN", "TRANSFER_IN", "OPENING"])
+const OUTBOUND_TYPES = new Set(["OUT", "SALE", "TRANSFER_OUT"])
+
+function resolveQuantityChange(transactionType: string, baseQuantity: number): number {
+  if (transactionType === "ADJUSTMENT" || transactionType === "CORRECTION") {
+    return baseQuantity
+  }
+  if (INBOUND_TYPES.has(transactionType)) return Math.abs(baseQuantity)
+  if (OUTBOUND_TYPES.has(transactionType)) return -Math.abs(baseQuantity)
+  return Math.abs(baseQuantity)
+}
+
+type SupabaseStockClient = Awaited<ReturnType<typeof createClient>>
+
+async function tryAtomicStockMovement(
+  supabase: SupabaseStockClient,
+  data: StockMovementData,
+  userId: string,
+  quantityAfter: number,
+): Promise<{ success: true; ledgerId: string; quantityAfter: number } | null> {
+  if (!data.warehouseId) return null
+  try {
+    const { data: ledgerId, error } = await supabase.rpc("record_stock_movement", {
+      p_organization_id: data.organizationId,
+      p_item_id: data.itemId,
+      p_warehouse_id: data.warehouseId,
+      p_transaction_type: data.transactionType,
+      p_entry_quantity: data.entryQuantity,
+      p_entry_unit: data.entryUnit,
+      p_reference_type: data.referenceType || null,
+      p_reference_id: data.referenceId || null,
+      p_reference_no: data.referenceNo || null,
+      p_party_id: data.partyId || null,
+      p_party_name: data.partyName || null,
+      p_rate_per_unit: data.ratePerUnit || null,
+      p_notes: data.notes || null,
+      p_created_by: userId,
+    })
+    if (!error && ledgerId) return { success: true, ledgerId, quantityAfter }
+  } catch { /* RPC unavailable */ }
+  return null
+}
+
 export async function logStockMovement(data: StockMovementData, userId: string) {
   const supabase = await createClient()
 
-  // Get item details for conversion
   const { data: item, error: itemError } = await supabase
     .from("items")
     .select("current_stock, unit, packaging_unit, per_carton_quantity, organization_id")
@@ -141,7 +200,6 @@ export async function logStockMovement(data: StockMovementData, userId: string) 
     return { success: false, error: itemError?.message || "Item not found" }
   }
 
-  // Calculate base quantity
   const baseQuantity = calculateBaseQuantity(
     data.entryQuantity,
     data.entryUnit,
@@ -150,55 +208,20 @@ export async function logStockMovement(data: StockMovementData, userId: string) 
     item.per_carton_quantity
   )
 
-  // Determine quantity change (positive for IN, negative for OUT)
-  const inboundTypes = ["IN", "PURCHASE", "RETURN", "TRANSFER_IN", "OPENING"]
-  const outboundTypes = ["OUT", "SALE", "TRANSFER_OUT"]
-  
-  let quantityChange: number
-  if (data.transactionType === "ADJUSTMENT" || data.transactionType === "CORRECTION") {
-    // For adjustments, the sign is determined by whether it's increase or decrease
-    quantityChange = baseQuantity
-  } else if (inboundTypes.includes(data.transactionType)) {
-    quantityChange = Math.abs(baseQuantity)
-  } else if (outboundTypes.includes(data.transactionType)) {
-    quantityChange = -Math.abs(baseQuantity)
-  } else {
-    quantityChange = Math.abs(baseQuantity)
-  }
-
+  const quantityChange = resolveQuantityChange(data.transactionType, baseQuantity)
   const quantityBefore = item.current_stock || 0
-  const quantityAfter = Math.max(0, quantityBefore + quantityChange)
+  const quantityAfter = quantityBefore + quantityChange
 
-  // Try to use the database RPC function first (preferred atomic method)
-  if (data.warehouseId) {
-    try {
-      const { data: ledgerId, error } = await supabase.rpc("record_stock_movement", {
-        p_organization_id: data.organizationId,
-        p_item_id: data.itemId,
-        p_warehouse_id: data.warehouseId,
-        p_transaction_type: data.transactionType,
-        p_entry_quantity: data.entryQuantity,
-        p_entry_unit: data.entryUnit,
-        p_reference_type: data.referenceType || null,
-        p_reference_id: data.referenceId || null,
-        p_reference_no: data.referenceNo || null,
-        p_party_id: data.partyId || null,
-        p_party_name: data.partyName || null,
-        p_rate_per_unit: data.ratePerUnit || null,
-        p_notes: data.notes || null,
-        p_created_by: userId,
-      })
-
-      if (!error && ledgerId) {
-        return { success: true, ledgerId, quantityAfter }
-      }
-      // If RPC fails, fall through to direct method
-    } catch {
-      // RPC not available, use direct method
+  if (quantityAfter < 0) {
+    return {
+      success: false,
+      error: `Insufficient stock. Available: ${quantityBefore}, Required: ${Math.abs(quantityChange)}`,
     }
   }
 
-  // CRITICAL: Insert ledger entry FIRST for audit trail
+  const atomicResult = await tryAtomicStockMovement(supabase, data, userId, quantityAfter)
+  if (atomicResult) return atomicResult
+
   const { data: movement, error: ledgerError } = await supabase
     .from("stock_ledger")
     .insert({
@@ -226,7 +249,6 @@ export async function logStockMovement(data: StockMovementData, userId: string) 
     .select()
     .single()
 
-  // Update item current_stock - use atomic increment/decrement
   const { error: updateError } = await supabase
     .from("items")
     .update({ 
@@ -239,7 +261,6 @@ export async function logStockMovement(data: StockMovementData, userId: string) 
     return { success: false, error: updateError.message }
   }
 
-  // Update warehouse stock if applicable
   if (data.warehouseId) {
     await updateWarehouseStock(
       supabase,
@@ -272,8 +293,10 @@ async function updateWarehouseStock(
     .maybeSingle()
 
   if (warehouseStock) {
-    // Update existing record with atomic operation
-    const newQuantity = Math.max(0, (warehouseStock.quantity || 0) + quantityChange)
+    const newQuantity = (warehouseStock.quantity || 0) + quantityChange
+    if (newQuantity < 0) {
+      return
+    }
     await supabase
       .from("item_warehouse_stock")
       .update({ 
@@ -282,14 +305,13 @@ async function updateWarehouseStock(
       })
       .eq("id", warehouseStock.id)
   } else if (quantityChange > 0) {
-    // Create new record only for positive changes
     await supabase
       .from("item_warehouse_stock")
       .insert({
         item_id: itemId,
         warehouse_id: warehouseId,
         organization_id: organizationId,
-        quantity: Math.max(0, quantityChange),
+        quantity: quantityChange,
       })
   }
 }

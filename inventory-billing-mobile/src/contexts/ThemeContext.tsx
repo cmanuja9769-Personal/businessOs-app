@@ -1,12 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { themeColors, shadows, typography, spacing, borderRadius, dimensions, statusColors, palette } from '@theme/designSystem';
 
 type ColorScheme = 'light' | 'dark';
 
+const THEME_STORAGE_KEY = 'user_theme_preference';
+
 interface ThemeContextType {
   colorScheme: ColorScheme;
   toggleColorScheme: () => void;
+  setColorScheme: (scheme: ColorScheme) => void;
   colors: typeof themeColors.light;
   shadows: typeof shadows.light;
   typography: typeof typography;
@@ -22,21 +26,37 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(
+  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(
     systemColorScheme === 'dark' ? 'dark' : 'light'
   );
 
   useEffect(() => {
-    // You can load saved theme preference from AsyncStorage here
+    AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then((saved) => {
+        if (saved === 'light' || saved === 'dark') {
+          setColorSchemeState(saved);
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const toggleColorScheme = () => {
-    setColorScheme((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  const setColorScheme = useCallback((scheme: ColorScheme) => {
+    setColorSchemeState(scheme);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, scheme).catch(() => {});
+  }, []);
+
+  const toggleColorScheme = useCallback(() => {
+    setColorSchemeState((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {});
+      return next;
+    });
+  }, []);
 
   const themeValue: ThemeContextType = {
     colorScheme,
     toggleColorScheme,
+    setColorScheme,
     colors: themeColors[colorScheme],
     shadows: shadows[colorScheme],
     typography,

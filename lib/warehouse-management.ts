@@ -1,6 +1,7 @@
 // Warehouse & Location Management
 
 import { createClient } from "@/lib/supabase/server"
+import { logStockMovement } from "@/lib/stock-management"
 
 export interface WarehouseData {
   name: string
@@ -121,6 +122,47 @@ export async function transferStock(
     console.error("[v0] Error creating transfer items:", itemsError)
     return { success: false, error: itemsError.message }
   }
+
+  for (const item of items) {
+    const outResult = await logStockMovement({
+      itemId: item.itemId,
+      organizationId,
+      warehouseId: fromWarehouseId,
+      transactionType: "TRANSFER_OUT",
+      entryQuantity: item.quantity,
+      entryUnit: "PCS",
+      referenceType: "transfer",
+      referenceId: transfer.id,
+      referenceNo: transferNo,
+      notes: `Transfer out to warehouse`,
+    }, userId)
+
+    if (!outResult.success) {
+      return { success: false, error: outResult.error || "Failed to reduce source warehouse stock" }
+    }
+
+    const inResult = await logStockMovement({
+      itemId: item.itemId,
+      organizationId,
+      warehouseId: toWarehouseId,
+      transactionType: "TRANSFER_IN",
+      entryQuantity: item.quantity,
+      entryUnit: "PCS",
+      referenceType: "transfer",
+      referenceId: transfer.id,
+      referenceNo: transferNo,
+      notes: `Transfer in from warehouse`,
+    }, userId)
+
+    if (!inResult.success) {
+      return { success: false, error: inResult.error || "Failed to add destination warehouse stock" }
+    }
+  }
+
+  await supabase
+    .from("stock_transfers")
+    .update({ status: "completed" })
+    .eq("id", transfer.id)
 
   return { success: true, transfer }
 }

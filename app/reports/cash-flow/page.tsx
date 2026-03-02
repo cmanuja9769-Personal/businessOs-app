@@ -49,23 +49,37 @@ export default function CashFlowPage() {
   const fetchCashFlowData = useCallback(async () => {
     setLoading(true)
     try {
-      const [, , paymentsRes] = await Promise.all([
+      const [invoicesRes, purchasesRes, paymentsRes] = await Promise.all([
         fetch('/api/invoices'),
         fetch('/api/purchases'),
         fetch('/api/payments')
       ])
 
+      if (invoicesRes.ok) await invoicesRes.json()
+      if (purchasesRes.ok) await purchasesRes.json()
       const payments = paymentsRes.ok ? await paymentsRes.json() : []
 
       const fromDate = new Date(dateFrom)
       const toDate = new Date(dateTo)
       toDate.setHours(23, 59, 59, 999)
 
-      // Filter for date range
       const periodPayments = payments.filter((pay: ApiPaymentResponse) => {
         const d = new Date(pay.paymentDate || pay.date || "")
         return d >= fromDate && d <= toDate
       })
+
+      const prePeriodPayments = payments.filter((pay: ApiPaymentResponse) => {
+        const d = new Date(pay.paymentDate || pay.date || "")
+        return d < fromDate
+      })
+
+      const prePeriodInflows = prePeriodPayments
+        .filter((p: ApiPaymentResponse) => p.type === 'receipt' || p.type === 'incoming')
+        .reduce((s: number, p: ApiPaymentResponse) => s + (p.amount || 0), 0)
+      const prePeriodOutflows = prePeriodPayments
+        .filter((p: ApiPaymentResponse) => p.type === 'payment' || p.type === 'outgoing')
+        .reduce((s: number, p: ApiPaymentResponse) => s + (p.amount || 0), 0)
+      const openingBalance = prePeriodInflows - prePeriodOutflows
 
       const salesReceipts = periodPayments
         .filter((p: ApiPaymentResponse) => p.type === 'receipt' || p.type === 'incoming')
@@ -105,9 +119,6 @@ export default function CashFlowPage() {
         ],
         total: 0
       }
-
-      // Mock opening balance - in real app, calculate from previous period
-      const openingBalance = 100000
 
       const netCashChange = operatingActivities.total + investingActivities.total + financingActivities.total
       const closingBalance = openingBalance + netCashChange

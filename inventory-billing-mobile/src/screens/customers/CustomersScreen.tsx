@@ -13,14 +13,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Card from '@components/ui/Card';
 import Loading from '@components/ui/Loading';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
 import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { usePaginatedSearch } from '@hooks/usePaginatedSearch';
 import { spacing, fontSize } from '@theme/spacing';
+import { lightTap } from '@lib/haptics';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
 
 interface Customer {
   id: string;
@@ -31,6 +35,15 @@ interface Customer {
   address?: string | null;
   gstin?: string | null;
   billing_address?: string | null;
+}
+
+function getCountText(query: string, resultCount: number, total: number): string {
+  if (query) {
+    const suffix = resultCount !== 1 ? 's' : '';
+    return `${resultCount} result${suffix}`;
+  }
+  const suffix = total !== 1 ? 's' : '';
+  return `${total} customer${suffix} total`;
 }
 
 export default function CustomersScreen() {
@@ -59,13 +72,16 @@ export default function CustomersScreen() {
     ascending: true,
   });
 
+  useFocusRefresh(refresh);
+
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && status !== 'loading') {
       loadMore();
     }
   }, [hasMore, isLoadingMore, status, loadMore]);
 
-  const renderItem = useCallback(({ item }: { item: Customer }) => (
+  const renderItem = useCallback(({ item, index }: { item: Customer; index: number }) => (
+    <AnimatedListItem index={index}>
     <TouchableOpacity
       onPress={() => navigation.navigate('CustomerDetail', { customerId: item.id })}
       activeOpacity={0.7}
@@ -99,6 +115,7 @@ export default function CustomersScreen() {
         </View>
       </Card>
     </TouchableOpacity>
+    </AnimatedListItem>
   ), [colors, navigation]);
 
   const renderListFooter = useCallback(() => (
@@ -137,7 +154,13 @@ export default function CustomersScreen() {
   }, [status, error, searchQuery, refresh, navigation]);
 
   if (status === 'loading' && customers.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading customers..." />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+          <SkeletonList count={6} />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -165,9 +188,7 @@ export default function CustomersScreen() {
       {totalCount > 0 && (
         <View style={styles.countContainer}>
           <Text style={[styles.countText, { color: colors.textTertiary }]}>
-            {searchQuery
-              ? `${customers.length} result${customers.length !== 1 ? 's' : ''}`
-              : `${totalCount} customer${totalCount !== 1 ? 's' : ''} total`}
+            {getCountText(searchQuery, customers.length, totalCount)}
           </Text>
         </View>
       )}
@@ -201,7 +222,7 @@ export default function CustomersScreen() {
 
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('AddCustomer', {})}
+        onPress={() => { lightTap(); navigation.navigate('AddCustomer', {}); }}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color="#ffffff" />

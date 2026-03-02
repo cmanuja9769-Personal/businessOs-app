@@ -115,40 +115,42 @@ export default function ReportsScreen() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    loadStats();
-  }, [organizationId]);
-
-  const loadStats = async () => {
     if (!organizationId) return;
 
-    try {
-      const [invoicesRes, purchasesRes] = await Promise.all([
-        supabase
-          .from('invoices')
-          .select('total, balance')
-          .eq('organization_id', organizationId),
-        supabase
-          .from('purchases')
-          .select('total, balance')
-          .eq('organization_id', organizationId),
-      ]);
+    const fetchStats = async () => {
+      try {
+        const [invoicesRes, purchasesRes] = await Promise.all([
+          supabase
+            .from('invoices')
+            .select('total, balance')
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null),
+          supabase
+            .from('purchases')
+            .select('total, balance')
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null),
+        ]);
 
-      const invoices = invoicesRes.data || [];
-      const purchases = purchasesRes.data || [];
+        const invoices = invoicesRes.data || [];
+        const purchases = purchasesRes.data || [];
 
-      setStats({
-        totalSales: invoices.reduce((sum, i) => sum + (i.total || 0), 0),
-        totalPurchases: purchases.reduce((sum, p) => sum + (p.total || 0), 0),
-        receivables: invoices.reduce((sum, i) => sum + (i.balance || 0), 0),
-        payables: purchases.reduce((sum, p) => sum + (p.balance || 0), 0),
-      });
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
-  };
+        setStats({
+          totalSales: invoices.reduce((sum, i) => sum + (i.total || 0), 0),
+          totalPurchases: purchases.reduce((sum, p) => sum + (p.total || 0), 0),
+          receivables: invoices.reduce((sum, i) => sum + (i.balance || 0), 0),
+          payables: purchases.reduce((sum, p) => sum + (p.balance || 0), 0),
+        });
+      } catch (error) {
+        console.error('Error loading stats:', error);
+      }
+    };
+
+    fetchStats();
+  }, [organizationId]);
 
   const handleReportPress = (reportKey: string) => {
-    navigation.navigate('ReportDetail' as any, { reportKey });
+    navigation.navigate('ReportDetail' as never, { reportKey } as never);
   };
 
   const toggleCategory = (title: string) => {

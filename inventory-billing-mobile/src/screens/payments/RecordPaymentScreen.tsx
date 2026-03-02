@@ -10,7 +10,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
@@ -49,32 +49,42 @@ interface Invoice {
 
 interface Purchase {
   id: string;
-  purchase_no: string;
+  purchase_number: string;
   supplier_name: string;
   total: number;
   paid_amount: number;
   balance: number;
 }
 
+type RecordPaymentRouteParams = {
+  RecordPayment: { invoiceId?: string; purchaseId?: string };
+};
+
+function derivePaymentStatus(balance: number, paidAmount: number): string {
+  if (balance <= 0) return 'paid';
+  if (paidAmount > 0) return 'partial';
+  return 'unpaid';
+}
+
 export default function RecordPaymentScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
-  const route = useRoute();
+  const route = useRoute<RouteProp<RecordPaymentRouteParams, 'RecordPayment'>>();
   const { colors, shadows } = useTheme();
   const { organizationId } = useAuth();
 
-  const invoiceId = (route.params as any)?.invoiceId as string | undefined;
-  const purchaseId = (route.params as any)?.purchaseId as string | undefined;
+  const invoiceId = route.params?.invoiceId;
+  const purchaseId = route.params?.purchaseId;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [paymentType, setPaymentType] = useState<PaymentType>(purchaseId ? 'payable' : 'receivable');
+  const paymentType: PaymentType = purchaseId ? 'payable' : 'receivable';
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     loadData();
@@ -83,7 +93,7 @@ export default function RecordPaymentScreen() {
   const loadData = async () => {
     try {
       if (invoiceId) {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('invoices')
           .select('id, invoice_number, customer_name, total, paid_amount, balance')
           .eq('id', invoiceId)
@@ -94,9 +104,9 @@ export default function RecordPaymentScreen() {
           setAmount(data.balance.toString());
         }
       } else if (purchaseId) {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('purchases')
-          .select('id, purchase_no, supplier_name, total, paid_amount, balance')
+          .select('id, purchase_number, supplier_name, total, paid_amount, balance')
           .eq('id', purchaseId)
           .single();
 
@@ -131,13 +141,10 @@ export default function RecordPaymentScreen() {
         organization_id: organizationId,
         invoice_id: invoiceId || null,
         purchase_id: purchaseId || null,
-        customer_name: invoice?.customer_name || null,
-        supplier_name: purchase?.supplier_name || null,
-        type: paymentType,
         payment_date: paymentDate,
         amount: amountValue,
-        payment_method: paymentMethod,
-        reference_number: referenceNumber || null,
+        payment_mode: paymentMethod,
+        reference_no: referenceNumber || null,
         notes: notes || null,
       };
 
@@ -147,7 +154,7 @@ export default function RecordPaymentScreen() {
       if (invoiceId && invoice) {
         const newPaidAmount = invoice.paid_amount + amountValue;
         const newBalance = invoice.total - newPaidAmount;
-        const newStatus = newBalance <= 0 ? 'paid' : newPaidAmount > 0 ? 'partial' : 'unpaid';
+        const newStatus = derivePaymentStatus(newBalance, newPaidAmount);
 
         await supabase
           .from('invoices')
@@ -158,7 +165,7 @@ export default function RecordPaymentScreen() {
       if (purchaseId && purchase) {
         const newPaidAmount = purchase.paid_amount + amountValue;
         const newBalance = purchase.total - newPaidAmount;
-        const newStatus = newBalance <= 0 ? 'paid' : newPaidAmount > 0 ? 'partial' : 'unpaid';
+        const newStatus = derivePaymentStatus(newBalance, newPaidAmount);
 
         await supabase
           .from('purchases')
@@ -182,7 +189,7 @@ export default function RecordPaymentScreen() {
   }
 
   const displayData = invoice || purchase;
-  const displayNumber = invoice?.invoice_number || purchase?.purchase_no;
+  const displayNumber = invoice?.invoice_number || purchase?.purchase_number;
   const displayName = invoice?.customer_name || purchase?.supplier_name;
 
   return (

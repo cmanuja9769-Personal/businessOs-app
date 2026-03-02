@@ -24,7 +24,6 @@ import OfflineBanner from '@components/ui/OfflineBanner';
 import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { usePaginatedSearch } from '@hooks/usePaginatedSearch';
 import { supabase } from '@lib/supabase';
-import { spacing, fontSize } from '@theme/spacing';
 
 interface Supplier {
   id: string;
@@ -34,6 +33,10 @@ interface Supplier {
   gst_number?: string | null;
   address?: string | null;
   gstin?: string | null;
+}
+
+function pluralize(count: number): string {
+  return count !== 1 ? 's' : '';
 }
 
 export default function SuppliersScreen() {
@@ -84,13 +87,14 @@ export default function SuppliersScreen() {
             try {
               const { error: delError } = await supabase
                 .from('suppliers')
-                .delete()
+                .update({ deleted_at: new Date().toISOString() })
                 .eq('organization_id', organizationId)
                 .eq('id', supplier.id);
               if (delError) throw delError;
               refresh();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to delete supplier');
+            } catch (e: unknown) {
+              const message = e instanceof Error ? e.message : 'Failed to delete supplier';
+              Alert.alert('Error', message);
             }
           },
         },
@@ -251,8 +255,8 @@ export default function SuppliersScreen() {
         {totalCount > 0 && (
           <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
             {searchQuery
-              ? `${suppliers.length} result${suppliers.length !== 1 ? 's' : ''}`
-              : `${totalCount} supplier${totalCount !== 1 ? 's' : ''}`}
+              ? `${suppliers.length} result${pluralize(suppliers.length)}`
+              : `${totalCount} supplier${pluralize(totalCount)}`}
           </Text>
         )}
       </View>

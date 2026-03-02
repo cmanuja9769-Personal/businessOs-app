@@ -1,27 +1,15 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { authorize, orgScope } from "@/lib/authorize"
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    
-    // Get user's organization
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userOrg } = await supabase
-      .from("app_user_organizations")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .single()
+    const { supabase, organizationId } = await authorize("customers", "read")
 
     const { data, error } = await supabase
       .from("suppliers")
       .select("*")
-      .eq("organization_id", userOrg?.organization_id)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
 
     if (error) {

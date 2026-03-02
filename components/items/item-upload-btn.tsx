@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Upload, Download, AlertCircle, Loader2, Trash2, Plus, Check } from "lucide-react"
 import { parseExcelFile, downloadItemExcelTemplate } from "@/lib/excel-parser"
 import { itemSchema } from "@/lib/schemas"
-import { bulkImportItems } from "@/app/items/actions"
+import { bulkImportItems } from "@/app/items/import-actions"
 import { toast } from "sonner"
 import type { IItem, PackagingUnit } from "@/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"

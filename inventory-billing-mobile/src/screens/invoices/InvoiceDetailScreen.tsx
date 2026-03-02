@@ -52,7 +52,7 @@ type DbInvoice = {
   customer_id?: string | null;
   customer_name?: string | null;
   customer_email?: string | null;
-  customer_gstin?: string | null;
+  customer_gst?: string | null;
   customer_address?: string | null;
   customer_phone?: string | null;
   status?: string | null;
@@ -70,8 +70,19 @@ type DbInvoice = {
   balance?: number | null;
   notes?: string | null;
   terms?: string | null;
-  items?: any;
+  items?: unknown;
 };
+
+interface DbInvoiceItem {
+  item_id?: string;
+  item_name?: string;
+  quantity?: number;
+  unit?: string;
+  rate?: number;
+  amount?: number;
+  tax_rate?: number;
+  hsn?: string;
+}
 
 interface InvoiceItem {
   itemId?: string;
@@ -88,7 +99,7 @@ interface InvoiceItem {
 
 export default function InvoiceDetailScreen() {
   const route = useRoute<InvoiceDetailRouteProp>();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
   const { invoiceId } = route.params;
@@ -99,9 +110,9 @@ export default function InvoiceDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showItemsModal, setShowItemsModal] = useState(false);
 
-  const normalizeItems = (raw: any): InvoiceItem[] => {
+  const normalizeItems = (raw: unknown): InvoiceItem[] => {
     if (!raw) return [];
-    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw)) return raw as InvoiceItem[];
     if (typeof raw === 'string') {
       try {
         const parsed = JSON.parse(raw);
@@ -110,7 +121,10 @@ export default function InvoiceDetailScreen() {
         return [];
       }
     }
-    if (typeof raw === 'object' && Array.isArray(raw.items)) return raw.items;
+    if (typeof raw === 'object' && raw !== null) {
+      const obj = raw as Record<string, unknown>;
+      if (Array.isArray(obj.items)) return obj.items as InvoiceItem[];
+    }
     return [];
   };
 
@@ -128,6 +142,7 @@ export default function InvoiceDetailScreen() {
         .select('*')
         .eq('organization_id', organizationId)
         .eq('id', invoiceId)
+        .is('deleted_at', null)
         .maybeSingle();
 
       if (error) throw error;
@@ -141,7 +156,7 @@ export default function InvoiceDetailScreen() {
 
       if (!itemsError && itemsData && itemsData.length > 0) {
         // Map invoice_items table columns to our InvoiceItem interface
-        const mappedItems: InvoiceItem[] = itemsData.map((item: any) => ({
+        const mappedItems: InvoiceItem[] = itemsData.map((item: DbInvoiceItem) => ({
           itemId: item.item_id,
           itemName: item.item_name,
           item_name: item.item_name,
@@ -149,8 +164,8 @@ export default function InvoiceDetailScreen() {
           unit: item.unit,
           rate: item.rate,
           amount: item.amount,
-          gstRate: item.gst_rate,
-          gst_rate: item.gst_rate,
+          gstRate: item.tax_rate,
+          gst_rate: item.tax_rate,
           hsn: item.hsn,
         }));
         setInvoiceItems(mappedItems);
@@ -208,9 +223,38 @@ export default function InvoiceDetailScreen() {
 
     try {
       await Share.share({ message });
-    } catch (error) {
-      Alert.alert('Error', 'Unable to share invoice');
+    } catch (err: unknown) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Unable to share invoice');
     }
+  };
+
+  const buildGstRowsHtml = (inv: DbInvoice): string => {
+    const parts: string[] = [];
+    if (inv.cgst) {
+      parts.push(`
+              <div class="totals-row">
+                <span class="totals-label">CGST</span>
+                <span class="totals-value">₹${inv.cgst.toFixed(2)}</span>
+              </div>
+      `);
+    }
+    if (inv.sgst) {
+      parts.push(`
+              <div class="totals-row">
+                <span class="totals-label">SGST</span>
+                <span class="totals-value">₹${inv.sgst.toFixed(2)}</span>
+              </div>
+      `);
+    }
+    if (inv.igst) {
+      parts.push(`
+              <div class="totals-row">
+                <span class="totals-label">IGST</span>
+                <span class="totals-value">₹${inv.igst.toFixed(2)}</span>
+              </div>
+      `);
+    }
+    return parts.join('');
   };
 
   const handleGeneratePDF = async () => {
@@ -404,7 +448,7 @@ export default function InvoiceDetailScreen() {
                 ${invoice.customer_phone ? `<div class="customer-detail">📞 ${invoice.customer_phone}</div>` : ''}
                 ${invoice.customer_email ? `<div class="customer-detail">✉️ ${invoice.customer_email}</div>` : ''}
                 ${invoice.customer_address ? `<div class="customer-detail">📍 ${invoice.customer_address}</div>` : ''}
-                ${invoice.customer_gstin ? `<div class="customer-detail">GSTIN: ${invoice.customer_gstin}</div>` : ''}
+                ${invoice.customer_gst ? `<div class="customer-detail">GSTIN: ${invoice.customer_gst}</div>` : ''}
               </div>
               <div class="info-box">
                 <div class="section-title">Payment Info</div>
@@ -446,26 +490,7 @@ export default function InvoiceDetailScreen() {
                 <span class="totals-value">- ₹${invoice.discount.toFixed(2)}</span>
               </div>
               ` : ''}
-              ${gstEnabled && (invoice.cgst || invoice.sgst || invoice.igst) ? `
-              ${invoice.cgst ? `
-              <div class="totals-row">
-                <span class="totals-label">CGST</span>
-                <span class="totals-value">₹${invoice.cgst.toFixed(2)}</span>
-              </div>
-              ` : ''}
-              ${invoice.sgst ? `
-              <div class="totals-row">
-                <span class="totals-label">SGST</span>
-                <span class="totals-value">₹${invoice.sgst.toFixed(2)}</span>
-              </div>
-              ` : ''}
-              ${invoice.igst ? `
-              <div class="totals-row">
-                <span class="totals-label">IGST</span>
-                <span class="totals-value">₹${invoice.igst.toFixed(2)}</span>
-              </div>
-              ` : ''}
-              ` : ''}
+              ${gstEnabled ? buildGstRowsHtml(invoice) : ''}
               <div class="totals-row grand">
                 <span class="totals-label" style="font-size: 14px;">Grand Total</span>
                 <span class="totals-value grand">₹${(invoice.total || 0).toFixed(2)}</span>
@@ -502,9 +527,9 @@ export default function InvoiceDetailScreen() {
       } else {
         Alert.alert('PDF Generated', `Saved to: ${uri}`);
       }
-    } catch (error: any) {
-      console.error('PDF generation error:', error);
-      Alert.alert('Error', error.message || 'Failed to generate PDF');
+    } catch (err: unknown) {
+      console.error('PDF generation error:', err);
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to generate PDF');
     }
   };
 
@@ -711,10 +736,10 @@ export default function InvoiceDetailScreen() {
             </View>
           )}
           
-          {invoice.customer_gstin && (
+          {invoice.customer_gst && (
             <View style={[styles.gstinBadge, { backgroundColor: colors.primaryLight }]}>
               <Text style={[styles.gstinText, { color: colors.primary }]}>
-                GSTIN: {invoice.customer_gstin}
+                GSTIN: {invoice.customer_gst}
               </Text>
             </View>
           )}

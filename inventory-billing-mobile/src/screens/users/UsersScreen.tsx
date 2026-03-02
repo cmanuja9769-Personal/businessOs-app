@@ -124,8 +124,8 @@ export default function UsersScreen() {
               if (error) throw error;
               loadUsers();
               Alert.alert('Success', 'Role updated successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to update role');
+            } catch (err: unknown) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update role');
             }
           },
         })),
@@ -159,8 +159,8 @@ export default function UsersScreen() {
               if (error) throw error;
               loadUsers();
               Alert.alert('Success', 'User removed successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to remove user');
+            } catch (err: unknown) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to remove user');
             }
           },
         },

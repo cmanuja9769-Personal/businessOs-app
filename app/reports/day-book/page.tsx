@@ -398,7 +398,7 @@ export default function DayBookPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[80px]">Time</TableHead>
+                    <TableHead className="w-[5rem]">Time</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Document No</TableHead>
                     <TableHead>Party</TableHead>

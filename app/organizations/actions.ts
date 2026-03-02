@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth"
 import { createOrganization } from "@/lib/organizations"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
 
 export async function createOrganizationAction(data: {
   name: string
@@ -16,6 +17,7 @@ export async function createOrganizationAction(data: {
   legalName?: string
   tradeName?: string
 }) {
+  if (await isDemoMode()) throwDemoMutationError()
   try {
     const user = await getCurrentUser()
 

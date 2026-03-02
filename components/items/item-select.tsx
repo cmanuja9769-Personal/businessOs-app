@@ -18,9 +18,12 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { IItem } from "@/types";
+import type { LightweightItem } from "@/app/items/lightweight-actions";
+
+type SelectableItem = IItem | LightweightItem;
 
 interface ItemSelectProps {
-  items: IItem[];
+  items: SelectableItem[];
   value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;

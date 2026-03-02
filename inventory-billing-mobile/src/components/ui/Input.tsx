@@ -40,6 +40,10 @@ export default function Input({
   const showPasswordToggle = secureTextEntry;
   const actuallySecure = secureTextEntry && !isPasswordVisible;
 
+  let inputBorderColor = colors.border;
+  if (error) inputBorderColor = colors.error;
+  else if (isFocused) inputBorderColor = colors.primary;
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
@@ -49,14 +53,14 @@ export default function Input({
         style={[
           styles.inputContainer,
           {
-            borderColor: error ? colors.error : isFocused ? colors.primary : colors.border,
+            borderColor: inputBorderColor,
             backgroundColor: colors.surface,
           },
         ]}
       >
         {leftIcon && (
           <Ionicons
-            name={leftIcon as any}
+            name={leftIcon as keyof typeof Ionicons.glyphMap}
             size={20}
             color={colors.textSecondary}
             style={styles.leftIcon}
@@ -89,7 +93,7 @@ export default function Input({
         {rightIcon && !showPasswordToggle && (
           <TouchableOpacity onPress={onRightIconPress} style={styles.rightIcon}>
             <Ionicons
-              name={rightIcon as any}
+              name={rightIcon as keyof typeof Ionicons.glyphMap}
               size={20}
               color={colors.textSecondary}
             />

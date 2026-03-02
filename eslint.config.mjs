@@ -10,6 +10,17 @@ export default tseslint.config(
       "**/out/**",
       "**/build/**",
       "**/dist/**",
+      "**/dist-electron/**",
+      "**/release/**",
+      "**/coverage/**",
+      "**/.cache/**",
+      "**/.turbo/**",
+      "**/.expo/**",
+      "**/.expo-shared/**",
+      "**/android/**",
+      "**/ios/**",
+      "**/*.min.js",
+      "**/eslint-*.{json,html,txt}",
       "**/supabase/functions/**",
       "**/.git/**",
       "**/public/**",
@@ -58,5 +69,11 @@ export default tseslint.config(
       "sonarjs/no-ignored-exceptions": "error",
       "sonarjs/no-nested-conditional": "error",
     },
-  }
+  },
+  {
+    files: ["**/demo/**", "**/*.demo.*", "**/*.fixture.*", "**/*.seed.*"],
+    rules: {
+      "sonarjs/no-duplicate-string": "off",
+    },
+  },
 );

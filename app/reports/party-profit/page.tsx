@@ -17,11 +17,14 @@ import {
   Loader2,
   TrendingUp,
   TrendingDown,
-  Users
+  Users,
+  AlertCircle
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfYear, endOfMonth } from "date-fns"
 import type { ApiInvoiceResponse, ApiInvoiceItemResponse } from "@/types/api-responses"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
 interface PartyProfit {
   partyId: string
@@ -44,6 +47,7 @@ function calculateItemsCost(items: ApiInvoiceItemResponse[] | undefined): number
 export default function PartyProfitPage() {
   const [partyProfits, setPartyProfits] = useState<PartyProfit[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState(format(startOfYear(new Date()), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
   const [sortBy, setSortBy] = useState<string>("profit")
@@ -51,11 +55,15 @@ export default function PartyProfitPage() {
   useEffect(() => {
     async function fetchPartyProfits() {
     setLoading(true)
+    setFetchError(null)
     try {
       const response = await fetch('/api/invoices')
-      if (!response.ok) throw new Error('Failed to fetch')
+      if (!response.ok) throw new Error(`Server returned ${response.status}: ${response.statusText}`)
       
       const invoices = await response.json()
+      if (!Array.isArray(invoices)) {
+        throw new Error(invoices?.error || 'Invalid response format')
+      }
       
       // Group invoices by customer and calculate profits
       const customerMap = new Map<string, PartyProfit>()
@@ -98,7 +106,9 @@ export default function PartyProfitPage() {
       
       setPartyProfits(profits)
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch party profits'
       console.error('Failed to fetch party profits:', error)
+      setFetchError(message)
     } finally {
       setLoading(false)
     }
@@ -173,6 +183,7 @@ export default function PartyProfitPage() {
   }
 
   return (
+    <ClientErrorBoundary fallbackTitle="Party profit report encountered an error">
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -315,6 +326,21 @@ export default function PartyProfitPage() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : fetchError ? (
+            <DataEmptyState
+              icon={<AlertCircle className="h-12 w-12" />}
+              title="Failed to load profit data"
+              description={fetchError}
+              action={
+                <Button variant="outline" size="sm" onClick={() => {
+                  setFetchError(null)
+                  setLoading(true)
+                  fetch('/api/invoices').then(r => r.json()).then(() => window.location.reload())
+                }}>
+                  Retry
+                </Button>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -369,5 +395,6 @@ export default function PartyProfitPage() {
         </CardContent>
       </Card>
     </div>
+    </ClientErrorBoundary>
   )
 }

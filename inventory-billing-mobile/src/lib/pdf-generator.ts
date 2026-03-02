@@ -33,6 +33,19 @@ interface OrganizationData {
   phone?: string;
 }
 
+function getNotesSection(invoice: InvoiceData): string {
+  if (!invoice.notes && !invoice.terms) return '';
+
+  const notesHtml = invoice.notes
+    ? `<div><div class="notes-title">Notes</div><div class="notes-text">${invoice.notes}</div></div>`
+    : '';
+  const termsHtml = invoice.terms
+    ? `<div style="margin-top: 15px;"><div class="notes-title">Terms & Conditions</div><div class="notes-text">${invoice.terms}</div></div>`
+    : '';
+
+  return `<div class="notes-section">${notesHtml}${termsHtml}</div>`;
+}
+
 const generateInvoiceHTML = (invoice: InvoiceData, organization: OrganizationData): string => {
   return `
     <!DOCTYPE html>
@@ -271,22 +284,7 @@ const generateInvoiceHTML = (invoice: InvoiceData, organization: OrganizationDat
           </div>
           
           <!-- Notes -->
-          ${invoice.notes || invoice.terms ? `
-            <div class="notes-section">
-              ${invoice.notes ? `
-                <div>
-                  <div class="notes-title">Notes</div>
-                  <div class="notes-text">${invoice.notes}</div>
-                </div>
-              ` : ''}
-              ${invoice.terms ? `
-                <div style="margin-top: 15px;">
-                  <div class="notes-title">Terms & Conditions</div>
-                  <div class="notes-text">${invoice.terms}</div>
-                </div>
-              ` : ''}
-            </div>
-          ` : ''}
+          ${getNotesSection(invoice)}
           
           <!-- Footer -->
           <div class="footer">

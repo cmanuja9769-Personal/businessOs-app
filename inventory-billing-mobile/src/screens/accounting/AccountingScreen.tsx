@@ -59,10 +59,10 @@ export default function AccountingScreen() {
 
     try {
       const [invoicesRes, purchasesRes, itemsRes, paymentsRes] = await Promise.all([
-        supabase.from('invoices').select('total, balance').eq('organization_id', organizationId),
-        supabase.from('purchases').select('total, balance').eq('organization_id', organizationId),
-        supabase.from('items').select('stock, purchase_price').eq('organization_id', organizationId),
-        supabase.from('payments').select('amount, payment_method').eq('organization_id', organizationId),
+        supabase.from('invoices').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
+        supabase.from('purchases').select('total, balance').eq('organization_id', organizationId).is('deleted_at', null),
+        supabase.from('items').select('current_stock, purchase_price').eq('organization_id', organizationId).is('deleted_at', null),
+        supabase.from('payments').select('amount, payment_mode').eq('organization_id', organizationId).is('deleted_at', null),
       ]);
 
       const invoices = invoicesRes.data || [];
@@ -74,10 +74,10 @@ export default function AccountingScreen() {
       const expenses = purchases.reduce((sum, p) => sum + (p.total || 0), 0);
       const receivables = invoices.reduce((sum, i) => sum + (i.balance || 0), 0);
       const payables = purchases.reduce((sum, p) => sum + (p.balance || 0), 0);
-      const inventory = items.reduce((sum, i) => sum + ((i.stock || 0) * (i.purchase_price || 0)), 0);
+      const inventory = items.reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
 
-      const cashPayments = payments.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + (p.amount || 0), 0);
-      const bankPayments = payments.filter(p => ['bank', 'upi'].includes(p.payment_method)).reduce((sum, p) => sum + (p.amount || 0), 0);
+      const cashPayments = payments.filter(p => p.payment_mode === 'cash').reduce((sum, p) => sum + (p.amount || 0), 0);
+      const bankPayments = payments.filter(p => ['bank', 'upi'].includes(p.payment_mode)).reduce((sum, p) => sum + (p.amount || 0), 0);
 
       setData({
         revenue,
@@ -197,7 +197,7 @@ export default function AccountingScreen() {
       <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
         <Text style={[styles.cardTitle, { color: colors.text }]}>Equity</Text>
         <View style={[styles.lineItem, styles.totalRow]}>
-          <Text style={[styles.lineLabel, { color: colors.text, fontWeight: '700' }]}>Owner's Equity</Text>
+          <Text style={[styles.lineLabel, { color: colors.text, fontWeight: '700' }]}>Owner&apos;s Equity</Text>
           <Text style={[styles.lineValue, { color: '#10B981', fontWeight: '700' }]}>{formatCurrency(equity)}</Text>
         </View>
       </View>

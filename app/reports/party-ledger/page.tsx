@@ -17,12 +17,14 @@ import {
   User,
   FileDown,
   FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react"
 import Link from "next/link"
 import { format, endOfMonth } from "date-fns"
-import { pdf } from "@react-pdf/renderer"
 import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/components/reports/report-filter"
-import { CompactReportPDF, type ReportColumn } from "@/components/reports/compact-report-pdf"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
 interface Party {
   id: string
@@ -49,6 +51,7 @@ export default function PartyLedgerPage() {
   const [selectedParty, setSelectedParty] = useState<string>("")
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [partyType, setPartyType] = useState<string>("all")
   const [filters, setFilters] = useState<ReportFilters>(() => {
@@ -86,6 +89,7 @@ export default function PartyLedgerPage() {
 
   const fetchLedger = useCallback(async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const party = parties.find((p) => p.id === selectedParty)
       if (!party) return
@@ -122,8 +126,8 @@ export default function PartyLedgerPage() {
           return inv.customerId === selectedParty && invDateStr >= dateFromStr && invDateStr <= dateToStr && inv.status !== "cancelled"
         })
 
-        const customerPayments = payments.filter((pay: { invoiceId?: string; paymentDate: string }) => {
-          const payDateStr = pay.paymentDate.slice(0, 10)
+        const customerPayments = payments.filter((pay: { invoiceId?: string; paymentDate?: string; date?: string }) => {
+          const payDateStr = (pay.paymentDate || pay.date || '').slice(0, 10)
           const inv = invoices.find((i: { id: string }) => i.id === pay.invoiceId)
           return inv?.customerId === selectedParty && payDateStr >= dateFromStr && payDateStr <= dateToStr
         })
@@ -141,10 +145,10 @@ export default function PartyLedgerPage() {
           })
         })
 
-        customerPayments.forEach((pay: { id: string; paymentDate: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
+        customerPayments.forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
           entries.push({
             id: `pay-${pay.id}`,
-            date: pay.paymentDate,
+            date: pay.paymentDate || pay.date || '',
             type: "payment",
             documentNo: pay.referenceNo || "Payment",
             description: `Payment Received - ${pay.paymentMethod || "Cash"}`,
@@ -166,8 +170,8 @@ export default function PartyLedgerPage() {
           return pur.supplierId === selectedParty && purDateStr >= dateFromStr && purDateStr <= dateToStr
         })
 
-        const supplierPayments = payments.filter((pay: { purchaseId?: string; paymentDate: string }) => {
-          const payDateStr = pay.paymentDate.slice(0, 10)
+        const supplierPayments = payments.filter((pay: { purchaseId?: string; paymentDate?: string; date?: string }) => {
+          const payDateStr = (pay.paymentDate || pay.date || '').slice(0, 10)
           const pur = purchases.find((p: { id: string }) => p.id === pay.purchaseId)
           return pur?.supplierId === selectedParty && payDateStr >= dateFromStr && payDateStr <= dateToStr
         })
@@ -185,10 +189,10 @@ export default function PartyLedgerPage() {
           })
         })
 
-        supplierPayments.forEach((pay: { id: string; paymentDate: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
+        supplierPayments.forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
           entries.push({
             id: `pay-${pay.id}`,
-            date: pay.paymentDate,
+            date: pay.paymentDate || pay.date || '',
             type: "payment",
             documentNo: pay.referenceNo || "Payment",
             description: `Payment Made - ${pay.paymentMethod || "Cash"}`,
@@ -213,7 +217,9 @@ export default function PartyLedgerPage() {
 
       setLedgerEntries(entries)
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch ledger data"
       console.error("Failed to fetch ledger:", error)
+      setFetchError(message)
     } finally {
       setLoading(false)
     }
@@ -273,6 +279,8 @@ export default function PartyLedgerPage() {
         balance: closingBalance,
       }
 
+      const { pdf } = await import("@react-pdf/renderer")
+      const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
       const blob = await pdf(
         <CompactReportPDF
           title={`Party Ledger: ${selectedPartyData.name}`}
@@ -337,6 +345,7 @@ export default function PartyLedgerPage() {
   }
 
   return (
+    <ClientErrorBoundary fallbackTitle="Party ledger encountered an error">
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -557,14 +566,15 @@ export default function PartyLedgerPage() {
       {!selectedParty && (
         <Card>
           <CardContent className="py-12">
-            <div className="text-center text-muted-foreground">
-              <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">Select a party to view ledger</p>
-              <p className="text-sm">Choose a customer or supplier from the dropdown above</p>
-            </div>
+            <DataEmptyState
+              icon={<BookOpen className="h-12 w-12" />}
+              title="Select a party to view ledger"
+              description="Choose a customer or supplier from the dropdown above to see their transaction history"
+            />
           </CardContent>
         </Card>
       )}
     </div>
+    </ClientErrorBoundary>
   )
 }

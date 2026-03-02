@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
   Text,
   StyleSheet,
   ScrollView,
@@ -27,10 +26,55 @@ type DbCustomer = {
   phone?: string | null;
   address?: string | null;
   gst_number?: string | null;
-  // legacy
   gstin?: string | null;
   billing_address?: string | null;
 };
+
+type CustomerFormData = {
+  name: string;
+  email: string;
+  phone: string;
+  gst_number: string;
+  address: string;
+};
+
+type CustomerPayload = Record<string, string | null>;
+
+function getButtonTitle(isLoading: boolean, isEditMode: boolean): string {
+  if (isLoading) {
+    return isEditMode ? 'Updating...' : 'Adding...';
+  }
+  return isEditMode ? 'Update Customer' : 'Add Customer';
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return fallback;
+}
+
+function buildPreferredPayload(orgId: string, form: CustomerFormData): CustomerPayload {
+  return {
+    organization_id: orgId,
+    name: form.name.trim(),
+    email: form.email.trim() || null,
+    phone: form.phone.trim() || null,
+    gst_number: form.gst_number.trim() ? form.gst_number.trim().toUpperCase() : null,
+    address: form.address.trim() || null,
+  };
+}
+
+function buildLegacyPayload(orgId: string, form: CustomerFormData): CustomerPayload {
+  return {
+    organization_id: orgId,
+    name: form.name.trim(),
+    email: form.email.trim() || null,
+    phone: form.phone.trim() || null,
+    gstin: form.gst_number.trim() ? form.gst_number.trim().toUpperCase() : null,
+    billing_address: form.address.trim() || null,
+  };
+}
 
 export default function AddCustomerScreen() {
   const navigation = useNavigation();
@@ -39,7 +83,7 @@ export default function AddCustomerScreen() {
   const { organizationId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [savedSuccessfully, setSavedSuccessfully] = useState(false);
-  const [initialFormData, setInitialFormData] = useState<typeof formData | null>(null);
+  const [initialFormData, setInitialFormData] = useState<CustomerFormData | null>(null);
   const customerId = route.params?.customerId;
   const isEdit = useMemo(() => Boolean(customerId), [customerId]);
 
@@ -92,7 +136,7 @@ export default function AddCustomerScreen() {
           .maybeSingle();
 
         if (error) throw error;
-        const c = (data as any as DbCustomer) ?? null;
+        const c = (data as unknown as DbCustomer) ?? null;
         if (!c) return;
 
         const fetchedData = {
@@ -114,9 +158,8 @@ export default function AddCustomerScreen() {
     fetchCustomer();
   }, [customerId, organizationId]);
 
-  const saveWithFallback = async (payloadPreferred: any, payloadLegacy: any) => {
-    // Prefer web schema first; if schema cache complains, retry with legacy.
-    const run = async (payload: any) => {
+  const saveWithFallback = async (payloadPreferred: CustomerPayload, payloadLegacy: CustomerPayload) => {
+    const run = async (payload: CustomerPayload) => {
       if (isEdit) {
         return supabase
           .from('customers')
@@ -130,7 +173,7 @@ export default function AddCustomerScreen() {
     const first = await run(payloadPreferred);
     if (!first.error) return first;
 
-    const msg = String((first.error as any)?.message || '');
+    const msg = String(first.error.message ?? '');
     const schemaCache = msg.toLowerCase().includes('schema cache');
     const mentionsPreferredCol = msg.includes('gst_number') || msg.includes('address');
     if (schemaCache && mentionsPreferredCol) {
@@ -140,6 +183,9 @@ export default function AddCustomerScreen() {
   };
 
   const handleSubmit = async () => {
+    const successMessage = isEdit ? 'Customer updated successfully' : 'Customer added successfully';
+    const failMessage = isEdit ? 'Failed to update customer' : 'Failed to add customer';
+
     if (!formData.name.trim()) {
       Alert.alert('Error', 'Customer name is required');
       return;
@@ -152,34 +198,19 @@ export default function AddCustomerScreen() {
 
     try {
       setLoading(true);
-      const preferred = {
-        organization_id: organizationId,
-        name: formData.name.trim(),
-        email: formData.email.trim() ? formData.email.trim() : null,
-        phone: formData.phone.trim() ? formData.phone.trim() : null,
-        gst_number: formData.gst_number.trim() ? formData.gst_number.trim().toUpperCase() : null,
-        address: formData.address.trim() ? formData.address.trim() : null,
-      };
-
-      const legacy = {
-        organization_id: organizationId,
-        name: formData.name.trim(),
-        email: formData.email.trim() ? formData.email.trim() : null,
-        phone: formData.phone.trim() ? formData.phone.trim() : null,
-        gstin: formData.gst_number.trim() ? formData.gst_number.trim().toUpperCase() : null,
-        billing_address: formData.address.trim() ? formData.address.trim() : null,
-      };
+      const preferred = buildPreferredPayload(organizationId, formData);
+      const legacy = buildLegacyPayload(organizationId, formData);
 
       const { error } = await saveWithFallback(preferred, legacy);
       if (error) throw error;
 
       setSavedSuccessfully(true);
-      Alert.alert('Success', isEdit ? 'Customer updated successfully' : 'Customer added successfully', [
+      Alert.alert('Success', successMessage, [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
-    } catch (error: any) {
-      console.error('Error adding customer:', error);
-      Alert.alert('Error', error.message || (isEdit ? 'Failed to update customer' : 'Failed to add customer'));
+    } catch (err: unknown) {
+      console.error('Error adding customer:', err);
+      Alert.alert('Error', getErrorMessage(err, failMessage));
     } finally {
       setLoading(false);
     }
@@ -241,7 +272,7 @@ export default function AddCustomerScreen() {
       </Card>
 
       <Button
-        title={loading ? (isEdit ? 'Updating...' : 'Adding...') : (isEdit ? 'Update Customer' : 'Add Customer')}
+        title={getButtonTitle(loading, isEdit)}
         onPress={handleSubmit}
         disabled={loading}
         style={styles.submitButton}

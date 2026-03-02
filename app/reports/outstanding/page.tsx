@@ -157,6 +157,36 @@ export default function OutstandingReportPage() {
     }).format(value)
   }
 
+  const exportToCSV = () => {
+    const headers = ['Type', 'Party Name', 'Document No', 'Date', 'Due Date', 'Amount', 'Paid', 'Balance', 'Days Overdue', 'Phone']
+    const allEntries = [...filterByAging(receivables), ...filterByAging(payables)]
+    const rows = allEntries.map(e => [
+      e.partyType === 'customer' ? 'Receivable' : 'Payable',
+      e.partyName,
+      e.documentNo,
+      format(new Date(e.documentDate), 'dd/MM/yyyy'),
+      format(new Date(e.dueDate), 'dd/MM/yyyy'),
+      e.totalAmount.toFixed(2),
+      e.paidAmount.toFixed(2),
+      e.balance.toFixed(2),
+      e.daysOverdue.toString(),
+      e.phone || ''
+    ])
+
+    const csvContent = [
+      `Outstanding Report - As of ${format(new Date(), 'dd MMM yyyy')}`,
+      '',
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `outstanding-report-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    link.click()
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6 report-container">
       {/* Print Header - Only visible when printing */}
@@ -293,7 +323,7 @@ export default function OutstandingReportPage() {
               <SelectItem value="90+">90+ Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button onClick={exportToCSV} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

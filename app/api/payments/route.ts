@@ -1,30 +1,19 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { authorize, orgScope } from "@/lib/authorize"
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    
-    // Get user's organization
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userOrg } = await supabase
-      .from("app_user_organizations")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .single()
+    const { supabase, organizationId } = await authorize("invoices", "read")
 
     const { data, error } = await supabase
       .from("payments")
       .select(`
         *,
-        invoices:invoice_id(invoice_number, customer_name, organization_id),
-        purchases:purchase_id(purchase_number, supplier_name, organization_id)
+        invoices:invoice_id(invoice_number, customer_name),
+        purchases:purchase_id(purchase_number, supplier_name)
       `)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
       .order("payment_date", { ascending: false })
 
     if (error) {
@@ -32,15 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Filter payments by organization (via linked invoices/purchases)
-    const filteredPayments = data?.filter((payment) => {
-      if (payment.invoices?.organization_id === userOrg?.organization_id) return true
-      if (payment.purchases?.organization_id === userOrg?.organization_id) return true
-      return false
-    }) || []
-
-    // Transform to frontend format
-    const payments = filteredPayments.map((payment) => ({
+    const payments = (data || []).map((payment) => ({
       id: payment.id,
       invoiceId: payment.invoice_id,
       invoiceNo: payment.invoices?.invoice_number,

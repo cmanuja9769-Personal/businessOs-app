@@ -55,20 +55,20 @@ export default function ProfitLossPage() {
     async function fetchProfitLossData() {
     setLoading(true)
     try {
-      // Fetch invoices and purchases
-      const [invoicesRes, purchasesRes] = await Promise.all([
+      const [invoicesRes, purchasesRes, stockRes] = await Promise.all([
         fetch('/api/invoices'),
-        fetch('/api/purchases')
+        fetch('/api/purchases'),
+        fetch('/api/reports/stock')
       ])
 
       const invoices = invoicesRes.ok ? await invoicesRes.json() : []
       const purchases = purchasesRes.ok ? await purchasesRes.json() : []
+      const stockData = stockRes.ok ? await stockRes.json() : { data: [] }
 
       const fromDate = new Date(dateFrom)
       const toDate = new Date(dateTo)
       toDate.setHours(23, 59, 59, 999)
 
-      // Filter for date range
       const periodInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
         const d = new Date(inv.invoiceDate)
         return d >= fromDate && d <= toDate
@@ -78,34 +78,30 @@ export default function ProfitLossPage() {
         return d >= fromDate && d <= toDate
       })
 
-      // Calculate revenue
       const totalSales = periodInvoices.reduce((s: number, inv: ApiInvoiceResponse) => s + (inv.subtotal || 0), 0)
-      const otherIncome = 0 // Can be extended
+      const otherIncome = 0
 
-      // Calculate COGS
       const totalPurchases = periodPurchases.reduce((s: number, pur: ApiPurchaseResponse) => s + (pur.subtotal || 0), 0)
-      const openingStock = 50000 // Mock - in real app, calculate from inventory
-      const closingStock = 45000 // Mock
-      const cogs = openingStock + totalPurchases - closingStock
 
-      // Calculate gross profit
+      const stockItems = stockData?.data || []
+      const closingStockValue = stockItems.reduce((sum: number, item: Record<string, number | null>) => {
+        const qty = item.current_stock || 0
+        const price = item.purchase_price || 0
+        return sum + (qty * price)
+      }, 0)
+
+      const openingStockValue = closingStockValue + totalSales - totalPurchases > 0
+        ? closingStockValue + totalSales - totalPurchases
+        : closingStockValue
+
+      const cogs = openingStockValue + totalPurchases - closingStockValue
+
       const grossProfit = totalSales + otherIncome - cogs
 
-      // Expenses (mock data - in real app, fetch from expense records)
-      const expenses = [
-        { category: 'Salaries & Wages', amount: grossProfit * 0.15 },
-        { category: 'Rent', amount: grossProfit * 0.05 },
-        { category: 'Utilities', amount: grossProfit * 0.02 },
-        { category: 'Marketing & Advertising', amount: grossProfit * 0.03 },
-        { category: 'Office Supplies', amount: grossProfit * 0.01 },
-        { category: 'Insurance', amount: grossProfit * 0.02 },
-        { category: 'Depreciation', amount: grossProfit * 0.02 },
-        { category: 'Other Expenses', amount: grossProfit * 0.01 }
-      ]
-
-      const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
+      const expenses: { category: string; amount: number }[] = []
+      const totalExpenses = 0
       const operatingProfit = grossProfit - totalExpenses
-      const taxesProvision = Math.max(0, operatingProfit * 0.30) // 30% tax
+      const taxesProvision = 0
       const netProfit = operatingProfit - taxesProvision
 
       setData({
@@ -115,9 +111,9 @@ export default function ProfitLossPage() {
           total: totalSales + otherIncome
         },
         costOfGoodsSold: {
-          openingStock,
+          openingStock: openingStockValue,
           purchases: totalPurchases,
-          closingStock,
+          closingStock: closingStockValue,
           total: cogs
         },
         grossProfit,

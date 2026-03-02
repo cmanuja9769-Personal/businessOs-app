@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,21 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { InventoryStackNavigationProp } from '@navigation/types';
+import { InventoryStackNavigationProp, InventoryStackParamList } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useToast } from '@contexts/ToastContext';
 import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import Card from '@components/ui/Card';
+import Loading from '@components/ui/Loading';
 import { useUnsavedChanges } from '@hooks/useUnsavedChanges';
 import { spacing, fontSize } from '@theme/spacing';
 import { supabase } from '@lib/supabase';
+import { successFeedback, errorFeedback } from '@lib/haptics';
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const UNITS = ['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'SET'];
@@ -29,10 +32,17 @@ const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Stationery', 'Hardware',
 
 export default function AddItemScreen() {
   const navigation = useNavigation<InventoryStackNavigationProp>();
+  const route = useRoute<RouteProp<InventoryStackParamList, 'AddItem'>>();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
+  const toast = useToast();
+
+  const itemId = route.params?.itemId;
+  const barcodeFromScan = route.params?.barcode;
+  const isEditing = !!itemId;
 
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEditing);
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   // Form fields
@@ -66,6 +76,53 @@ export default function AddItemScreen() {
     title: 'Discard Item?',
     message: 'You have unsaved changes. Are you sure you want to discard them?',
   });
+
+  useEffect(() => {
+    if (barcodeFromScan) {
+      setBarcode(barcodeFromScan);
+    }
+  }, [barcodeFromScan]);
+
+  useEffect(() => {
+    if (!itemId || !organizationId) {
+      setInitialLoading(false);
+      return;
+    }
+
+    const fetchItem = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('items')
+          .select('*')
+          .eq('id', itemId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data) {
+          setName(data.name || '');
+          setSku(data.item_code || '');
+          setBarcode(data.barcode_no || '');
+          setCategory(data.category || '');
+          setUnit(data.unit || 'PCS');
+          setPurchasePrice(data.purchase_price ? String(data.purchase_price) : '');
+          setSellingPrice(data.sale_price ? String(data.sale_price) : '');
+          setGstRate(data.tax_rate ? Number(data.tax_rate) : 18);
+          setHsnCode(data.hsn || '');
+          setMinStock(data.min_stock ? String(data.min_stock) : '');
+          setMaxStock('');
+          setCurrentStock(data.current_stock ? String(data.current_stock) : '0');
+          setDescription(data.description || '');
+        }
+      } catch {
+        toast.error('Failed to load item details');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchItem();
+  }, [itemId, organizationId]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -120,6 +177,7 @@ export default function AddItemScreen() {
 
   const handleSaveItem = async () => {
     if (!validateForm()) {
+      errorFeedback();
       Alert.alert('Validation Error', 'Please fill all required fields correctly');
       return;
     }
@@ -135,38 +193,45 @@ export default function AddItemScreen() {
       const itemData = {
         organization_id: organizationId,
         name: name.trim(),
-        sku: sku.trim(),
-        barcode: barcode.trim() || null,
+        item_code: sku.trim(),
+        barcode_no: barcode.trim() || null,
         category: category.trim() || 'Other',
         unit,
         purchase_price: parseFloat(purchasePrice),
-        selling_price: parseFloat(sellingPrice),
-        gst_rate: gstRate,
-        hsn_code: hsnCode.trim() || null,
+        sale_price: parseFloat(sellingPrice),
+        tax_rate: gstRate,
+        hsn: hsnCode.trim() || null,
         min_stock: minStock ? parseInt(minStock) : 0,
-        max_stock: maxStock ? parseInt(maxStock) : 0,
         current_stock: parseInt(currentStock),
         description: description.trim() || null,
-        image_url: imageUri, // In production, upload to Supabase Storage first
       };
 
-      const { data, error } = await supabase
-        .from('items')
-        .insert(itemData)
-        .select()
-        .single();
+      if (isEditing) {
+        const { error } = await supabase
+          .from('items')
+          .update(itemData)
+          .eq('id', itemId)
+          .eq('organization_id', organizationId);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('items')
+          .insert(itemData)
+          .select()
+          .single();
+
+        if (error) throw error;
+      }
 
       setSavedSuccessfully(true);
-      Alert.alert('Success', 'Item added successfully!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add item');
+      successFeedback();
+      toast.success(isEditing ? 'Item updated successfully' : 'Item added successfully');
+      navigation.goBack();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save item';
+      errorFeedback();
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -177,6 +242,9 @@ export default function AddItemScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {initialLoading ? (
+        <Loading fullScreen text="Loading item..." />
+      ) : (
       <ScrollView style={styles.content}>
         {/* Image Section */}
         <Card style={styles.imageSection}>
@@ -405,8 +473,8 @@ export default function AddItemScreen() {
           </View>
         </Card>
       </ScrollView>
+      )}
 
-      {/* Footer */}
       <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <Button
           title="Cancel"
@@ -415,10 +483,10 @@ export default function AddItemScreen() {
           style={styles.footerButton}
         />
         <Button
-          title="Save Item"
+          title={isEditing ? 'Update Item' : 'Save Item'}
           onPress={handleSaveItem}
           loading={loading}
-          disabled={loading}
+          disabled={loading || initialLoading}
           style={styles.footerButton}
         />
       </View>

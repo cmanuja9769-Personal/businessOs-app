@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TextInput as RNTextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
@@ -9,14 +9,13 @@ import Loading from '@components/ui/Loading';
 import { spacing } from '@theme/spacing';
 import { supabase } from '@lib/supabase';
 
-type RouteParams = {
-  godownId?: string;
-};
-
 const makeGodownCode = (n: number) => 'GDN' + String(n).padStart(4, '0');
 
+const getSaveButtonTitle = (isEditing: boolean) =>
+  isEditing ? 'Update Godown' : 'Create Godown';
+
 export default function AddGodownScreen() {
-  const route = useRoute<any>();
+  const route = useRoute();
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
@@ -119,9 +118,10 @@ export default function AddGodownScreen() {
       }
 
       navigation.goBack();
-    } catch (error: any) {
-      console.error('[ADD_GODOWN] handleSave error:', error);
-      Alert.alert('Error', error.message || 'Failed to save godown');
+    } catch (err: unknown) {
+      console.error('[ADD_GODOWN] handleSave error:', err);
+      const message = err instanceof Error ? err.message : 'Failed to save godown';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
@@ -151,7 +151,7 @@ export default function AddGodownScreen() {
         />
 
         <Button
-          title={loading ? 'Saving...' : isEditing ? 'Update Godown' : 'Create Godown'}
+          title={loading ? 'Saving...' : getSaveButtonTitle(isEditing)}
           onPress={handleSave}
           disabled={loading}
           style={styles.saveButton}

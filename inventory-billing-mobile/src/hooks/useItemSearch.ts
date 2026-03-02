@@ -98,22 +98,24 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
         let countQuery = supabase
           .from('items')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', organizationId);
+          .eq('organization_id', organizationId)
+          .is('deleted_at', null);
 
         let dataQuery = supabase
           .from('items')
           .select('*')
           .eq('organization_id', organizationId)
+          .is('deleted_at', null)
           .order('name', { ascending: true })
           .range(from, to);
 
         if (query.trim()) {
           const searchTerm = `%${query.trim()}%`;
           countQuery = countQuery.or(
-            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode.ilike.${searchTerm},category.ilike.${searchTerm}`
+            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`
           );
           dataQuery = dataQuery.or(
-            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode.ilike.${searchTerm},category.ilike.${searchTerm}`
+            `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`
           );
         }
 
@@ -142,19 +144,21 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
         setPage(pageNum);
         setStatus('success');
         setError(null);
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return;
+      } catch (err: unknown) {
+        const errorObj = err instanceof Error ? err : null;
+        if (errorObj?.name === 'AbortError') return;
 
+        const message = errorObj?.message ?? '';
         const isNetworkError =
-          err?.message?.includes('network') ||
-          err?.message?.includes('fetch') ||
-          err?.message?.includes('Failed to fetch');
+          message.includes('network') ||
+          message.includes('fetch') ||
+          message.includes('Failed to fetch');
 
         if (isNetworkError) {
           setIsOffline(true);
           setError('Network error. Please check your connection and try again.');
         } else {
-          setError(err?.message || 'Failed to load items');
+          setError(message || 'Failed to load items');
         }
         setStatus('error');
       } finally {

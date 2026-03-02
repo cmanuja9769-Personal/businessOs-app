@@ -16,7 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { InvoiceStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Loading from '@components/ui/Loading';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
@@ -24,6 +26,8 @@ import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
+import { lightTap } from '@lib/haptics';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
 
 type DocumentType = 'invoice' | 'sales_order' | 'quotation' | 'proforma' | 'delivery_challan' | 'credit_note' | 'debit_note';
 
@@ -78,6 +82,10 @@ export default function InvoiceListScreen() {
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
 
+  useFocusRefresh(useCallback(() => {
+    fetchInvoices(searchQuery, selectedType, 0, true);
+  }, [searchQuery, selectedType]));
+
   const fetchInvoices = useCallback(async (
     query: string,
     docType: DocumentType | 'all',
@@ -110,12 +118,14 @@ export default function InvoiceListScreen() {
       let countQuery = supabase
         .from('invoices')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       let dataQuery = supabase
         .from('invoices')
         .select('id, invoice_number, customer_name, total, status, invoice_date, document_type')
         .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -158,8 +168,9 @@ export default function InvoiceListScreen() {
       setHasMore(fetchedItems.length === PAGE_SIZE);
       setPage(pageNum);
       setError(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load invoices');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load invoices';
+      setError(message);
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -260,12 +271,13 @@ export default function InvoiceListScreen() {
     </TouchableOpacity>
   );
 
-  const renderInvoiceItem = useCallback(({ item }: { item: Invoice }) => {
+  const renderInvoiceItem = useCallback(({ item, index }: { item: Invoice; index: number }) => {
     const docType = (item.document_type || 'invoice') as DocumentType;
     const config = DOCUMENT_TYPES[docType] || DOCUMENT_TYPES.invoice;
     const statusStyle = getStatusStyle(item.status);
 
     return (
+      <AnimatedListItem index={index}>
       <TouchableOpacity
         onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: item.id })}
         activeOpacity={0.7}
@@ -310,6 +322,7 @@ export default function InvoiceListScreen() {
           <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
         </View>
       </TouchableOpacity>
+      </AnimatedListItem>
     );
   }, [colors, shadows, isDark, navigation]);
 
@@ -337,17 +350,17 @@ export default function InvoiceListScreen() {
       );
     }
 
+    const getEmptyDescription = (): string => {
+      if (searchQuery) return `No invoices matching "${searchQuery}"`;
+      if (selectedType === 'all') return 'Create your first invoice to get started';
+      return `No ${DOCUMENT_TYPES[selectedType]?.label.toLowerCase()}s yet`;
+    };
+
     return (
       <EmptyState
         icon="document-outline"
         title="No invoices found"
-        description={
-          searchQuery
-            ? `No invoices matching "${searchQuery}"`
-            : selectedType === 'all'
-              ? 'Create your first invoice to get started'
-              : `No ${DOCUMENT_TYPES[selectedType]?.label.toLowerCase()}s yet`
-        }
+        description={getEmptyDescription()}
         actionText="Create Invoice"
         onAction={() => navigation.navigate('CreateInvoice', {})}
       />
@@ -355,7 +368,16 @@ export default function InvoiceListScreen() {
   }, [loading, error, searchQuery, selectedType, handleRefresh, navigation]);
 
   if (loading && invoices.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading invoices..." />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Invoices</Text>
+        </View>
+        <View style={{ paddingHorizontal: 20 }}>
+          <SkeletonList count={6} />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -442,7 +464,7 @@ export default function InvoiceListScreen() {
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('CreateInvoice', {})}
+        onPress={() => { lightTap(); navigation.navigate('CreateInvoice', {}); }}
         activeOpacity={0.9}
       >
         <LinearGradient

@@ -1,5 +1,9 @@
-import ExcelJS from "exceljs"
 import type { IItem } from "@/types"
+
+async function getExcelJS() {
+  const mod = await import("exceljs")
+  return mod.default
+}
 
 export interface ParsedRow {
   [key: string]: string | number | Date | null
@@ -138,6 +142,7 @@ function remapRowKeys(row: ParsedRow): ParsedRow {
 
 export async function parseExcelFile(file: File): Promise<ParsedRow[]> {
   const arrayBuffer = await file.arrayBuffer()
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(arrayBuffer)
 
@@ -172,6 +177,7 @@ export async function parseExcelFile(file: File): Promise<ParsedRow[]> {
 }
 
 export async function downloadExcelTemplate(headers: string[], filename: string) {
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "businessOs-app"
   workbook.created = new Date()
@@ -272,6 +278,7 @@ export async function downloadExcelTemplate(headers: string[], filename: string)
 }
 
 export async function downloadItemExcelTemplate(filename = "item_template.xlsx", godownNames: string[] = []) {
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "businessOs-app"
   workbook.created = new Date()
@@ -466,6 +473,7 @@ export async function downloadItemExcelTemplate(filename = "item_template.xlsx",
 }
 
 export async function exportItemsToExcel(items: IItem[], filename = "items_export.xlsx", godownNames: string[] = []) {
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "businessOs-app"
   workbook.created = new Date()
@@ -694,6 +702,7 @@ export async function exportItemsToExcel(items: IItem[], filename = "items_expor
 }
 
 export async function downloadCustomerExcelTemplate(filename = "customer_template.xlsx") {
+  const ExcelJS = await getExcelJS()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "businessOs-app"
   workbook.created = new Date()

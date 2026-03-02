@@ -103,6 +103,33 @@ export default function ReturnsReportPage() {
     }).format(value)
   }
 
+  const exportToCSV = () => {
+    const headers = ['Return No', 'Date', 'Type', 'Original Invoice', 'Party Name', 'Amount', 'Reason', 'Status']
+    const rows = filteredReturns.map(r => [
+      r.returnNo,
+      format(new Date(r.date), 'dd/MM/yyyy'),
+      r.type === 'credit_note' ? 'Credit Note' : 'Debit Note',
+      r.originalInvoiceNo,
+      r.partyName,
+      r.amount.toFixed(2),
+      r.reason,
+      r.status
+    ])
+
+    const csvContent = [
+      `Returns Report - ${dateFrom} to ${dateTo}`,
+      '',
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `returns-report-${dateFrom}-to-${dateTo}.csv`
+    link.click()
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
@@ -122,7 +149,7 @@ export default function ReturnsReportPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button onClick={exportToCSV} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -311,7 +338,7 @@ function ReturnTable({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(ret.amount)}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{ret.reason}</TableCell>
+                      <TableCell className="max-w-[12.5rem] truncate">{ret.reason}</TableCell>
                       <TableCell>
                         <Badge variant={ret.status === 'processed' ? 'secondary' : 'outline'}>
                           {ret.status}

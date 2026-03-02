@@ -13,7 +13,7 @@ interface UsePaginatedSearchOptions {
   ascending?: boolean;
   pageSize?: number;
   debounceMs?: number;
-  additionalFilters?: Record<string, any>;
+  additionalFilters?: Record<string, unknown>;
 }
 
 interface UsePaginatedSearchReturn<T> {
@@ -107,12 +107,14 @@ export function usePaginatedSearch<T extends { id: string }>(
         let countQuery = supabase
           .from(table)
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', organizationId);
+          .eq('organization_id', organizationId)
+          .is('deleted_at', null);
 
         let dataQuery = supabase
           .from(table)
           .select(selectColumns)
           .eq('organization_id', organizationId)
+          .is('deleted_at', null)
           .order(orderBy, { ascending })
           .range(from, to);
 
@@ -155,17 +157,18 @@ export function usePaginatedSearch<T extends { id: string }>(
         setPage(pageNum);
         setStatus('success');
         setError(null);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : '';
         const isNetworkError =
-          err?.message?.includes('network') ||
-          err?.message?.includes('fetch') ||
-          err?.message?.includes('Failed to fetch');
+          message.includes('network') ||
+          message.includes('fetch') ||
+          message.includes('Failed to fetch');
 
         if (isNetworkError) {
           setIsOffline(true);
           setError('Network error. Please check your connection and try again.');
         } else {
-          setError(err?.message || `Failed to load ${table}`);
+          setError(message || `Failed to load ${table}`);
         }
         setStatus('error');
       } finally {

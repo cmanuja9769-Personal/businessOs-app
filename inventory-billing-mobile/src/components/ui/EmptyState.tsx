@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@contexts/ThemeContext';
 import { spacing, fontSize } from '@theme/spacing';
 import Button from './Button';
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   description?: string;
   actionText?: string;
@@ -24,7 +24,7 @@ export default function EmptyState({
 
   return (
     <View style={styles.container}>
-      <Ionicons name={icon as any} size={64} color={colors.textSecondary} />
+      <Ionicons name={icon} size={64} color={colors.textSecondary} />
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
       {description && (
         <Text style={[styles.description, { color: colors.textSecondary }]}>

@@ -71,10 +71,10 @@ const STEPS = [
 export default function CreatePurchaseScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const route = useRoute();
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const { organizationId } = useAuth();
 
-  const purchaseId = (route.params as any)?.purchaseId as string | undefined;
+  const purchaseId = (route.params as Record<string, unknown>)?.purchaseId as string | undefined;
   const isEditing = !!purchaseId;
 
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -124,13 +124,15 @@ export default function CreatePurchaseScreen() {
       const [suppliersRes, itemsRes] = await Promise.all([
         supabase
           .from('suppliers')
-          .select('id, name, email, gstin_no, contact_no, address')
+          .select('id, name, email, gst_number, phone, address')
           .eq('organization_id', organizationId)
+          .is('deleted_at', null)
           .order('name'),
         supabase
           .from('items')
-          .select('id, name, item_code, category, purchase_price, gst_rate, hsn_code, barcode_no')
+          .select('id, name, item_code, category, purchase_price, tax_rate, hsn, barcode_no, current_stock')
           .eq('organization_id', organizationId)
+          .is('deleted_at', null)
           .order('name'),
       ]);
 
@@ -139,8 +141,8 @@ export default function CreatePurchaseScreen() {
           id: s.id,
           name: s.name,
           email: s.email,
-          gstin: s.gstin_no,
-          phone: s.contact_no,
+          gstin: s.gst_number,
+          phone: s.phone,
           address: s.address,
         })));
       }
@@ -152,8 +154,8 @@ export default function CreatePurchaseScreen() {
           item_code: i.item_code,
           category: i.category,
           purchase_price: i.purchase_price,
-          tax_rate: i.gst_rate,
-          hsn: i.hsn_code,
+          tax_rate: i.tax_rate,
+          hsn: i.hsn,
           barcode_no: i.barcode_no,
         })));
       }
@@ -171,24 +173,38 @@ export default function CreatePurchaseScreen() {
   const loadExistingPurchase = async () => {
     if (!purchaseId) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('purchases')
       .select('*')
       .eq('id', purchaseId)
       .single();
 
     if (data) {
-      setExistingPurchaseNumber(data.purchase_no);
-      setPurchaseDate(data.date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+      setExistingPurchaseNumber(data.purchase_number);
+      setPurchaseDate(data.purchase_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
       setNotes(data.notes || '');
       setBillingMode(data.gst_enabled ? 'gst' : 'non-gst');
 
       const supplier = suppliers.find(s => s.id === data.supplier_id);
       if (supplier) setSelectedSupplier(supplier);
 
-      if (data.items) {
-        const items = typeof data.items === 'string' ? JSON.parse(data.items) : data.items;
-        setPurchaseItems(items);
+      const { data: itemsData } = await supabase
+        .from('purchase_items')
+        .select('*')
+        .eq('purchase_id', purchaseId);
+
+      if (itemsData && itemsData.length > 0) {
+        setPurchaseItems(itemsData.map((item: Record<string, unknown>) => ({
+          itemId: (item.item_id as string) || '',
+          name: (item.item_name as string) || '',
+          hsn: (item.hsn as string) || '',
+          quantity: Number(item.quantity) || 0,
+          rate: Number(item.rate) || 0,
+          discount: Number(item.discount) || 0,
+          discountType: ((item.discount_type as string) || 'percentage') as 'percentage' | 'flat',
+          taxRate: Number(item.tax_rate) || 0,
+          amount: Number(item.amount) || 0,
+        })));
       }
     }
   };
@@ -320,7 +336,8 @@ export default function CreatePurchaseScreen() {
     const { count } = await supabase
       .from('purchases')
       .select('*', { count: 'exact', head: true })
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null);
 
     const nextNum = (count || 0) + 1;
     return `PUR-${nextNum.toString().padStart(5, '0')}`;
@@ -335,17 +352,14 @@ export default function CreatePurchaseScreen() {
 
       const purchaseData = {
         organization_id: organizationId,
-        purchase_no: purchaseNo,
+        purchase_number: purchaseNo,
         supplier_id: selectedSupplier.id,
         supplier_name: selectedSupplier.name,
         supplier_phone: selectedSupplier.phone,
         supplier_address: selectedSupplier.address,
         supplier_gst: selectedSupplier.gstin,
-        date: purchaseDate,
-        items: purchaseItems,
+        purchase_date: purchaseDate,
         subtotal: totals.subtotal,
-        discount: 0,
-        discount_type: 'percentage',
         cgst: totals.cgst,
         sgst: totals.sgst,
         igst: 0,
@@ -357,10 +371,36 @@ export default function CreatePurchaseScreen() {
         notes,
       };
 
+      let savedPurchaseId = purchaseId;
+
       if (isEditing) {
         await supabase.from('purchases').update(purchaseData).eq('id', purchaseId);
+        await supabase.from('purchase_items').delete().eq('purchase_id', purchaseId);
       } else {
-        await supabase.from('purchases').insert(purchaseData);
+        const { data: newPurchase, error: insertError } = await supabase
+          .from('purchases')
+          .insert(purchaseData)
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        savedPurchaseId = newPurchase?.id;
+      }
+
+      if (savedPurchaseId && purchaseItems.length > 0) {
+        const itemsToInsert = purchaseItems.map(item => ({
+          purchase_id: savedPurchaseId,
+          item_id: item.itemId || null,
+          item_name: item.name || 'Item',
+          hsn: item.hsn || null,
+          quantity: item.quantity || 1,
+          rate: item.rate || 0,
+          discount: item.discount || 0,
+          discount_type: item.discountType || 'percentage',
+          tax_rate: item.taxRate || 0,
+          amount: item.amount || 0,
+        }));
+
+        await supabase.from('purchase_items').insert(itemsToInsert);
       }
 
       setSavedSuccessfully(true);
@@ -392,7 +432,7 @@ export default function CreatePurchaseScreen() {
             disabled={index >= step}
           >
             <Ionicons
-              name={s.icon as any}
+              name={s.icon as keyof typeof Ionicons.glyphMap}
               size={16}
               color={index <= step ? '#fff' : colors.textSecondary}
             />

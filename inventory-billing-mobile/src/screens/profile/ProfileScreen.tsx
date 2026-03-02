@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,9 @@ import { useTheme } from '@contexts/ThemeContext';
 import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import { spacing, fontSize } from '@theme/spacing';
-import { supabase } from '@lib/supabase';
 
 export default function ProfileScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const { user, signOut } = useAuth();
   const { colors } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -33,8 +32,9 @@ export default function ProfileScreen() {
             setLoading(true);
             await signOut();
             // Navigation to auth screen is handled by AuthProvider
-          } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to sign out');
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to sign out';
+            Alert.alert('Error', message);
           } finally {
             setLoading(false);
           }

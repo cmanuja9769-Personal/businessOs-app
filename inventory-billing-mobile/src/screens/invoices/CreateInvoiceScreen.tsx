@@ -15,7 +15,7 @@ import {
   FlatList,
   Modal,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { InvoiceStackNavigationProp } from '@navigation/types';
@@ -25,74 +25,35 @@ import Loading from '@components/ui/Loading';
 import { useUnsavedChanges } from '@hooks/useUnsavedChanges';
 import { supabase } from '@lib/supabase';
 import { calculateInvoiceTotals, IInvoiceItem } from '@lib/invoice-calculations';
-import { formatCurrency, generateInvoiceNumber } from '@lib/utils';
+import { formatCurrency } from '@lib/utils';
+import {
+  DocumentType,
+  DOCUMENT_TYPES,
+  STEPS,
+  PricingMode,
+  BillingMode,
+  PackingType,
+  Customer,
+  Item,
+  CreateInvoiceRouteParams,
+  InvoiceRow,
+  InvoiceItemRow,
+  getItemPrice as getItemPriceUtil,
+  getErrorMessage,
+  getPricingModeLabel,
+} from './invoice-types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type DocumentType = 'invoice' | 'sales_order' | 'quotation' | 'proforma' | 'delivery_challan' | 'credit_note' | 'debit_note';
-
-interface DocumentTypeConfig {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  gradient: [string, string];
-  description: string;
-}
-
-const DOCUMENT_TYPES: Record<DocumentType, DocumentTypeConfig> = {
-  invoice: { label: 'Invoice', icon: 'receipt-outline', gradient: ['#4F46E5', '#6366F1'], description: 'Standard tax invoice' },
-  sales_order: { label: 'Sales Order', icon: 'cart-outline', gradient: ['#059669', '#10B981'], description: 'Confirm customer order' },
-  quotation: { label: 'Quotation', icon: 'document-text-outline', gradient: ['#D97706', '#F59E0B'], description: 'Price estimate for customer' },
-  proforma: { label: 'Proforma', icon: 'clipboard-outline', gradient: ['#7C3AED', '#8B5CF6'], description: 'Preliminary invoice' },
-  delivery_challan: { label: 'Delivery Challan', icon: 'car-outline', gradient: ['#0369A1', '#0EA5E9'], description: 'Goods delivery document' },
-  credit_note: { label: 'Credit Note', icon: 'arrow-down-circle-outline', gradient: ['#DC2626', '#EF4444'], description: 'Refund or credit' },
-  debit_note: { label: 'Debit Note', icon: 'arrow-up-circle-outline', gradient: ['#EA580C', '#F97316'], description: 'Additional charge' },
-};
-
-interface Customer {
-  id: string;
-  name: string;
-  email?: string;
-  gstin?: string;
-  phone?: string;
-  address?: string;
-}
-
-interface Item {
-  id: string;
-  name: string;
-  item_code?: string;
-  category?: string;
-  sale_price?: number;
-  wholesale_price?: number;
-  quantity_price?: number;
-  purchase_price?: number;
-  tax_rate?: number;
-  hsn?: string;
-  barcode_no?: string;
-  current_stock?: number;
-  per_carton_quantity?: number;
-}
-
-const STEPS = [
-  { key: 'type', label: 'Type', icon: 'document-outline' },
-  { key: 'customer', label: 'Customer', icon: 'person-outline' },
-  { key: 'items', label: 'Items', icon: 'cube-outline' },
-  { key: 'review', label: 'Review', icon: 'checkmark-circle-outline' },
-];
-
-type PricingMode = 'sale' | 'wholesale' | 'quantity';
-type BillingMode = 'gst' | 'non-gst';
-type PackingType = 'loose' | 'carton';
-
 export default function CreateInvoiceScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
-  const route = useRoute();
+  const route = useRoute<RouteProp<Record<string, CreateInvoiceRouteParams | undefined>, string>>();
   const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
 
-  const invoiceId = (route.params as any)?.invoiceId as string | undefined;
+  const invoiceId = route.params?.invoiceId;
   const isEditing = !!invoiceId;
-  const preselectedCustomerId = (route.params as any)?.customerId as string | undefined;
+  const preselectedCustomerId = route.params?.customerId;
 
   // Animation refs
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -130,7 +91,6 @@ export default function CreateInvoiceScreen() {
   // Invoice details
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
-  const [terms, setTerms] = useState('Payment due within 30 days');
   const [existingInvoiceNumber, setExistingInvoiceNumber] = useState<string | null>(null);
 
   const docConfig = DOCUMENT_TYPES[documentType];
@@ -151,7 +111,7 @@ export default function CreateInvoiceScreen() {
     cancelText: 'Keep Editing',
   });
 
-  const normalizeItems = (raw: any): IInvoiceItem[] => {
+  const normalizeItems = (raw: unknown): IInvoiceItem[] => {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw as IInvoiceItem[];
     if (typeof raw === 'string') {
@@ -162,7 +122,10 @@ export default function CreateInvoiceScreen() {
         return [];
       }
     }
-    if (typeof raw === 'object' && Array.isArray(raw.items)) return raw.items as IInvoiceItem[];
+    if (typeof raw === 'object' && raw !== null && 'items' in raw) {
+      const items = (raw as { items?: unknown }).items;
+      if (Array.isArray(items)) return items as IInvoiceItem[];
+    }
     return [];
   };
 
@@ -287,23 +250,27 @@ export default function CreateInvoiceScreen() {
         return;
       }
 
-      setDocumentType((data as any).document_type || 'invoice');
-      setExistingInvoiceNumber((data as any).invoice_number ?? null);
-      setInvoiceDate((data as any).invoice_date ?? new Date().toISOString().split('T')[0]);
-      setNotes((data as any).notes ?? '');
-      setTerms((data as any).terms ?? '');
-      
-      // Set pricing and billing modes
-      setPricingMode((data as any).pricing_mode || 'sale');
-      setBillingMode((data as any).billing_mode || ((data as any).gst_enabled === false ? 'non-gst' : 'gst'));
+      const invoice = data as InvoiceRow;
 
-      const customerFromInvoice: Customer | null = (data as any).customer_id
+      setDocumentType(invoice.document_type || 'invoice');
+      setExistingInvoiceNumber(invoice.invoice_number ?? null);
+      setInvoiceDate(invoice.invoice_date ?? new Date().toISOString().split('T')[0]);
+      setNotes(invoice.notes ?? '');
+      
+      setPricingMode(invoice.pricing_mode || 'sale');
+      if (invoice.billing_mode) {
+        setBillingMode(invoice.billing_mode);
+      } else {
+        setBillingMode(invoice.gst_enabled === false ? 'non-gst' : 'gst');
+      }
+
+      const customerFromInvoice: Customer | null = invoice.customer_id
         ? {
-            id: (data as any).customer_id,
-            name: (data as any).customer_name ?? 'Customer',
-            email: (data as any).customer_email ?? undefined,
-            gstin: (data as any).customer_gstin ?? undefined,
-            phone: (data as any).customer_phone ?? undefined,
+            id: invoice.customer_id,
+            name: invoice.customer_name ?? 'Customer',
+            email: invoice.customer_email ?? undefined,
+            gstin: invoice.customer_gst ?? undefined,
+            phone: invoice.customer_phone ?? undefined,
           }
         : null;
 
@@ -319,29 +286,28 @@ export default function CreateInvoiceScreen() {
 
       if (!itemsError && itemsData && itemsData.length > 0) {
         // Map invoice_items table columns to our IInvoiceItem interface
-        const mappedItems: IInvoiceItem[] = itemsData.map((item: any) => ({
-          itemId: item.item_id,
-          itemName: item.item_name,
-          quantity: item.quantity,
+        const mappedItems: IInvoiceItem[] = (itemsData as InvoiceItemRow[]).map((item) => ({
+          itemId: item.item_id || '',
+          itemName: item.item_name || 'Item',
+          quantity: item.quantity || 1,
           unit: item.unit || 'pcs',
-          rate: item.rate,
-          amount: item.amount,
-          gstRate: item.gst_rate || 0,
+          rate: item.rate || 0,
+          amount: item.amount || 0,
+          gstRate: item.gst_rate || item.tax_rate || 0,
           cessRate: item.cess_rate || 0,
           discount: item.discount || 0,
           hsnCode: item.hsn || '',
         }));
         setInvoiceItems(mappedItems);
       } else {
-        // Fallback to JSON items column
-        const items = normalizeItems((data as any).items);
+        const items = normalizeItems(invoice.items);
         setInvoiceItems(items);
       }
       
       setStep(2); // Go to items step when editing
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[CREATE_INVOICE] fetchInvoiceForEdit error:', error);
-      Alert.alert('Error', error.message || 'Failed to load invoice');
+      Alert.alert('Error', getErrorMessage(error, 'Failed to load invoice'));
       navigation.goBack();
     } finally {
       setInitialLoading(false);
@@ -358,6 +324,7 @@ export default function CreateInvoiceScreen() {
         .from('customers')
         .select('*')
         .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('name');
 
       if (!error && data) {
@@ -374,27 +341,22 @@ export default function CreateInvoiceScreen() {
         setAvailableItems([]);
         return;
       }
-      console.log('[ITEMS] Fetching items for org:', organizationId);
-      
-      // First, get the total count
       const { count, error: countError } = await supabase
         .from('items')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       if (countError) {
         console.error('[ITEMS] Count error:', countError);
         return;
       }
 
-      console.log('[ITEMS] Total items:', count);
-
       if (!count || count === 0) {
         setAvailableItems([]);
         return;
       }
 
-      // Fetch all items in batches (Supabase default limit is 1000)
       const PAGE_SIZE = 1000;
       const totalPages = Math.ceil(count / PAGE_SIZE);
       const allItems: Item[] = [];
@@ -403,12 +365,11 @@ export default function CreateInvoiceScreen() {
         const from = page * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
 
-        console.log('[ITEMS] Fetching batch', page + 1, 'of', totalPages, `(${from}-${to})`);
-
         const { data, error } = await supabase
           .from('items')
           .select('*')
           .eq('organization_id', organizationId)
+          .is('deleted_at', null)
           .order('name')
           .range(from, to);
 
@@ -422,37 +383,19 @@ export default function CreateInvoiceScreen() {
         }
       }
 
-      console.log('[ITEMS] Loaded', allItems.length, 'total items');
-      // Log first item structure for debugging
-      if (allItems.length > 0) {
-        console.log('[ITEMS] Sample item keys:', Object.keys(allItems[0]));
-        console.log('[ITEMS] Sample item:', JSON.stringify(allItems[0], null, 2));
-      }
       setAvailableItems(allItems);
     } catch (error) {
       console.error('[ITEMS] Fetch error:', error);
     }
   };
 
-  // Get price based on pricing mode
-  const getItemPrice = (item: Item): number => {
-    switch (pricingMode) {
-      case 'wholesale':
-        return item.wholesale_price ?? item.sale_price ?? 0;
-      case 'quantity':
-        return item.quantity_price ?? item.sale_price ?? 0;
-      default:
-        return item.sale_price ?? 0;
-    }
-  };
+  const getItemPrice = (item: Item): number => getItemPriceUtil(item, pricingMode);
 
   const addItem = (item: Item) => {
     // Use price based on selected pricing mode
     const price = getItemPrice(item);
     const gstRate = billingMode === 'gst' ? (item.tax_rate ?? 0) : 0;
     const hsnCode = item.hsn;
-    
-    console.log('[ITEMS] Adding item:', item.name, 'price:', price, 'mode:', pricingMode, 'packingType:', packingType);
     
     const existingIndex = invoiceItems.findIndex(i => i.itemId === item.id);
     
@@ -607,7 +550,7 @@ export default function CreateInvoiceScreen() {
         customer_name: selectedCustomer.name,
         customer_phone: selectedCustomer.phone || null,
         customer_address: selectedCustomer.address || null,
-        customer_gstin: selectedCustomer.gstin || null,
+        customer_gst: selectedCustomer.gstin || null,
         customer_email: selectedCustomer.email || null,
         invoice_date: invoiceDate,
         subtotal: totals.subtotal,
@@ -649,7 +592,7 @@ export default function CreateInvoiceScreen() {
             rate: item.rate || 0,
             discount: item.discount || 0,
             discount_type: 'percentage',
-            gst_rate: item.gstRate || 0,
+            tax_rate: item.gstRate || 0,
             amount: (item.quantity || 1) * (item.rate || 0),
           }));
 
@@ -684,7 +627,7 @@ export default function CreateInvoiceScreen() {
             rate: item.rate || 0,
             discount: item.discount || 0,
             discount_type: 'percentage',
-            gst_rate: item.gstRate || 0,
+            tax_rate: item.gstRate || 0,
             amount: (item.quantity || 1) * (item.rate || 0),
           }));
 
@@ -702,8 +645,8 @@ export default function CreateInvoiceScreen() {
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save');
+    } catch (error: unknown) {
+      Alert.alert('Error', getErrorMessage(error, 'Failed to save'));
     } finally {
       setLoading(false);
     }
@@ -731,6 +674,24 @@ export default function CreateInvoiceScreen() {
     setTimeout(() => setStep(step - 1), 200);
   };
 
+  const getStepSizeForItem = (itemId?: string) => {
+    if (packingType !== 'carton') return 1;
+    const perCarton = Math.floor(availableItems.find((item) => item.id === itemId)?.per_carton_quantity || 1);
+    return Math.max(1, perCarton);
+  };
+
+  const getProgressLabelColor = (isActive: boolean, isCompleted: boolean) => {
+    if (isActive) return colors.primary;
+    if (isCompleted) return colors.success;
+    return colors.textTertiary;
+  };
+
+  const getNextButtonText = () => {
+    if (step === 0) return 'Continue';
+    if (step === 2) return 'Review';
+    return 'Next';
+  };
+
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(searchCustomer.toLowerCase()) ||
     (c.email || '').toLowerCase().includes(searchCustomer.toLowerCase())
@@ -754,48 +715,79 @@ export default function CreateInvoiceScreen() {
     return <Loading fullScreen />;
   }
 
+  const renderItemCard = ({ item }: { item: Item }) => {
+    const price = getItemPrice(item);
+    const existingItem = invoiceItems.find((i) => i.itemId === item.id);
+    const isSelected = !!existingItem;
+
+    return (
+      <TouchableOpacity
+        style={[styles.itemCard, { backgroundColor: colors.card, ...shadows.sm }]}
+        onPress={() => addItem(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemCardContent}>
+          <View style={styles.itemCardInfo}>
+            <Text style={[styles.itemCardName, { color: colors.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text style={[styles.itemCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.item_code || item.category || 'No code'}
+              {item.current_stock != null && ` • Stock: ${item.current_stock}`}
+            </Text>
+          </View>
+          <View style={styles.itemCardRight}>
+            <Text style={[styles.itemCardPrice, { color: colors.primary }]}>
+              {formatCurrency(price)}
+            </Text>
+            {isSelected && (
+              <View style={[styles.itemQtyBadge, { backgroundColor: colors.success }]}>
+                <Text style={styles.itemQtyBadgeText}>
+                  Qty: {existingItem.quantity}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.addButton, { backgroundColor: isSelected ? colors.successLight : colors.primaryLight }]}>
+            <Ionicons
+              name={isSelected ? 'checkmark' : 'add'}
+              size={18}
+              color={isSelected ? colors.success : colors.primary}
+            />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderDocumentTypeStep = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
-      <Text style={[styles.stepTitle, { color: colors.text }]}>
-        What are you creating?
-      </Text>
-      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-        Select the type of document
-      </Text>
-      
+      <Text style={[styles.stepTitle, { color: colors.text }]}>What are you creating?</Text>
+      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Select the type of document</Text>
+
       <View style={styles.docTypeGrid}>
         {(Object.keys(DOCUMENT_TYPES) as DocumentType[]).map((type) => {
           const config = DOCUMENT_TYPES[type];
           const isSelected = documentType === type;
-          
+
           return (
             <TouchableOpacity
               key={type}
               style={[
                 styles.docTypeCard,
                 { backgroundColor: colors.card, ...shadows.sm },
-                isSelected && { borderWidth: 2, borderColor: config.gradient[0] }
+                isSelected && { borderWidth: 2, borderColor: config.gradient[0] },
               ]}
               onPress={() => setDocumentType(type)}
               activeOpacity={0.7}
             >
-              <LinearGradient
-                colors={config.gradient}
-                style={styles.docTypeIconContainer}
-              >
+              <LinearGradient colors={config.gradient} style={styles.docTypeIconContainer}>
                 <Ionicons name={config.icon} size={24} color="#FFFFFF" />
               </LinearGradient>
-              <Text style={[styles.docTypeLabel, { color: colors.text }]}>
-                {config.label}
-              </Text>
+              <Text style={[styles.docTypeLabel, { color: colors.text }]}>{config.label}</Text>
               <Text style={[styles.docTypeDesc, { color: colors.textTertiary }]} numberOfLines={2}>
                 {config.description}
               </Text>
-              {isSelected && (
-                <View style={[styles.selectedIndicator, { backgroundColor: config.gradient[0] }]}>
-                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                </View>
-              )}
             </TouchableOpacity>
           );
         })}
@@ -805,14 +797,9 @@ export default function CreateInvoiceScreen() {
 
   const renderCustomerStep = () => (
     <View style={styles.stepContent}>
-      <Text style={[styles.stepTitle, { color: colors.text }]}>
-        Select Customer
-      </Text>
-      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-        Who is this {docConfig.label.toLowerCase()} for?
-      </Text>
-      
-      {/* Search Input */}
+      <Text style={[styles.stepTitle, { color: colors.text }]}>Select Customer</Text>
+      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>Who is this {docConfig.label.toLowerCase()} for?</Text>
+
       <View style={[styles.searchContainer, { backgroundColor: colors.card, ...shadows.sm }]}>
         <Ionicons name="search" size={20} color={colors.textTertiary} />
         <TextInput
@@ -822,405 +809,25 @@ export default function CreateInvoiceScreen() {
           value={searchCustomer}
           onChangeText={setSearchCustomer}
         />
-        {searchCustomer.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchCustomer('')}>
-            <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-        )}
       </View>
-      
-      {/* Selected Customer */}
-      {selectedCustomer && (
-        <View style={[styles.selectedCustomerCard, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
-          <View style={styles.selectedCustomerInfo}>
-            <LinearGradient colors={docConfig.gradient} style={styles.customerAvatar}>
-              <Text style={styles.customerAvatarText}>
-                {selectedCustomer.name.charAt(0).toUpperCase()}
-              </Text>
-            </LinearGradient>
-            <View style={styles.customerDetails}>
-              <Text style={[styles.customerName, { color: colors.text }]}>
-                {selectedCustomer.name}
-              </Text>
-              {selectedCustomer.email && (
-                <Text style={[styles.customerEmail, { color: colors.textSecondary }]}>
-                  {selectedCustomer.email}
-                </Text>
+
+      <ScrollView style={styles.customerList} showsVerticalScrollIndicator={false}>
+        {filteredCustomers.map((customer) => (
+          <TouchableOpacity
+            key={customer.id}
+            style={[styles.customerCard, { backgroundColor: colors.card, ...shadows.sm }]}
+            onPress={() => setSelectedCustomer(customer)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.customerInfo}>
+              <Text style={[styles.customerNameList, { color: colors.text }]}>{customer.name}</Text>
+              {customer.email && (
+                <Text style={[styles.customerEmailList, { color: colors.textSecondary }]}>{customer.email}</Text>
               )}
             </View>
-          </View>
-          <TouchableOpacity 
-            style={[styles.changeButton, { backgroundColor: colors.primary }]}
-            onPress={() => setSelectedCustomer(null)}
-          >
-            <Text style={styles.changeButtonText}>Change</Text>
           </TouchableOpacity>
-        </View>
-      )}
-      
-      {/* Customer List */}
-      {!selectedCustomer && (
-        <ScrollView style={styles.customerList} showsVerticalScrollIndicator={false}>
-          {filteredCustomers.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color={colors.textTertiary} />
-              <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-                No customers found
-              </Text>
-            </View>
-          ) : (
-            filteredCustomers.map((customer) => (
-              <TouchableOpacity
-                key={customer.id}
-                style={[styles.customerCard, { backgroundColor: colors.card, ...shadows.sm }]}
-                onPress={() => setSelectedCustomer(customer)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.customerAvatarSmall, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.customerAvatarTextSmall, { color: colors.primary }]}>
-                    {customer.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.customerInfo}>
-                  <Text style={[styles.customerNameList, { color: colors.text }]}>
-                    {customer.name}
-                  </Text>
-                  {customer.email && (
-                    <Text style={[styles.customerEmailList, { color: colors.textSecondary }]}>
-                      {customer.email}
-                    </Text>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
-      )}
-    </View>
-  );
-
-  const renderItemCard = ({ item }: { item: Item }) => {
-    const existingItem = invoiceItems.find(i => i.itemId === item.id);
-    const price = getItemPrice(item);
-    const gstRate = billingMode === 'gst' ? (item.tax_rate ?? 0) : 0;
-    const hsnCode = item.hsn;
-    
-    return (
-      <TouchableOpacity
-        style={[
-          styles.itemCard,
-          { backgroundColor: colors.card, ...shadows.sm },
-          existingItem && { borderLeftWidth: 3, borderLeftColor: colors.primary }
-        ]}
-        onPress={() => addItem(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.itemCardContent}>
-          <View style={styles.itemCardInfo}>
-            <Text style={[styles.itemCardName, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.itemCardMeta, { color: colors.textSecondary }]}>
-              {item.item_code && `${item.item_code} • `}
-              {billingMode === 'gst' ? `GST ${gstRate}%` : 'No GST'}
-              {hsnCode && ` • HSN ${hsnCode}`}
-            </Text>
-          </View>
-          <View style={styles.itemCardRight}>
-            <Text style={[styles.itemCardPrice, { color: colors.text }]}>
-              {formatCurrency(price)}
-            </Text>
-            {existingItem && (
-              <View style={[styles.itemQtyBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.itemQtyBadgeText}>×{existingItem.quantity}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        <View style={[styles.addButton, { backgroundColor: colors.primaryLight }]}>
-          <Ionicons name="add" size={18} color={colors.primary} />
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderItemsListHeader = () => (
-    <View>
-      <Text style={[styles.stepTitle, { color: colors.text }]}>
-        Add Items
-      </Text>
-      <Text style={[styles.stepSubtitle, { color: colors.textSecondary }]}>
-        Select products or services ({availableItems.length} available)
-      </Text>
-
-      {/* Pricing Mode Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Pricing Mode <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'sale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('sale')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'sale' ? colors.primary : colors.text }
-            ]}>
-              Sale Price (MRP)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'wholesale' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('wholesale')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'wholesale' ? colors.primary : colors.text }
-            ]}>
-              Wholesale
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              { backgroundColor: colors.card, ...shadows.sm },
-              pricingMode === 'quantity' && { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryLight }
-            ]}
-            onPress={() => setPricingMode('quantity')}
-          >
-            <Text style={[
-              styles.modeButtonText,
-              { color: pricingMode === 'quantity' ? colors.primary : colors.text }
-            ]}>
-              Bulk/Quantity
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Billing Mode Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Billing Mode
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              billingMode === 'gst' && { borderWidth: 2, borderColor: colors.success, backgroundColor: colors.successLight }
-            ]}
-            onPress={() => setBillingMode('gst')}
-          >
-            <Ionicons 
-              name="receipt-outline" 
-              size={16} 
-              color={billingMode === 'gst' ? colors.success : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: billingMode === 'gst' ? colors.success : colors.text }
-            ]}>
-              GST Billing
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              billingMode === 'non-gst' && { borderWidth: 2, borderColor: colors.warning, backgroundColor: colors.warningLight }
-            ]}
-            onPress={() => setBillingMode('non-gst')}
-          >
-            <Ionicons 
-              name="document-outline" 
-              size={16} 
-              color={billingMode === 'non-gst' ? colors.warning : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: billingMode === 'non-gst' ? colors.warning : colors.text }
-            ]}>
-              Non-GST
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Packing Type Section */}
-      <View style={styles.modeSection}>
-        <Text style={[styles.modeSectionTitle, { color: colors.text }]}>
-          Packing Type <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <View style={styles.modeButtonsRow}>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              packingType === 'loose' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
-            ]}
-            onPress={() => setPackingType('loose')}
-          >
-            <Ionicons 
-              name="cube-outline" 
-              size={16} 
-              color={packingType === 'loose' ? colors.info : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: packingType === 'loose' ? colors.info : colors.text }
-            ]}>
-              Loose Quantity
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeButton,
-              styles.modeButtonWide,
-              { backgroundColor: colors.card, ...shadows.sm },
-              packingType === 'carton' && { borderWidth: 2, borderColor: colors.info, backgroundColor: colors.infoLight }
-            ]}
-            onPress={() => setPackingType('carton')}
-          >
-            <Ionicons 
-              name="apps-outline" 
-              size={16} 
-              color={packingType === 'carton' ? colors.info : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              { color: packingType === 'carton' ? colors.info : colors.text }
-            ]}>
-              Pack Cartons
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      {/* Barcode Scanner Input */}
-      <View style={[styles.barcodeContainer, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}>
-        <Ionicons name="barcode-outline" size={20} color={colors.primary} />
-        <TextInput
-          style={[styles.barcodeInput, { color: colors.text }]}
-          placeholder="Scan barcode or enter item code..."
-          placeholderTextColor={colors.textTertiary}
-          value={barcodeInput}
-          onChangeText={setBarcodeInput}
-          onSubmitEditing={handleBarcodeSubmit}
-          returnKeyType="go"
-          autoCapitalize="characters"
-        />
-        <TouchableOpacity 
-          style={[styles.barcodeButton, { backgroundColor: colors.primary }]}
-          onPress={handleBarcodeSubmit}
-        >
-          <Ionicons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.barcodeButtonText}>Add</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Selected Items Summary */}
-      {invoiceItems.length > 0 && (
-        <View style={[styles.selectedItemsSummary, { backgroundColor: colors.primaryLight }]}>
-          <View style={styles.summaryInfo}>
-            <Text style={[styles.summaryCount, { color: colors.primary }]}>
-              {invoiceItems.length} item{invoiceItems.length > 1 ? 's' : ''} selected
-            </Text>
-            <Text style={[styles.summaryTotal, { color: colors.primary }]}>
-              {formatCurrency(totals?.total || 0)}
-            </Text>
-          </View>
-        </View>
-      )}
-      
-      {/* Search Input */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.card, ...shadows.sm }]}>
-        <Ionicons name="search" size={20} color={colors.textTertiary} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search items..."
-          placeholderTextColor={colors.textTertiary}
-          value={searchItem}
-          onChangeText={setSearchItem}
-          returnKeyType="search"
-        />
-        {searchItem.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchItem('')}>
-            <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      {/* Selected Items List */}
-      {invoiceItems.length > 0 && (
-        <View style={[styles.selectedItemsContainer, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <Text style={[styles.selectedItemsTitle, { color: colors.text }]}>
-            Selected Items
-          </Text>
-          {invoiceItems.map((item, index) => (
-            <View 
-              key={index} 
-              style={[
-                styles.selectedItemRow,
-                index < invoiceItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
-              ]}
-            >
-              <View style={styles.selectedItemInfo}>
-                <Text style={[styles.selectedItemName, { color: colors.text }]} numberOfLines={1}>
-                  {item.itemName}
-                </Text>
-                <Text style={[styles.selectedItemRate, { color: colors.textSecondary }]}>
-                  {formatCurrency(item.rate)} × {item.quantity}
-                </Text>
-              </View>
-              <View style={styles.qtyControls}>
-                <TouchableOpacity
-                  style={[styles.qtyButton, { backgroundColor: colors.errorLight }]}
-                  onPress={() => {
-                    const step = packingType === 'carton' 
-                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
-                      : 1;
-                    updateItemQuantity(index, item.quantity - step);
-                  }}
-                >
-                  <Ionicons name="remove" size={16} color={colors.error} />
-                </TouchableOpacity>
-                <Text style={[styles.qtyText, { color: colors.text }]}>{item.quantity}</Text>
-                <TouchableOpacity
-                  style={[styles.qtyButton, { backgroundColor: colors.successLight }]}
-                  onPress={() => {
-                    const step = packingType === 'carton' 
-                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
-                      : 1;
-                    updateItemQuantity(index, item.quantity + step);
-                  }}
-                >
-                  <Ionicons name="add" size={16} color={colors.success} />
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.itemAmountText, { color: colors.text }]}>
-                {formatCurrency(item.amount)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-      
-      {/* Available Items Header */}
-      <Text style={[styles.availableItemsTitle, { color: colors.text }]}>
-        Available Items ({filteredItems.length})
-      </Text>
+        ))}
+      </ScrollView>
     </View>
   );
 
@@ -1445,24 +1052,14 @@ export default function CreateInvoiceScreen() {
               <View style={styles.qtyControls}>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.errorLight }]}
-                  onPress={() => {
-                    const step = packingType === 'carton' 
-                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
-                      : 1;
-                    updateItemQuantity(index, item.quantity - step);
-                  }}
+                  onPress={() => updateItemQuantity(index, item.quantity - getStepSizeForItem(item.itemId))}
                 >
                   <Ionicons name="remove" size={16} color={colors.error} />
                 </TouchableOpacity>
                 <Text style={[styles.qtyText, { color: colors.text }]}>{item.quantity}</Text>
                 <TouchableOpacity
                   style={[styles.qtyButton, { backgroundColor: colors.successLight }]}
-                  onPress={() => {
-                    const step = packingType === 'carton' 
-                      ? Math.floor(availableItems.find(i => i.id === item.itemId)?.per_carton_quantity || 1)
-                      : 1;
-                    updateItemQuantity(index, item.quantity + step);
-                  }}
+                  onPress={() => updateItemQuantity(index, item.quantity + getStepSizeForItem(item.itemId))}
                 >
                   <Ionicons name="add" size={16} color={colors.success} />
                 </TouchableOpacity>
@@ -1483,7 +1080,7 @@ export default function CreateInvoiceScreen() {
           </View>
           <Text style={[styles.emptyItemsTitle, { color: colors.text }]}>No items added yet</Text>
           <Text style={[styles.emptyItemsText, { color: colors.textSecondary }]}>
-            Tap "Add Items" above to select products or services
+            Tap &quot;Add Items&quot; above to select products or services
           </Text>
         </View>
       )}
@@ -1594,14 +1191,6 @@ export default function CreateInvoiceScreen() {
     </ScrollView>
   );
 
-  const getPricingModeLabel = () => {
-    switch (pricingMode) {
-      case 'wholesale': return 'Wholesale Price';
-      case 'quantity': return 'Quantity Price (Bulk)';
-      default: return 'Sale Price (MRP)';
-    }
-  };
-
   const renderReviewStep = () => (
     <ScrollView style={styles.stepContent} showsVerticalScrollIndicator={false}>
       <Text style={[styles.stepTitle, { color: colors.text }]}>
@@ -1627,7 +1216,7 @@ export default function CreateInvoiceScreen() {
         <View style={[styles.reviewModeBadge, { backgroundColor: colors.primaryLight }]}>
           <Ionicons name="pricetag-outline" size={14} color={colors.primary} />
           <Text style={[styles.reviewModeText, { color: colors.primary }]}>
-            {getPricingModeLabel()}
+            {getPricingModeLabel(pricingMode)}
           </Text>
         </View>
         <View style={[styles.reviewModeBadge, { backgroundColor: billingMode === 'gst' ? colors.successLight : colors.warningLight }]}>
@@ -1821,12 +1410,12 @@ export default function CreateInvoiceScreen() {
                 {isCompleted ? (
                   <Ionicons name="checkmark" size={12} color="#FFFFFF" />
                 ) : (
-                  <Ionicons name={s.icon as any} size={12} color={isActive ? '#FFFFFF' : colors.textTertiary} />
+                  <Ionicons name={s.icon} size={12} color={isActive ? '#FFFFFF' : colors.textTertiary} />
                 )}
               </View>
               <Text style={[
                 styles.progressLabel,
-                { color: isActive ? colors.primary : isCompleted ? colors.success : colors.textTertiary }
+                { color: getProgressLabelColor(isActive, isCompleted) }
               ]}>
                 {s.label}
               </Text>
@@ -1874,9 +1463,7 @@ export default function CreateInvoiceScreen() {
             style={[styles.nextBtn, { backgroundColor: colors.primary }]}
             onPress={goToNextStep}
           >
-            <Text style={styles.nextBtnText}>
-              {step === 0 ? 'Continue' : step === 1 && selectedCustomer ? 'Next' : step === 2 ? 'Review' : 'Next'}
-            </Text>
+            <Text style={styles.nextBtnText}>{getNextButtonText()}</Text>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (

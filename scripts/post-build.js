@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 // Copy .next/static to .next/standalone/.next/static
 const staticSource = path.join(__dirname, '../.next/static');
@@ -12,7 +12,7 @@ const publicDest = path.join(__dirname, '../.next/standalone/public');
 // Function to copy directory recursively
 function copyDir(src, dest) {
   if (!fs.existsSync(src)) {
-    console.log(`Source ${src} does not exist, skipping...`);
+    console.warn(`Source ${src} does not exist, skipping...`);
     return;
   }
 
@@ -34,11 +34,11 @@ function copyDir(src, dest) {
   }
 }
 
-console.log('Copying static assets for standalone build...');
+console.warn('Copying static assets for standalone build...');
 copyDir(staticSource, staticDest);
-console.log('✓ Copied .next/static');
+console.warn('✓ Copied .next/static');
 
 copyDir(publicSource, publicDest);
-console.log('✓ Copied public folder');
+console.warn('✓ Copied public folder');
 
-console.log('✓ Post-build complete!');
+console.warn('✓ Post-build complete!');

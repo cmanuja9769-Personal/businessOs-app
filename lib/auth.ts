@@ -1,11 +1,20 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import type { User } from "@supabase/supabase-js"
+import { isDemoMode, DEMO_USER_ID } from "@/app/demo/helpers"
 
-/**
- * Get the current authenticated user
- */
 export async function getCurrentUser(): Promise<User | null> {
+  if (await isDemoMode()) {
+    return {
+      id: DEMO_USER_ID,
+      email: "demo@businessos.app",
+      app_metadata: {},
+      user_metadata: { full_name: "Demo User" },
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+    } as User
+  }
+
   const supabase = await createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

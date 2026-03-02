@@ -97,7 +97,7 @@ export function EInvoiceGenerationDialog({ invoice, open, onOpenChange }: EInvoi
     // Refresh invoice data
     try {
       // Call the server action to update invoice with IRN
-      await generateEInvoice(invoice.id, "default-org")
+      await generateEInvoice(invoice.id)
       toast.success("E-Invoice generated successfully!")
       onOpenChange(false)
       router.refresh()

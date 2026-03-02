@@ -125,8 +125,9 @@ export default function EwaybillsScreen() {
               if (error) throw error;
               loadEwaybills();
               Alert.alert('Success', 'E-Way Bill cancelled successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to cancel E-Way Bill');
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Failed to cancel E-Way Bill';
+              Alert.alert('Error', message);
             }
           },
         },
@@ -142,6 +143,10 @@ export default function EwaybillsScreen() {
   const renderEwaybill = ({ item: ewb }: { item: EWayBill }) => {
     const statusStyle = STATUS_COLORS[ewb.status] || STATUS_COLORS.active;
     const expiringSoon = ewb.status === 'active' && isExpiringSoon(ewb.valid_upto);
+
+    let validUntilColor = colors.text;
+    if (expiringSoon) validUntilColor = '#D97706';
+    else if (ewb.status === 'expired') validUntilColor = '#DC2626';
 
     return (
       <TouchableOpacity
@@ -195,7 +200,7 @@ export default function EwaybillsScreen() {
             <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>Valid Until</Text>
             <Text style={[
               styles.dateValue, 
-              { color: expiringSoon ? '#D97706' : ewb.status === 'expired' ? '#DC2626' : colors.text }
+              { color: validUntilColor }
             ]}>
               {formatDate(ewb.valid_upto)}
             </Text>

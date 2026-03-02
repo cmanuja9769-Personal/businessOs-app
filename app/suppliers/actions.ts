@@ -1,13 +1,17 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
 import type { ISupplier } from "@/types"
 import { supplierSchema } from "@/lib/schemas"
+import { authorize, orgScope } from "@/lib/authorize"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
+import { demoSuppliers } from "@/app/demo/data"
 
 export async function getSuppliers(): Promise<ISupplier[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.from("suppliers").select("*").order("created_at", { ascending: false })
+  if (await isDemoMode()) return demoSuppliers
+  try {
+  const { supabase, organizationId } = await authorize("customers", "read")
+  const { data, error } = await supabase.from("suppliers").select("*").or(orgScope(organizationId)).is("deleted_at", null).order("created_at", { ascending: false })
 
   if (error) {
     console.error("[v0] Error fetching suppliers:", error)
@@ -26,9 +30,13 @@ export async function getSuppliers(): Promise<ISupplier[]> {
       updatedAt: new Date(supplier.updated_at),
     })) || []
   )
+  } catch {
+    return []
+  }
 }
 
 export async function createSupplier(formData: FormData) {
+  if (await isDemoMode()) throwDemoMutationError()
   const data = {
     name: formData.get("name"),
     contactNo: formData.get("contactNo"),
@@ -39,7 +47,7 @@ export async function createSupplier(formData: FormData) {
 
   const validated = supplierSchema.parse(data)
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "create")
   const { data: newSupplier, error } = await supabase
     .from("suppliers")
     .insert({
@@ -48,6 +56,7 @@ export async function createSupplier(formData: FormData) {
       email: validated.email || null,
       address: validated.address || null,
       gst_number: validated.gstinNo || null,
+      organization_id: organizationId,
     })
     .select()
     .single()
@@ -62,6 +71,7 @@ export async function createSupplier(formData: FormData) {
 }
 
 export async function updateSupplier(id: string, formData: FormData) {
+  if (await isDemoMode()) throwDemoMutationError()
   const data = {
     name: formData.get("name"),
     contactNo: formData.get("contactNo"),
@@ -72,7 +82,7 @@ export async function updateSupplier(id: string, formData: FormData) {
 
   const validated = supplierSchema.parse(data)
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "update")
   const { error } = await supabase
     .from("suppliers")
     .update({
@@ -83,6 +93,7 @@ export async function updateSupplier(id: string, formData: FormData) {
       gst_number: validated.gstinNo || null,
     })
     .eq("id", id)
+    .or(orgScope(organizationId))
 
   if (error) {
     console.error("[v0] Error updating supplier:", error)
@@ -94,8 +105,14 @@ export async function updateSupplier(id: string, formData: FormData) {
 }
 
 export async function deleteSupplier(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from("suppliers").delete().eq("id", id)
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("customers", "delete")
+  const { error } = await supabase
+    .from("suppliers")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("deleted_at", null)
+    .or(orgScope(organizationId))
 
   if (error) {
     console.error("[v0] Error deleting supplier:", error)
@@ -107,15 +124,17 @@ export async function deleteSupplier(id: string) {
 }
 
 export async function bulkDeleteSuppliers(ids: string[]) {
+  if (await isDemoMode()) throwDemoMutationError()
   if (!ids || ids.length === 0) {
     return { success: false, error: "No suppliers selected" }
   }
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "delete")
   const { error, count } = await supabase
     .from("suppliers")
     .delete()
     .in("id", ids)
+    .or(orgScope(organizationId))
     .select()
 
   if (error) {
@@ -132,11 +151,13 @@ export async function bulkDeleteSuppliers(ids: string[]) {
 }
 
 export async function deleteAllSuppliers() {
-  const supabase = await createClient()
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("customers", "delete")
   
   const { count } = await supabase
     .from("suppliers")
     .select("*", { count: "exact", head: true })
+    .or(orgScope(organizationId))
   
   if (!count || count === 0) {
     return { success: false, error: "No suppliers to delete" }
@@ -145,6 +166,7 @@ export async function deleteAllSuppliers() {
   const { error } = await supabase
     .from("suppliers")
     .delete()
+    .or(orgScope(organizationId))
     .neq("id", "00000000-0000-0000-0000-000000000000")
 
   if (error) {

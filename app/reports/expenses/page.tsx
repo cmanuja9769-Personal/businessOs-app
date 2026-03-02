@@ -58,37 +58,7 @@ export default function ExpenseReportPage() {
     const fetchExpenses = async () => {
       setLoading(true)
       try {
-        const mockExpenses: Expense[] = [
-          {
-            id: '1',
-            expenseNo: 'EXP-001',
-            category: 'Rent',
-            description: 'Monthly office rent',
-            date: new Date().toISOString(),
-            amount: 25000,
-            paymentMethod: 'bank',
-            vendor: 'Property Owner'
-          },
-          {
-            id: '2',
-            expenseNo: 'EXP-002',
-            category: 'Utilities',
-            description: 'Electricity bill',
-            date: new Date().toISOString(),
-            amount: 5500,
-            paymentMethod: 'upi'
-          },
-          {
-            id: '3',
-            expenseNo: 'EXP-003',
-            category: 'Office Supplies',
-            description: 'Stationery and printer ink',
-            date: new Date().toISOString(),
-            amount: 2500,
-            paymentMethod: 'cash'
-          }
-        ]
-        setExpenses(mockExpenses)
+        setExpenses([])
       } catch (error) {
         console.error('Failed to fetch expenses:', error)
       } finally {
@@ -261,7 +231,7 @@ export default function ExpenseReportPage() {
                   <div key={category} className="p-2 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground truncate">{category}</p>
                     <p className="text-sm font-semibold">{formatCurrency(amount)}</p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[0.625rem] text-muted-foreground">
                       {((amount / totalExpenses) * 100).toFixed(1)}%
                     </p>
                   </div>
@@ -295,8 +265,16 @@ export default function ExpenseReportPage() {
                 <TableBody>
                   {filteredExpenses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No expenses found for the selected filters
+                      <TableCell colSpan={7} className="text-center py-12">
+                        <div className="flex flex-col items-center gap-3">
+                          <CreditCard className="h-10 w-10 text-muted-foreground/50" />
+                          <div>
+                            <p className="font-medium text-muted-foreground">No expenses recorded yet</p>
+                            <p className="text-sm text-muted-foreground/70 mt-1">
+                              Expense tracking will be available once expenses are added to the system.
+                            </p>
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -307,7 +285,7 @@ export default function ExpenseReportPage() {
                         <TableCell>
                           <Badge variant="outline">{exp.category}</Badge>
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate">{exp.description}</TableCell>
+                        <TableCell className="max-w-[12.5rem] truncate">{exp.description}</TableCell>
                         <TableCell className="text-right font-medium text-red-600">
                           {formatCurrency(exp.amount)}
                         </TableCell>

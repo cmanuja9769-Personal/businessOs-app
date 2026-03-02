@@ -26,10 +26,10 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; pass?: string }>({});
 
   const validate = (): boolean => {
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { email?: string; pass?: string } = {};
 
     if (!email) {
       newErrors.email = 'Email is required';
@@ -38,9 +38,9 @@ export default function LoginScreen() {
     }
 
     if (!password) {
-      newErrors.password = 'Password is required';
+      newErrors.pass = 'Password is required';
     } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.pass = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
@@ -98,9 +98,9 @@ export default function LoginScreen() {
             value={password}
             onChangeText={(text) => {
               setPassword(text);
-              if (errors.password) setErrors({ ...errors, password: undefined });
+              if (errors.pass) setErrors({ ...errors, pass: undefined });
             }}
-            error={errors.password}
+            error={errors.pass}
             secureTextEntry
             leftIcon="lock-closed-outline"
           />
@@ -125,7 +125,7 @@ export default function LoginScreen() {
 
           <View style={styles.signupContainer}>
             <Text style={[styles.signupText, { color: colors.textSecondary }]}>
-              Don't have an account?{' '}
+              {"Don't have an account? "}
             </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
               <Text style={[styles.signupLink, { color: colors.primary }]}>

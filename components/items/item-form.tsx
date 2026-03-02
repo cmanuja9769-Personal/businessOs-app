@@ -241,8 +241,8 @@ export function ItemForm({ item, godowns = [], trigger }: ItemFormProps) {
 
   // Update HSN suggestions when search changes (debounced)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const results = searchHSNCodes(hsnSearch, 30);
+    const timer = setTimeout(async () => {
+      const results = await searchHSNCodes(hsnSearch, 30);
       setHsnSuggestions(results);
     }, hsnSearch.length > 0 ? 150 : 0);
     return () => clearTimeout(timer);

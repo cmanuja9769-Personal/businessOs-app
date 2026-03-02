@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import type { IItem, IBarcodePrintLog } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,14 +17,14 @@ import { getStockStatus } from "@/lib/stock-utils"
 import { formatRelativeDate } from "@/lib/date-utils"
 
 interface ItemDesktopRowProps {
-  item: IItem
-  godowns: Array<{ id: string; name: string }>
-  lastPrint?: IBarcodePrintLog
-  selected?: boolean
-  onSelectChange?: (id: string) => void
+  readonly item: IItem
+  readonly godowns: Array<{ id: string; name: string }>
+  readonly lastPrint?: IBarcodePrintLog
+  readonly selected?: boolean
+  readonly onSelectChange?: (id: string) => void
 }
 
-export function ItemDesktopRow({ item, godowns, lastPrint, selected, onSelectChange }: ItemDesktopRowProps) {
+export const ItemDesktopRow = memo(function ItemDesktopRow({ item, godowns, lastPrint, selected, onSelectChange }: ItemDesktopRowProps) {
   const stockStatus = getStockStatus(item)
 
   return (
@@ -204,4 +205,4 @@ export function ItemDesktopRow({ item, godowns, lastPrint, selected, onSelectCha
       </TableCell>
     </TableRow>
   )
-}
+})

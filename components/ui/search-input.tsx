@@ -43,13 +43,14 @@ export function SearchInput({
   }, [])
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className={cn("relative w-full", className)} role="search">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
       <Input
         type="search"
         placeholder={placeholder}
         value={localValue}
         onChange={handleChange}
+        aria-label={placeholder}
         className={cn("pl-9 w-full text-sm h-8", inputClassName)}
       />
     </div>

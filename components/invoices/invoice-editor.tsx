@@ -10,9 +10,10 @@ import { Save, FileText, Loader2 } from "lucide-react"
 import { updateInvoice } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
 import { getItems } from "@/app/items/actions"
+import { getOrganizationDetails } from "@/app/settings/actions"
 import { toast } from "sonner"
 import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, PackingType } from "@/types"
-import { calculateInvoiceTotals } from "@/lib/invoice-calculations"
+import { calculateInvoiceTotals, isInterStateSale } from "@/lib/invoice-calculations"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 
@@ -35,13 +36,17 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
   const [packingType, setPackingType] = useState<PackingType>("loose")
   const [invoiceItems, setInvoiceItems] = useState<IInvoiceItem[]>(invoice.items)
   const [notes, setNotes] = useState(invoice.notes || "")
+  const [orgGstNumber, setOrgGstNumber] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, itemsData] = await Promise.all([getCustomers(), getItems()])
+        const [customersData, itemsData, orgDetails] = await Promise.all([getCustomers(), getItems(), getOrganizationDetails()])
         setCustomers(customersData)
         setItems(itemsData)
+        if (orgDetails?.gstNumber) {
+          setOrgGstNumber(orgDetails.gstNumber)
+        }
 
         const customer = customersData.find((c) => c.id === invoice.customerId)
         setSelectedCustomer(customer || null)
@@ -54,7 +59,8 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
     loadData()
   }, [invoice.customerId])
 
-  const totals = calculateInvoiceTotals(invoiceItems, billingMode)
+  const interState = isInterStateSale(orgGstNumber, selectedCustomer?.gstinNo)
+  const totals = calculateInvoiceTotals(invoiceItems, billingMode, interState)
 
   const handleSave = async () => {
     if (!selectedCustomer) {
@@ -166,14 +172,23 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
               </div>
               {billingMode === "gst" && (
                 <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">CGST:</span>
-                    <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">SGST:</span>
-                    <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
-                  </div>
+                  {interState ? (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">IGST:</span>
+                      <span className="font-medium">₹{totals.igst.toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">CGST:</span>
+                        <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">SGST:</span>
+                        <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   {totals.cess > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Cess:</span>
@@ -188,9 +203,15 @@ export function InvoiceEditor({ invoice }: InvoiceEditorProps) {
                   <span className="font-medium text-green-600">-₹{totals.discount.toFixed(2)}</span>
                 </div>
               )}
+              {totals.roundOff !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Round Off:</span>
+                  <span className="font-medium">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold pt-3 border-t border-border">
                 <span>Total Amount:</span>
-                <span className="text-primary">₹{totals.total.toFixed(2)}</span>
+                <span className="text-primary">₹{totals.grandTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>

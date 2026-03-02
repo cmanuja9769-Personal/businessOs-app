@@ -7,7 +7,7 @@ import DashboardScreen from '@screens/dashboard/DashboardScreen';
 const Stack = createStackNavigator<DashboardStackParamList>();
 
 export default function DashboardStack() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   
   return (
     <Stack.Navigator

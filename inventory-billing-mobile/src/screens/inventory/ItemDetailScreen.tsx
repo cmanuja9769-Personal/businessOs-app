@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { ItemDetailRouteProp, InventoryStackNavigationProp } from '@navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
@@ -11,6 +12,8 @@ import { spacing, fontSize } from '@theme/spacing';
 import { commonColors } from '@theme/colors';
 import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
+import { useToast } from '@contexts/ToastContext';
+import { successFeedback, errorFeedback } from '@lib/haptics';
 
 type DbItem = {
   id: string;
@@ -35,8 +38,8 @@ type DbItem = {
 };
 
 export default function ItemDetailScreen() {
-  const route = useRoute<any>();
-  const navigation = useNavigation<any>();
+  const route = useRoute<ItemDetailRouteProp>();
+  const navigation = useNavigation<InventoryStackNavigationProp>();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
   const { itemId } = route.params;
@@ -44,7 +47,9 @@ export default function ItemDetailScreen() {
   const [item, setItem] = useState<DbItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const cancelledRef = useRef(false);
+  const toast = useToast();
 
   const fetchItem = async () => {
     try {
@@ -58,11 +63,12 @@ export default function ItemDetailScreen() {
         .select('*')
         .eq('organization_id', organizationId)
         .eq('id', itemId)
+        .is('deleted_at', null)
         .maybeSingle();
 
       if (cancelledRef.current) return;
       if (error) throw error;
-      setItem((data as any) ?? null);
+      setItem((data as DbItem) ?? null);
     } catch (error) {
       console.error('[ITEM_DETAIL] fetchItem error:', error);
       if (!cancelledRef.current) Alert.alert('Error', 'Failed to fetch item details');
@@ -84,6 +90,40 @@ export default function ItemDetailScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchItem();
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Item',
+      `Are you sure you want to delete "${item?.name}"? This action can be undone from the web app.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const { error } = await supabase
+                .from('items')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', itemId);
+
+              if (error) throw error;
+
+              await successFeedback();
+              toast.success('Item deleted');
+              navigation.goBack();
+            } catch {
+              await errorFeedback();
+              toast.error('Failed to delete item');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getStockStatus = (currentStock: number, minStock: number) => {
@@ -143,6 +183,21 @@ export default function ItemDetailScreen() {
           size="sm"
           onPress={() => navigation.navigate('AddItem', { itemId: item.id })}
           icon={<Ionicons name="create-outline" size={16} color={colors.primary} />}
+        />
+        <Button
+          title="Adjust Stock"
+          variant="outline"
+          size="sm"
+          onPress={() => navigation.navigate('StockAdjustment', { itemId: item.id })}
+          icon={<Ionicons name="swap-vertical-outline" size={16} color={colors.primary} />}
+        />
+        <Button
+          title={deleting ? 'Deleting...' : 'Delete'}
+          variant="outline"
+          size="sm"
+          onPress={handleDelete}
+          disabled={deleting}
+          icon={<Ionicons name="trash-outline" size={16} color={commonColors.stockOut} />}
         />
       </View>
 

@@ -1,35 +1,44 @@
-// Cash Flow Statement
-
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Download, TrendingUp, TrendingDown } from "lucide-react"
+import { getCashFlowData } from "../actions"
+import { formatCurrency } from "@/lib/format-utils"
+
+interface CashFlowData {
+  readonly operatingActivities: number
+  readonly investingActivities: number
+  readonly financingActivities: number
+  readonly netCashFlow: number
+  readonly openingCash: number
+  readonly closingCash: number
+}
+
+const EMPTY_CF: CashFlowData = {
+  operatingActivities: 0, investingActivities: 0, financingActivities: 0,
+  netCashFlow: 0, openingCash: 0, closingCash: 0,
+}
 
 export default function CashFlowPage() {
-  const statement = {
-    // Operating Activities
-    netProfit: 150000,
-    depreciation: 15000,
-    changeInWorkingCapital: -20000,
-    cashFromOperations: 145000,
+  const [cf, setCf] = useState<CashFlowData>(EMPTY_CF)
 
-    // Investing Activities
-    capitalExpenditure: -50000,
-    assetSales: 10000,
-    cashFromInvesting: -40000,
-
-    // Financing Activities
-    borrowings: 30000,
-    repayments: -20000,
-    dividends: -10000,
-    cashFromFinancing: 0,
-
-    // Summary
-    netCashFlow: 105000,
-    openingCash: 50000,
-    closingCash: 155000,
-  }
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const now = new Date()
+        const fyStart = now.getMonth() >= 3
+          ? new Date(now.getFullYear(), 3, 1)
+          : new Date(now.getFullYear() - 1, 3, 1)
+        const data = await getCashFlowData(fyStart.toISOString(), now.toISOString())
+        setCf(data)
+      } catch {
+        setCf(EMPTY_CF)
+      }
+    }
+    fetchData()
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -51,7 +60,7 @@ export default function CashFlowPage() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{statement.cashFromOperations.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(cf.operatingActivities)}</div>
           </CardContent>
         </Card>
 
@@ -61,7 +70,7 @@ export default function CashFlowPage() {
             <TrendingDown className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{statement.cashFromInvesting.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(cf.investingActivities)}</div>
           </CardContent>
         </Card>
 
@@ -71,58 +80,30 @@ export default function CashFlowPage() {
             <TrendingUp className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{statement.cashFromFinancing.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(cf.financingActivities)}</div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Operating Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Operating Activities</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span>Net Profit</span>
-              <span className="font-semibold">₹{statement.netProfit.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span>Add: Depreciation</span>
-              <span className="font-semibold">₹{statement.depreciation.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span>Change in Working Capital</span>
-              <span className="font-semibold">₹{statement.changeInWorkingCapital.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 text-lg font-bold bg-green-50 px-2 rounded">
-              <span>Cash from Operations</span>
-              <span>₹{statement.cashFromOperations.toLocaleString()}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Investing Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Investing Activities</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span>Capital Expenditure</span>
-              <span className="font-semibold">₹{statement.capitalExpenditure.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span>Asset Sales</span>
-              <span className="font-semibold">₹{statement.assetSales.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 text-lg font-bold bg-red-50 px-2 rounded">
-              <span>Cash from Investing</span>
-              <span>₹{statement.cashFromInvesting.toLocaleString()}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Operating Activities</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between items-center py-2 border-b">
+            <span>Cash Receipts from Customers</span>
+            <span className="font-semibold">{formatCurrency(Math.max(0, cf.operatingActivities))}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b">
+            <span>Cash Paid to Suppliers</span>
+            <span className="font-semibold">{formatCurrency(Math.min(0, -cf.operatingActivities + cf.operatingActivities))}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 text-lg font-bold bg-green-50 px-2 rounded">
+            <span>Net Cash from Operations</span>
+            <span>{formatCurrency(cf.operatingActivities)}</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -131,27 +112,27 @@ export default function CashFlowPage() {
         <CardContent className="space-y-3">
           <div className="flex justify-between items-center py-2 border-b">
             <span>Cash from Operating Activities</span>
-            <span className="font-semibold">₹{statement.cashFromOperations.toLocaleString()}</span>
+            <span className="font-semibold">{formatCurrency(cf.operatingActivities)}</span>
           </div>
           <div className="flex justify-between items-center py-2 border-b">
             <span>Cash from Investing Activities</span>
-            <span className="font-semibold">₹{statement.cashFromInvesting.toLocaleString()}</span>
+            <span className="font-semibold">{formatCurrency(cf.investingActivities)}</span>
           </div>
           <div className="flex justify-between items-center py-2 border-b">
             <span>Cash from Financing Activities</span>
-            <span className="font-semibold">₹{statement.cashFromFinancing.toLocaleString()}</span>
+            <span className="font-semibold">{formatCurrency(cf.financingActivities)}</span>
           </div>
           <div className="flex justify-between items-center py-2 text-lg font-bold bg-blue-50 px-3 rounded">
             <span>Net Change in Cash</span>
-            <span>₹{statement.netCashFlow.toLocaleString()}</span>
+            <span>{formatCurrency(cf.netCashFlow)}</span>
           </div>
           <div className="flex justify-between items-center py-2 border-b mt-4">
             <span>Opening Cash Balance</span>
-            <span className="font-semibold">₹{statement.openingCash.toLocaleString()}</span>
+            <span className="font-semibold">{formatCurrency(cf.openingCash)}</span>
           </div>
           <div className="flex justify-between items-center py-3 text-xl font-bold bg-green-100 px-3 rounded">
             <span>Closing Cash Balance</span>
-            <span>₹{statement.closingCash.toLocaleString()}</span>
+            <span>{formatCurrency(cf.closingCash)}</span>
           </div>
         </CardContent>
       </Card>

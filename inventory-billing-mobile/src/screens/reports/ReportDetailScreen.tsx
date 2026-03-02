@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Platform,
   FlatList,
@@ -55,7 +54,7 @@ export default function ReportDetailScreen() {
   const config = REPORT_CONFIG[reportKey] || { title: 'Report', color: '#6366F1', icon: 'document-outline' };
 
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [summary, setSummary] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -110,6 +109,7 @@ export default function ReportDetailScreen() {
       .from('invoices')
       .select('*, customers(name)')
       .eq('organization_id', organizationId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -125,6 +125,7 @@ export default function ReportDetailScreen() {
       .from('purchases')
       .select('*, suppliers(name)')
       .eq('organization_id', organizationId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -140,9 +141,10 @@ export default function ReportDetailScreen() {
       .from('items')
       .select('*')
       .eq('organization_id', organizationId)
+      .is('deleted_at', null)
       .order('name');
 
-    const totalValue = (items || []).reduce((sum, i) => sum + ((i.stock || 0) * (i.purchase_price || 0)), 0);
+    const totalValue = (items || []).reduce((sum, i) => sum + ((i.current_stock || 0) * (i.purchase_price || 0)), 0);
     const totalItems = items?.length || 0;
 
     setData(items || []);
@@ -154,8 +156,9 @@ export default function ReportDetailScreen() {
       .from('items')
       .select('*')
       .eq('organization_id', organizationId)
-      .lt('stock', 10)
-      .order('stock');
+      .is('deleted_at', null)
+      .lt('current_stock', 10)
+      .order('current_stock');
 
     setData(items || []);
     setSummary({ count: items?.length || 0 });
@@ -166,6 +169,7 @@ export default function ReportDetailScreen() {
       .from('invoices')
       .select('*, customers(name)')
       .eq('organization_id', organizationId)
+      .is('deleted_at', null)
       .gt('balance', 0)
       .order('balance', { ascending: false });
 
@@ -179,12 +183,14 @@ export default function ReportDetailScreen() {
     const { data: customers } = await supabase
       .from('customers')
       .select('id, name')
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null);
 
     const { data: invoices } = await supabase
       .from('invoices')
       .select('customer_id, total, subtotal')
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null);
 
     const partyData = (customers || []).map(c => {
       const customerInvoices = (invoices || []).filter(i => i.customer_id === c.id);
@@ -201,7 +207,8 @@ export default function ReportDetailScreen() {
       .from('invoices')
       .select('*')
       .eq('organization_id', organizationId)
-      .eq('is_gst', true);
+      .is('deleted_at', null)
+      .eq('gst_enabled', true);
 
     const cgst = (invoices || []).reduce((sum, i) => sum + (i.cgst || 0), 0);
     const sgst = (invoices || []).reduce((sum, i) => sum + (i.sgst || 0), 0);
@@ -215,12 +222,14 @@ export default function ReportDetailScreen() {
     const { data: invoices } = await supabase
       .from('invoices')
       .select('total, subtotal')
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null);
 
     const { data: purchases } = await supabase
       .from('purchases')
       .select('total')
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null);
 
     const revenue = (invoices || []).reduce((sum, i) => sum + (i.total || 0), 0);
     const expense = (purchases || []).reduce((sum, p) => sum + (p.total || 0), 0);
@@ -253,7 +262,7 @@ export default function ReportDetailScreen() {
     );
   };
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = ({ item }: { item: Record<string, unknown> }) => {
     if (reportKey === 'sales') {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
@@ -285,16 +294,16 @@ export default function ReportDetailScreen() {
     }
 
     if (reportKey === 'stock-summary' || reportKey === 'stock-detail' || reportKey === 'low-stock') {
-      const stockValue = (item.stock || 0) * (item.purchase_price || 0);
-      const isLow = (item.stock || 0) < 10;
+      const stockValue = (item.current_stock || 0) * (item.purchase_price || 0);
+      const isLow = (item.current_stock || 0) < 10;
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
             <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.sku || item.hsn_code}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.item_code || item.hsn}</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: isLow ? '#EF4444' : colors.text }]}>{item.stock} {item.unit}</Text>
+            <Text style={[styles.listItemAmount, { color: isLow ? '#EF4444' : colors.text }]}>{item.current_stock} {item.unit}</Text>
             <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatCurrency(stockValue)}</Text>
           </View>
         </View>
@@ -332,15 +341,20 @@ export default function ReportDetailScreen() {
 
     if (reportKey === 'profit-loss') {
       const isProfit = item.type === 'Net Profit';
-      const isPositive = item.amount >= 0;
+      const isPositive = (item.amount as number) >= 0;
+      const profitColor = () => {
+        if (!isProfit) return colors.text;
+        if (isPositive) return '#10B981';
+        return '#EF4444';
+      };
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <Text style={[styles.listItemTitle, { color: colors.text, flex: 1 }]}>{item.type}</Text>
+          <Text style={[styles.listItemTitle, { color: colors.text, flex: 1 }]}>{item.type as string}</Text>
           <Text style={[
             styles.listItemAmount, 
-            { color: isProfit ? (isPositive ? '#10B981' : '#EF4444') : colors.text, fontWeight: isProfit ? '700' : '600' }
+            { color: profitColor(), fontWeight: isProfit ? '700' : '600' }
           ]}>
-            {formatCurrency(item.amount)}
+            {formatCurrency(item.amount as number)}
           </Text>
         </View>
       );

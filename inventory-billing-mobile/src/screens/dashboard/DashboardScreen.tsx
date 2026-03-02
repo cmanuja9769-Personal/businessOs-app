@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   StatusBar,
   Platform,
   Animated,
-  Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -18,9 +17,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Loading from '@components/ui/Loading';
+import { SkeletonDashboard } from '@components/ui/Skeleton';
 import { supabase } from '@lib/supabase';
-import { formatCurrency, formatDate } from '@lib/utils';
+import { formatCurrency, formatCompactCurrency, formatDate } from '@lib/utils';
+import { lightTap, mediumTap } from '@lib/haptics';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48 - 12) / 2;
@@ -76,14 +78,22 @@ const FAB_ACTIONS = [
 ];
 
 // Floating Action Button Component
-function FABMenu({ navigation, colors, shadows, isDark }: any) {
+interface FABMenuProps {
+  readonly navigation: { navigate: (...args: unknown[]) => void };
+  readonly colors: Record<string, string | string[]>;
+  readonly shadows: Record<string, Record<string, unknown>>;
+  readonly isDark?: boolean;
+}
+
+function FABMenu({ navigation, colors, shadows }: FABMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useMemo(() => new Animated.Value(0), []);
+  const scaleAnim = useMemo(() => new Animated.Value(0), []);
+  const opacityAnim = useMemo(() => new Animated.Value(0), []);
 
   const toggleMenu = () => {
     const toValue = isOpen ? 0 : 1;
+    mediumTap();
     
     Animated.parallel([
       Animated.spring(rotateAnim, {
@@ -110,6 +120,7 @@ function FABMenu({ navigation, colors, shadows, isDark }: any) {
 
   const handleAction = (action: typeof FAB_ACTIONS[0]) => {
     toggleMenu();
+    lightTap();
     setTimeout(() => {
       navigation.navigate(action.route.tab, { 
         screen: action.route.screen,
@@ -148,7 +159,7 @@ function FABMenu({ navigation, colors, shadows, isDark }: any) {
         ]}
         pointerEvents={isOpen ? 'auto' : 'none'}
       >
-        {FAB_ACTIONS.map((action, index) => (
+        {FAB_ACTIONS.map((action) => (
           <Animated.View
             key={action.key}
             style={{
@@ -257,7 +268,7 @@ const fabStyles = StyleSheet.create({
 });
 
 export default function DashboardScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const { colors, shadows, isDark } = useTheme();
   const { user, organizationId, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -275,6 +286,10 @@ export default function DashboardScreen() {
   const cancelledRef = useRef(false);
   const fetchDashboardDataRef = useRef<() => Promise<void>>();
 
+  useFocusRefresh(useCallback(() => {
+    fetchDashboardDataRef.current?.();
+  }, []));
+
   useEffect(() => {
     cancelledRef.current = false;
     fetchDashboardData();
@@ -287,21 +302,21 @@ export default function DashboardScreen() {
     if (!organizationId) return;
     
     try {
-      // Try app_organizations first
-      let { data, error } = await supabase
+      const firstResult = await supabase
         .from('app_organizations')
         .select('name')
         .eq('id', organizationId)
         .single();
 
-      // Fallback to organizations table
-      if (error || !data) {
-        const result = await supabase
+      let data = firstResult.data;
+
+      if (firstResult.error || !data) {
+        const fallback = await supabase
           .from('organizations')
           .select('name')
           .eq('id', organizationId)
           .single();
-        data = result.data;
+        data = fallback.data;
       }
 
       if (cancelledRef.current) return;
@@ -319,7 +334,7 @@ export default function DashboardScreen() {
       if (!organizationId) {
         // Only warn if auth has finished loading (not during initial auth restore)
         if (!authLoading) {
-          console.log('[DASHBOARD] No organizationId available, skipping fetch');
+          console.warn('[DASHBOARD] No organizationId available, skipping fetch');
         }
         setStats({
           totalInvoices: 0,
@@ -339,6 +354,7 @@ export default function DashboardScreen() {
         .from('invoices')
         .select('id, invoice_number, total, status, created_at, customer:customers(name)')
         .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (cancelledRef.current) return;
@@ -371,7 +387,8 @@ export default function DashboardScreen() {
       const { data: items, error: itemsError } = await supabase
         .from('items')
         .select('id, current_stock, min_stock')
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       if (!itemsError && items) {
         const lowStockItems = items.filter(
@@ -384,7 +401,8 @@ export default function DashboardScreen() {
       const { count: customerCount } = await supabase
         .from('customers')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       setStats((prev) => ({ ...prev, totalCustomers: customerCount || 0 }));
     } catch (error) {
@@ -437,32 +455,6 @@ export default function DashboardScreen() {
     }
   };
 
-  // Quick Action Button Component
-  const QuickAction = ({ icon, label, onPress, gradientColors }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    onPress: () => void;
-    gradientColors: [string, string];
-  }) => (
-    <TouchableOpacity 
-      style={styles.quickActionWrapper}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.quickActionGradient}
-      >
-        <View style={styles.quickActionIconBg}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
-        </View>
-      </LinearGradient>
-      <Text style={[styles.quickActionLabel, { color: colors.text }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
   // Stat Card Component
   const StatCard = ({ label, value, icon, color, onPress }: {
     label: string;
@@ -493,7 +485,15 @@ export default function DashboardScreen() {
   );
 
   if (loading) {
-    return <Loading fullScreen />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+        <SkeletonDashboard />
+      </View>
+    );
   }
 
   return (
@@ -550,7 +550,11 @@ export default function DashboardScreen() {
                 </View>
                 <Text style={styles.revenueLabel}>Total Revenue</Text>
               </View>
-              <Text style={styles.revenueAmount}>{formatCurrency(stats.totalRevenue)}</Text>
+              <Text style={styles.revenueAmount}>
+                {stats.totalRevenue > 99999 
+                  ? formatCompactCurrency(stats.totalRevenue) 
+                  : formatCurrency(stats.totalRevenue)}
+              </Text>
               <View style={styles.revenueBadge}>
                 <Ionicons name="checkmark-circle" size={14} color="#34D399" />
                 <Text style={styles.revenueBadgeText}>{stats.paidInvoices} paid invoices</Text>
@@ -684,7 +688,7 @@ export default function DashboardScreen() {
       
       {/* Floating Action Button */}
       <FABMenu 
-        navigation={navigation} 
+        navigation={navigation as FABMenuProps['navigation']} 
         colors={colors} 
         shadows={shadows}
         isDark={isDark}

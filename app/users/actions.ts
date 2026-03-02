@@ -1,24 +1,29 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
-import { getCurrentUser, getUserRole } from "@/lib/auth"
+import { authorize } from "@/lib/authorize"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
 
 export async function updateUserRole(userId: string, role: "admin" | "salesperson" | "accountant" | "viewer") {
+  if (await isDemoMode()) throwDemoMutationError()
   try {
-    const currentUser = await getCurrentUser()
+    const { supabase, organizationId, role: callerRole } = await authorize("settings", "update")
 
-    if (!currentUser) {
-      return { success: false, error: "Not authenticated" }
-    }
-
-    // Check if current user is admin
-    const userRole = await getUserRole(currentUser.id)
-    if (!userRole || userRole.role !== "admin") {
+    if (callerRole !== "admin") {
       return { success: false, error: "Only admins can change user roles" }
     }
 
-    const supabase = await createClient()
+    const { data: targetUserOrg } = await supabase
+      .from("app_user_organizations")
+      .select("organization_id")
+      .eq("user_id", userId)
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (!targetUserOrg) {
+      return { success: false, error: "User does not belong to your organization" }
+    }
 
     const { error } = await supabase.from("user_roles").update({ role }).eq("user_id", userId)
 

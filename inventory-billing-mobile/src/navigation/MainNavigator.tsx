@@ -2,7 +2,6 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
-import { CommonActions } from '@react-navigation/native';
 import { MainTabParamList } from './types';
 import { useTheme } from '@contexts/ThemeContext';
 
@@ -26,28 +25,6 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
  */
 export default function MainNavigator() {
   const { colors, shadows } = useTheme();
-
-  // Reset stack to initial screen when switching tabs
-  const resetStackOnTabPress = (tabName: string, initialScreen: string) => ({
-    tabPress: (e: any) => {
-      const { navigation } = e.target ? { navigation: e.target } : e;
-      // Navigate to the tab and reset its stack to the initial screen
-      e.preventDefault();
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [
-            {
-              name: tabName,
-              state: {
-                routes: [{ name: initialScreen }],
-              },
-            },
-          ],
-        })
-      );
-    },
-  });
 
   return (
     <Tab.Navigator

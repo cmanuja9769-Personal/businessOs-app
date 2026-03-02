@@ -16,12 +16,11 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
 import { spacing, fontSize, borderRadius } from '@theme/spacing';
-import { commonColors } from '@theme/colors';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { CustomerDetailRouteProp } from '@navigation/types';
 
-const { width } = Dimensions.get('window');
+const { width: _screenWidth } = Dimensions.get('window');
 
 type DbCustomer = {
   id: string;
@@ -48,9 +47,21 @@ type DbInvoice = {
   created_at?: string | null;
 };
 
+function getStatusBg(status: string): string {
+  if (status === 'paid') return '#10B98120';
+  if (status === 'pending') return '#F59E0B20';
+  return '#EF444420';
+}
+
+function getStatusColor(status: string): string {
+  if (status === 'paid') return '#10B981';
+  if (status === 'pending') return '#F59E0B';
+  return '#EF4444';
+}
+
 export default function CustomerDetailScreen() {
   const route = useRoute<CustomerDetailRouteProp>();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
   const { customerId } = route.params;
@@ -77,12 +88,14 @@ export default function CustomerDetailScreen() {
           .select('*')
           .eq('organization_id', organizationId)
           .eq('id', customerId)
+          .is('deleted_at', null)
           .maybeSingle(),
         supabase
           .from('invoices')
           .select('*')
           .eq('organization_id', organizationId)
           .eq('customer_id', customerId)
+          .is('deleted_at', null)
           .order('invoice_date', { ascending: false }),
       ]);
 
@@ -91,8 +104,8 @@ export default function CustomerDetailScreen() {
       if (customerRes.error) throw customerRes.error;
       if (invoicesRes.error) throw invoicesRes.error;
 
-      setCustomer((customerRes.data as any) ?? null);
-      setInvoices((invoicesRes.data as any) ?? []);
+      setCustomer((customerRes.data as DbCustomer) ?? null);
+      setInvoices((invoicesRes.data as DbInvoice[]) ?? []);
     } catch (error) {
       console.error('[CUSTOMER_DETAIL] fetchAll error:', error);
     } finally {
@@ -157,8 +170,8 @@ export default function CustomerDetailScreen() {
 
   const customerPhone = customer.phone ?? null;
   const customerEmail = customer.email ?? null;
-  const customerAddress = (customer as any).address ?? customer.billing_address ?? null;
-  const customerGstin = (customer as any).gst_number ?? customer.gstin ?? null;
+  const customerAddress = (customer as DbCustomer & { address?: string }).address ?? customer.billing_address ?? null;
+  const customerGstin = (customer as DbCustomer & { gst_number?: string }).gst_number ?? customer.gstin ?? null;
 
   const TabButton = ({ id, label }: { id: 'overview' | 'invoices', label: string }) => (
     <TouchableOpacity
@@ -307,11 +320,11 @@ export default function CustomerDetailScreen() {
                   </Text>
                   <View style={[
                     styles.statusBadge,
-                    { backgroundColor: inv.status === 'paid' ? '#10B98120' : inv.status === 'pending' ? '#F59E0B20' : '#EF444420' }
+                    { backgroundColor: getStatusBg(inv.status) }
                   ]}>
                     <Text style={[
                       styles.statusText,
-                      { color: inv.status === 'paid' ? '#10B981' : inv.status === 'pending' ? '#F59E0B' : '#EF4444' }
+                      { color: getStatusColor(inv.status) }
                     ]}>
                       {inv.status}
                     </Text>

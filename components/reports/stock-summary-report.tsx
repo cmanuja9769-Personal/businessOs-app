@@ -17,11 +17,13 @@ import {
   FileSpreadsheet,
   FileDown,
   Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { format } from "date-fns"
-import { pdf } from "@react-pdf/renderer"
 import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/components/reports/report-filter"
-import { CompactReportPDF, type ReportColumn, type ReportGroup } from "@/components/reports/compact-report-pdf"
+import { type ReportColumn, type ReportGroup } from "@/components/reports/compact-report-pdf"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
 interface StockItem {
   id: string
@@ -61,6 +63,7 @@ interface WarehouseData {
 
 export default function StockReportComponent() {
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [stockData, setStockData] = useState<StockItem[]>([])
   const [summary, setSummary] = useState<StockReportSummary>({
@@ -79,9 +82,7 @@ export default function StockReportComponent() {
   )
 
   useEffect(() => {
-    loadWarehouses()
-    loadMetadata()
-    fetchStockReport()
+    Promise.all([loadWarehouses(), loadMetadata()]).then(() => fetchStockReport())
   }, [])
 
   const loadWarehouses = async () => {
@@ -107,6 +108,7 @@ export default function StockReportComponent() {
 
   const fetchStockReport = async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const params = new URLSearchParams({
         includeZeroStock: includeZeroStock.toString(),
@@ -123,13 +125,20 @@ export default function StockReportComponent() {
       }
 
       const response = await fetch(`/api/reports/stock?${params.toString()}`)
-      if (!response.ok) throw new Error("Failed to fetch stock report")
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`)
+      }
 
       const result = await response.json()
-      setStockData(result.data)
-      setSummary(result.summary)
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      setStockData(result.data || [])
+      setSummary(result.summary || { totalItems: 0, totalStockValue: 0, lowStockItems: 0, overstockItems: 0 })
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch stock report"
       console.error("Failed to fetch stock report:", error)
+      setFetchError(message)
     } finally {
       setLoading(false)
     }
@@ -248,6 +257,8 @@ export default function StockReportComponent() {
   const handleDownloadPDF = async () => {
     setPdfGenerating(true)
     try {
+      const { pdf } = await import("@react-pdf/renderer")
+      const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
       const blob = await pdf(
         <CompactReportPDF
           title="Stock Summary Report"
@@ -306,6 +317,7 @@ export default function StockReportComponent() {
   }
 
   return (
+    <ClientErrorBoundary fallbackTitle="Stock report encountered an error">
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -392,6 +404,19 @@ export default function StockReportComponent() {
           <CardDescription>{stockData.length} items found</CardDescription>
         </CardHeader>
         <CardContent>
+          {fetchError && !loading && (
+            <DataEmptyState
+              icon={<AlertCircle className="h-12 w-12" />}
+              title="Failed to load stock data"
+              description={fetchError}
+              action={
+                <Button variant="outline" size="sm" onClick={fetchStockReport}>
+                  Retry
+                </Button>
+              }
+            />
+          )}
+          {!fetchError && (
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -473,8 +498,10 @@ export default function StockReportComponent() {
               </TableBody>
             </Table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>
+    </ClientErrorBoundary>
   )
 }

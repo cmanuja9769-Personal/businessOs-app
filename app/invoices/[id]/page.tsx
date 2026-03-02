@@ -7,10 +7,14 @@ import Link from "next/link"
 import { GenerateEInvoiceButton } from "@/components/invoices/generate-einvoice-button"
 import { GenerateEWayBillButton } from "@/components/invoices/generate-ewaybill-button"
 import { EWayBillStatusCard } from "@/components/invoices/e-waybill-status-card"
+import { CancelEInvoiceButton } from "@/components/invoices/cancel-einvoice-button"
+import { UpdateInvoiceStatus } from "@/components/invoices/update-invoice-status"
+import { DeleteInvoiceButton } from "@/components/invoices/delete-invoice-button"
 import { DOCUMENT_TYPE_CONFIG } from "@/types"
 import { SendInvoiceEmailDialog } from "@/components/invoices/send-invoice-email-dialog"
 import { InvoiceViewDisplay } from "@/components/invoices/invoice-view-display"
 import { InvoicePDFButtons } from "@/components/invoices/invoice-pdf-buttons"
+import type { DocumentStatus } from "@/components/ui/status-badge"
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -54,7 +58,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          <UpdateInvoiceStatus
+            invoiceId={invoice.id}
+            currentStatus={invoice.status as DocumentStatus}
+          />
           {DOCUMENT_TYPE_CONFIG[invoice.documentType].canBeEInvoiced && !invoice.irn && invoice.status !== "draft" && (
             <GenerateEInvoiceButton
               invoiceId={invoice.id}
@@ -65,6 +73,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               irn={invoice.irn}
               customerName={invoice.customerName}
               total={invoice.total}
+            />
+          )}
+          {invoice.irn && (
+            <CancelEInvoiceButton
+              invoiceId={invoice.id}
+              irn={invoice.irn}
+              eInvoiceDate={invoice.eInvoiceDate}
             />
           )}
           {!invoice.ewaybillNo && invoice.status !== "draft" && (
@@ -86,6 +101,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </Link>
           <InvoicePDFButtons invoice={invoice} settings={settings} />
           <SendInvoiceEmailDialog invoice={invoice} />
+          <DeleteInvoiceButton invoiceId={invoice.id} />
         </div>
       </div>
 

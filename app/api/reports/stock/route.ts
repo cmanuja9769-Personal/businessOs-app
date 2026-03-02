@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authorize } from '@/lib/authorize'
 
 interface LedgerEntry {
   item_id: string
@@ -66,27 +66,7 @@ interface WarehouseStockRow {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user's organization
-    const { data: orgData } = await supabase
-      .from('app_user_organizations')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle()
-
-    if (!orgData?.organization_id) {
-      return NextResponse.json({ error: 'No organization found' }, { status: 400 })
-    }
-
-    const organizationId = orgData.organization_id
+    const { supabase, organizationId } = await authorize('items', 'read')
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
@@ -96,6 +76,8 @@ export async function GET(request: NextRequest) {
     const categories = searchParams.get('categories')?.split(',').filter(Boolean) || []
     const stockStatus = searchParams.get('stockStatus') || 'all'
     const searchTerm = searchParams.get('searchTerm') || ''
+    const dateFrom = searchParams.get('dateFrom') || ''
+    const dateTo = searchParams.get('dateTo') || ''
 
     // Fetch ALL items using pagination (Supabase has 1000 row limit)
     // NOTE: Do NOT apply filters inside pagination loop as it causes skipped items
@@ -123,6 +105,7 @@ export async function GET(request: NextRequest) {
           warehouse_id
         `, { count: 'exact' })
         .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('name', { ascending: true })
         .order('id', { ascending: true })
         .range(offset, offset + pageSize - 1)
@@ -303,12 +286,58 @@ export async function GET(request: NextRequest) {
 
       return {
         ...item,
+        itemId: item.id,
         calculated_stock,
         stock_value: Math.round(stock_value * 100) / 100,
         stock_status_flag,
-        locations
+        locations,
+        totalIn: 0,
+        totalOut: 0,
       }
     })
+
+    // Compute inward/outward from stock_ledger when dateFrom/dateTo are provided
+    if (dateFrom && dateTo) {
+      const movementMap = new Map<string, { totalIn: number; totalOut: number }>()
+      const movItemIds = enrichedData.map(item => item.id)
+      
+      for (let i = 0; i < movItemIds.length; i += batchSize) {
+        const batchIds = movItemIds.slice(i, i + batchSize)
+        let ledgerQuery = supabase
+          .from('stock_ledger')
+          .select('item_id, quantity_change')
+          .in('item_id', batchIds)
+          .eq('organization_id', organizationId)
+          .gte('transaction_date', dateFrom)
+          .lte('transaction_date', dateTo + 'T23:59:59')
+
+        if (warehouseIds.length > 0) {
+          ledgerQuery = ledgerQuery.in('warehouse_id', warehouseIds)
+        }
+
+        const { data: ledgerBatch } = await ledgerQuery
+        if (!ledgerBatch) continue
+
+        for (const entry of ledgerBatch) {
+          const existing = movementMap.get(entry.item_id) || { totalIn: 0, totalOut: 0 }
+          const qty = entry.quantity_change || 0
+          if (qty > 0) {
+            existing.totalIn += qty
+          } else {
+            existing.totalOut += Math.abs(qty)
+          }
+          movementMap.set(entry.item_id, existing)
+        }
+      }
+
+      for (const item of enrichedData) {
+        const movement = movementMap.get(item.id)
+        if (movement) {
+          item.totalIn = movement.totalIn
+          item.totalOut = movement.totalOut
+        }
+      }
+    }
 
     // Apply stock status filter
     let filteredData = enrichedData

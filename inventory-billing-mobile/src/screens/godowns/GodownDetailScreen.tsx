@@ -8,7 +8,6 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  FlatList,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,6 +75,7 @@ export default function GodownDetailScreen() {
         .from('warehouses')
         .select('*')
         .eq('id', godownId)
+        .is('deleted_at', null)
         .single();
 
       if (godownError) throw godownError;
@@ -83,7 +83,7 @@ export default function GodownDetailScreen() {
 
       const { data: stockData, error: stockError } = await supabase
         .from('item_warehouse_stock')
-        .select('*, items(name, sku, unit, purchase_price)')
+        .select('*, items(name, item_code, unit, purchase_price)')
         .eq('warehouse_id', godownId);
 
       if (stockError) throw stockError;
@@ -92,7 +92,7 @@ export default function GodownDetailScreen() {
         id: s.id,
         item_id: s.item_id,
         item_name: s.items?.name || 'Unknown Item',
-        sku: s.items?.sku,
+        sku: s.items?.item_code,
         quantity: s.quantity || 0,
         unit: s.items?.unit || 'pcs',
         value: (s.quantity || 0) * (s.items?.purchase_price || 0),
@@ -148,7 +148,7 @@ export default function GodownDetailScreen() {
               if (error) throw error;
               loadGodownData();
               Alert.alert('Success', 'Default godown updated');
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to update default godown');
             }
           },
@@ -178,10 +178,10 @@ export default function GodownDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('warehouses').delete().eq('id', godownId);
+              const { error } = await supabase.from('warehouses').update({ deleted_at: new Date().toISOString() }).eq('id', godownId);
               if (error) throw error;
               navigation.goBack();
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete godown');
             }
           },

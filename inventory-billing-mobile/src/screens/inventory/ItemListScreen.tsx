@@ -13,8 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { InventoryStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Card from '@components/ui/Card';
 import Loading from '@components/ui/Loading';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
@@ -23,6 +25,8 @@ import { useItemSearch } from '@hooks/useItemSearch';
 import { spacing, fontSize } from '@theme/spacing';
 import { formatCurrency } from '@lib/utils';
 import { commonColors } from '@theme/colors';
+import { lightTap } from '@lib/haptics';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
 
 interface Item {
   id: string;
@@ -34,6 +38,15 @@ interface Item {
   sale_price?: number;
   selling_price?: number;
   category?: string;
+}
+
+function getCountText(query: string, resultCount: number, total: number): string {
+  if (query) {
+    const suffix = resultCount !== 1 ? 's' : '';
+    return `${resultCount} result${suffix} found`;
+  }
+  const suffix = total !== 1 ? 's' : '';
+  return `${total} item${suffix} total`;
 }
 
 export default function ItemListScreen() {
@@ -56,6 +69,8 @@ export default function ItemListScreen() {
     isRefreshing,
   } = useItemSearch(organizationId);
 
+  useFocusRefresh(refresh);
+
   const getStockStatus = (currentStock: number, minStock: number) => {
     if (currentStock === 0) {
       return { color: commonColors.stockOut, text: 'Out of Stock' };
@@ -73,12 +88,13 @@ export default function ItemListScreen() {
     }
   }, [hasMore, isLoadingMore, status, loadMore]);
 
-  const renderItem = useCallback(({ item }: { item: Item }) => {
+  const renderItem = useCallback(({ item, index }: { item: Item; index: number }) => {
     const currentStock = item.current_stock ?? 0;
     const minStock = item.min_stock ?? 0;
     const stockStatus = getStockStatus(currentStock, minStock);
 
     return (
+      <AnimatedListItem index={index}>
       <TouchableOpacity
         onPress={() => navigation.navigate('ItemDetail', { itemId: item.id })}
         activeOpacity={0.7}
@@ -125,6 +141,7 @@ export default function ItemListScreen() {
           </View>
         </Card>
       </TouchableOpacity>
+      </AnimatedListItem>
     );
   }, [colors, navigation]);
 
@@ -170,7 +187,13 @@ export default function ItemListScreen() {
   }, [status, error, searchQuery, refresh, navigation]);
 
   if (status === 'loading' && items.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading items..." />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+          <SkeletonList count={6} />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -198,9 +221,7 @@ export default function ItemListScreen() {
       {totalCount > 0 && (
         <View style={styles.countContainer}>
           <Text style={[styles.countText, { color: colors.textTertiary }]}>
-            {searchQuery
-              ? `${items.length} result${items.length !== 1 ? 's' : ''} found`
-              : `${totalCount} item${totalCount !== 1 ? 's' : ''} total`}
+            {getCountText(searchQuery, items.length, totalCount)}
           </Text>
         </View>
       )}
@@ -235,7 +256,7 @@ export default function ItemListScreen() {
 
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate('AddItem', {})}
+        onPress={() => { lightTap(); navigation.navigate('AddItem', {}); }}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={28} color="#ffffff" />

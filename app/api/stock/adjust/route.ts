@@ -1,49 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { authorize } from "@/lib/authorize"
 
-/**
- * PRODUCTION-READY Stock Adjustment API Endpoint
- * 
- * This endpoint provides a RESTful interface for stock adjustments with:
- * - Atomic database operations (prevents race conditions)
- * - Complete audit trail via stock_ledger
- * - Validation for negative stock prevention
- * - Support for both ADD and REDUCE operations
- * 
- * Request Body:
- * {
- *   itemId: string;
- *   warehouseId: string;
- *   quantity: number;
- *   entryUnit: string;
- *   operationType: "ADD" | "REDUCE";
- *   reason: string;
- *   notes?: string;
- * }
- * 
- * Response:
- * {
- *   success: boolean;
- *   data?: {
- *     newStock: number;
- *     quantityBefore: number;
- *     quantityAfter: number;
- *   };
- *   error?: string;
- * }
- */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Authenticate user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
+    const { supabase, userId } = await authorize("items", "update")
 
     // Parse request body
     const body = await request.json()
@@ -221,7 +181,7 @@ export async function POST(request: NextRequest) {
       reference_type: "manual_adjustment",
       reference_no: `${operationType}-${Date.now()}`,
       notes: notes ? `${reason}: ${notes}` : reason,
-      created_by: user.id,
+      created_by: userId,
     }
 
     const { error: ledgerError } = await supabase

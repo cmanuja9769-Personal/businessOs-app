@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import type { IPayment } from "@/types"
 import { paymentSchema } from "@/lib/schemas"
+import { authorize, orgScope } from "@/lib/authorize"
+import { createJournalEntryForPayment } from "@/lib/accounting/auto-journal"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
+import { demoPayments, demoPaymentsExtended } from "@/app/demo/data"
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>
 
@@ -74,16 +78,101 @@ async function updatePurchaseBalance(
   revalidatePath(`/purchases/${purchaseId}`)
 }
 
+async function updateCustomerOutstanding(
+  supabase: SupabaseClient,
+  customerId: string,
+  amountDelta: number,
+) {
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("outstanding_balance")
+    .eq("id", customerId)
+    .single()
+
+  if (!customer) return
+
+  const newOutstanding = Math.max(0, (Number(customer.outstanding_balance) || 0) + amountDelta)
+
+  await supabase
+    .from("customers")
+    .update({
+      outstanding_balance: newOutstanding,
+      last_transaction_date: new Date().toISOString().split("T")[0],
+    })
+    .eq("id", customerId)
+}
+
+async function validatePaymentAmount(
+  supabase: SupabaseClient,
+  table: "invoices" | "purchases",
+  recordId: string,
+  amount: number,
+): Promise<string | null> {
+  const { data: record } = await supabase
+    .from(table)
+    .select(TOTAL_PAID_SELECT)
+    .eq("id", recordId)
+    .single()
+
+  if (!record) return null
+
+  const remaining = Number(record.total) - Number(record.paid_amount)
+  if (amount > remaining + 0.01) {
+    return `Payment of ₹${amount.toFixed(2)} exceeds remaining balance of ₹${remaining.toFixed(2)}`
+  }
+  return null
+}
+
+async function createJournalEntrySafe(params: Parameters<typeof createJournalEntryForPayment>[0]) {
+  try {
+    await createJournalEntryForPayment(params)
+  } catch (journalErr) {
+    console.error("[Payments] Journal entry creation failed (non-blocking):", journalErr)
+  }
+}
+
+async function applyInvoicePaymentSideEffects(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  amount: number,
+) {
+  await updateInvoiceBalance(supabase, invoiceId, amount)
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("customer_id")
+    .eq("id", invoiceId)
+    .single()
+  if (invoice?.customer_id) {
+    await updateCustomerOutstanding(supabase, invoice.customer_id, -amount)
+  }
+}
+
+function formatPaymentDate(paymentDate: string | Date): string {
+  return typeof paymentDate === "string" ? paymentDate : paymentDate.toISOString().split("T")[0]
+}
+
 export async function createPayment(data: unknown) {
+  if (await isDemoMode()) throwDemoMutationError()
   const validated = paymentSchema.parse(data)
-  const supabase = await createClient()
+  const { supabase, organizationId, userId } = await authorize("invoices", "update")
+
+  if (validated.invoiceId) {
+    const err = await validatePaymentAmount(supabase, "invoices", validated.invoiceId, validated.amount)
+    if (err) return { success: false, error: err }
+  }
+
+  if (validated.purchaseId) {
+    const err = await validatePaymentAmount(supabase, "purchases", validated.purchaseId, validated.amount)
+    if (err) return { success: false, error: err }
+  }
 
   const { data: newPayment, error: paymentError } = await supabase
     .from("payments")
     .insert({
+      organization_id: organizationId,
       invoice_id: validated.invoiceId || null,
       purchase_id: validated.purchaseId || null,
-      payment_date: typeof validated.paymentDate === 'string' ? validated.paymentDate : validated.paymentDate.toISOString().split("T")[0],
+      payment_date: formatPaymentDate(validated.paymentDate),
       amount: validated.amount,
       payment_method: validated.paymentMethod,
       reference_number: validated.referenceNumber || null,
@@ -93,27 +182,41 @@ export async function createPayment(data: unknown) {
     .single()
 
   if (paymentError) {
-    console.error("[v0] Error creating payment:", paymentError)
+    console.error("[Payments] Error creating payment:", paymentError)
     return { success: false, error: paymentError.message }
   }
 
   if (validated.invoiceId) {
-    await updateInvoiceBalance(supabase, validated.invoiceId, validated.amount)
+    await applyInvoicePaymentSideEffects(supabase, validated.invoiceId, validated.amount)
   }
 
   if (validated.purchaseId) {
     await updatePurchaseBalance(supabase, validated.purchaseId, validated.amount)
   }
 
+  await createJournalEntrySafe({
+    organizationId,
+    userId,
+    paymentId: newPayment.id,
+    amount: validated.amount,
+    paymentMethod: validated.paymentMethod,
+    isReceivable: !!validated.invoiceId,
+    referenceNo: validated.referenceNumber || undefined,
+    description: validated.notes || undefined,
+  })
+
   return { success: true, payment: newPayment }
 }
 
 export async function getPaymentsByInvoice(invoiceId: string): Promise<IPayment[]> {
-  const supabase = await createClient()
+  if (await isDemoMode()) return demoPayments.filter(p => p.invoiceId === invoiceId)
+  const { supabase, organizationId } = await authorize("invoices", "read")
   const { data, error } = await supabase
     .from("payments")
     .select("*")
     .eq("invoice_id", invoiceId)
+    .or(orgScope(organizationId))
+    .is("deleted_at", null)
     .order("payment_date", { ascending: false })
 
   if (error) {
@@ -140,11 +243,14 @@ export async function getPaymentsByInvoice(invoiceId: string): Promise<IPayment[
 }
 
 export async function getPaymentsByPurchase(purchaseId: string): Promise<IPayment[]> {
-  const supabase = await createClient()
+  if (await isDemoMode()) return demoPayments.filter(p => p.purchaseId === purchaseId)
+  const { supabase, organizationId } = await authorize("purchases", "read")
   const { data, error } = await supabase
     .from("payments")
     .select("*")
     .eq("purchase_id", purchaseId)
+    .or(orgScope(organizationId))
+    .is("deleted_at", null)
     .order("payment_date", { ascending: false })
 
   if (error) {
@@ -169,7 +275,9 @@ export async function getPaymentsByPurchase(purchaseId: string): Promise<IPaymen
 }
 
 export async function getAllPayments() {
-  const supabase = await createClient()
+  if (await isDemoMode()) return demoPaymentsExtended
+  const { supabase, organizationId } = await authorize("invoices", "read")
+
   const { data, error } = await supabase
     .from("payments")
     .select(`
@@ -177,6 +285,8 @@ export async function getAllPayments() {
       invoices:invoice_id(invoice_number, customer_name),
       purchases:purchase_id(purchase_number, supplier_name)
     `)
+    .or(orgScope(organizationId))
+    .is("deleted_at", null)
     .order("payment_date", { ascending: false })
 
   if (error) {
@@ -204,15 +314,27 @@ export async function getAllPayments() {
 }
 
 export async function deletePayment(id: string, invoiceId?: string, purchaseId?: string) {
-  const supabase = await createClient()
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("invoices", "delete")
 
-  const { data: paymentData } = await supabase.from("payments").select("amount").eq("id", id).single()
+  const { data: paymentData } = await supabase
+    .from("payments")
+    .select("amount")
+    .eq("id", id)
+    .or(orgScope(organizationId))
+    .is("deleted_at", null)
+    .single()
 
   if (!paymentData) {
     return { success: false, error: "Payment not found" }
   }
 
-  const { error: deleteError } = await supabase.from("payments").delete().eq("id", id)
+  const { error: deleteError } = await supabase
+    .from("payments")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .or(orgScope(organizationId))
+    .is("deleted_at", null)
 
   if (deleteError) {
     console.error("[v0] Error deleting payment:", deleteError)

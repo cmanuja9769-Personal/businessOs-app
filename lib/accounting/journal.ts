@@ -1,28 +1,30 @@
-// Journal Entry Management
-
-import { createClient } from "@/lib/supabase/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 export interface JournalLineItem {
-  accountId: string
-  accountCode: string
-  accountName: string
-  debitAmount: number
-  creditAmount: number
-  description?: string
+  readonly accountId: string
+  readonly accountCode: string
+  readonly accountName: string
+  readonly debitAmount: number
+  readonly creditAmount: number
+  readonly description?: string
 }
 
 export interface JournalEntryData {
-  entryType: "journal" | "payment" | "receipt" | "contra" | "sales" | "purchase"
-  entryDate: Date
-  description?: string
-  lines: JournalLineItem[]
-  referenceType?: string
-  referenceId?: string
-  referenceNo?: string
+  readonly entryType: "journal" | "payment" | "receipt" | "contra" | "sales" | "purchase"
+  readonly entryDate: Date
+  readonly description?: string
+  readonly lines: readonly JournalLineItem[]
+  readonly referenceType?: string
+  readonly referenceId?: string
+  readonly referenceNo?: string
 }
 
-export async function createJournalEntry(organizationId: string, data: JournalEntryData, userId: string) {
-  const supabase = await createClient()
+export async function createJournalEntry(
+  supabase: SupabaseClient,
+  organizationId: string,
+  data: JournalEntryData,
+  userId: string,
+) {
 
   // Validate debit = credit
   const totalDebit = data.lines.reduce((sum, line) => sum + line.debitAmount, 0)
@@ -91,8 +93,7 @@ export async function createJournalEntry(organizationId: string, data: JournalEn
   return { success: true, entry }
 }
 
-export async function postJournalEntry(entryId: string, userId: string) {
-  const supabase = await createClient()
+export async function postJournalEntry(supabase: SupabaseClient, entryId: string, userId: string) {
 
   // Get entry with lines
   const { data: entry } = await supabase
@@ -151,8 +152,7 @@ export async function postJournalEntry(entryId: string, userId: string) {
   return { success: true }
 }
 
-export async function getJournalEntries(organizationId: string, status = "posted") {
-  const supabase = await createClient()
+export async function getJournalEntries(supabase: SupabaseClient, organizationId: string, status = "posted") {
 
   const { data, error } = await supabase
     .from("journal_entries")
@@ -169,8 +169,7 @@ export async function getJournalEntries(organizationId: string, status = "posted
   return data || []
 }
 
-export async function getGeneralLedger(accountId: string, startDate?: Date, endDate?: Date) {
-  const supabase = await createClient()
+export async function getGeneralLedger(supabase: SupabaseClient, accountId: string, startDate?: Date, endDate?: Date) {
 
   let query = supabase
     .from("journal_entry_lines")

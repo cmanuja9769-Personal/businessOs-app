@@ -124,4 +124,4 @@ export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export type Database = any; // Import from your existing types
+export type Database = Record<string, unknown>;

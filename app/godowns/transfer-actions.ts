@@ -143,12 +143,22 @@ export async function createStockTransfer(input: CreateTransferInput) {
     return { success: false as const, error: `Insufficient stock for: ${names}` }
   }
 
-  const { count } = await ctx.supabase
+  const { data: lastTransfer } = await ctx.supabase
     .from("stock_transfers")
-    .select("id", { count: "exact", head: true })
+    .select("transfer_no")
     .eq("organization_id", ctx.organizationId)
+    .like("transfer_no", "ST/%")
+    .order("transfer_no", { ascending: false })
+    .limit(1)
 
-  const transferNo = `ST/${String((count ?? 0) + 1).padStart(4, "0")}`
+  let nextNum = 1
+  if (lastTransfer && lastTransfer.length > 0) {
+    const lastNo = (lastTransfer[0] as Record<string, unknown>).transfer_no as string
+    const parsed = parseInt(lastNo.replace("ST/", ""), 10)
+    if (!isNaN(parsed)) nextNum = parsed + 1
+  }
+
+  const transferNo = `ST/${String(nextNum).padStart(4, "0")}`
 
   const { data: transfer, error: transferError } = await ctx.supabase
     .from("stock_transfers")

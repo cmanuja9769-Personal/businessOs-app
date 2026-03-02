@@ -1,4 +1,4 @@
-import { getItemById, getItemStockDistribution, getItemStockLedger, getItemInvoiceUsage } from "../actions"
+import { getItemById, getItemStockDistribution, getItemStockLedger, getItemInvoiceUsage } from "../item-details-actions"
 import { getWarehouses } from "@/app/godowns/actions"
 import { notFound } from "next/navigation"
 import { ItemDetailsClient } from "@/components/items/item-details-client"

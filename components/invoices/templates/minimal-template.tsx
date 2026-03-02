@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import type { IInvoice, DocumentType } from "@/types";
 import { DOCUMENT_TYPE_CONFIG } from "@/types";
 import type { ISettings } from "@/app/settings/actions";
+import { numberToWords } from "@/lib/number-to-words";
 
 interface MinimalTemplateProps {
   invoice: IInvoice;
@@ -141,6 +142,9 @@ export function MinimalTemplate({ invoice, settings }: MinimalTemplateProps) {
                 <th className="py-3 px-2 text-left text-xs font-semibold text-gray-600">
                   DESCRIPTION
                 </th>
+                <th className="py-3 px-2 text-left text-xs font-semibold text-gray-600">
+                  HSN
+                </th>
                 <th className="py-3 px-2 text-center text-xs font-semibold text-gray-600">
                   QTY
                 </th>
@@ -167,6 +171,9 @@ export function MinimalTemplate({ invoice, settings }: MinimalTemplateProps) {
                     {item.unit && (
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     )}
+                  </td>
+                  <td className="py-3 px-2 text-xs text-gray-500 font-mono">
+                    {item.hsnCode || "-"}
                   </td>
                   <td className="py-3 px-2 text-center text-sm text-gray-900">
                     {item.quantity}
@@ -279,6 +286,14 @@ export function MinimalTemplate({ invoice, settings }: MinimalTemplateProps) {
             )}
           </div>
         </div>
+
+        {invoice.total > 0 && (
+          <div className="mt-4">
+            <p className="text-xs text-gray-600">
+              <span className="font-semibold text-gray-700">Amount in Words:</span>{" "}{numberToWords(invoice.total)}
+            </p>
+          </div>
+        )}
 
         {/* Notes / Payment / Terms */}
         <div className="mt-10 grid grid-cols-2 gap-8">

@@ -1,35 +1,9 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { authorize, orgScope } from "@/lib/authorize"
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: memberships, error: orgError } = await supabase
-      .from("app_user_organizations")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .limit(1)
-
-    if (orgError) {
-      return NextResponse.json({ error: orgError.message }, { status: 500 })
-    }
-
-    const membership = memberships?.[0]
-
-    if (!membership) {
-      return NextResponse.json({ error: "No active organization" }, { status: 403 })
-    }
-
-    const orgId = membership.organization_id as string
+    const { supabase, organizationId } = await authorize("items", "read")
 
     const allItems: Record<string, unknown>[] = []
     let offset = 0
@@ -39,7 +13,8 @@ export async function GET() {
       const { data, error } = await supabase
         .from("items")
         .select("id, name, item_code, unit, current_stock, min_stock, purchase_price, sale_price, category, warehouse_id, opening_stock, created_at, updated_at")
-        .eq("organization_id", orgId)
+        .or(orgScope(organizationId))
+        .is("deleted_at", null)
         .order("name", { ascending: true })
         .range(offset, offset + pageSize - 1)
 

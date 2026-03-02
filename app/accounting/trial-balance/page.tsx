@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Download } from "lucide-react"
+import { getTrialBalanceData } from "../actions"
 
 interface TrialBalanceEntry {
   accountCode: string
   accountName: string
-  debit: number
-  credit: number
+  accountType: string
   debitBalance: number
   creditBalance: number
 }
@@ -22,11 +22,17 @@ export default function TrialBalancePage() {
   const [totals, setTotals] = useState({ totalDebit: 0, totalCredit: 0 })
 
   useEffect(() => {
-    // Fetch trial balance data
     const fetchData = async () => {
-      // Implementation will fetch from API
-      setTrialBalance([])
-      setTotals({ totalDebit: 0, totalCredit: 0 })
+      try {
+        const data = await getTrialBalanceData()
+        setTrialBalance(data)
+        const totalDebit = data.reduce((sum: number, a: TrialBalanceEntry) => sum + a.debitBalance, 0)
+        const totalCredit = data.reduce((sum: number, a: TrialBalanceEntry) => sum + a.creditBalance, 0)
+        setTotals({ totalDebit, totalCredit })
+      } catch {
+        setTrialBalance([])
+        setTotals({ totalDebit: 0, totalCredit: 0 })
+      }
     }
     fetchData()
   }, [])

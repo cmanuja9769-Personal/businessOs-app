@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, Menu, shell } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
@@ -30,7 +31,7 @@ function startNextServer() {
     }
 
     // In production, start the Next.js standalone server
-    console.log('Starting Next.js server...')
+    console.warn('Starting Next.js server...')
     
     let serverPath
     let cwd
@@ -47,9 +48,9 @@ function startNextServer() {
       nodePath = 'node'
     }
     
-    console.log('Node path:', nodePath)
-    console.log('Server path:', serverPath)
-    console.log('Working directory:', cwd)
+    console.warn('Node path:', nodePath)
+    console.warn('Server path:', serverPath)
+    console.warn('Working directory:', cwd)
     
     // Use spawn with node executable
     const next = spawn(nodePath, [serverPath], {
@@ -65,7 +66,7 @@ function startNextServer() {
     let serverReady = false
 
     next.stdout.on('data', (data) => {
-      console.log(`Next.js: ${data.toString()}`)
+      console.warn(`Next.js: ${data.toString()}`)
     })
 
     next.stderr.on('data', (data) => {
@@ -80,7 +81,7 @@ function startNextServer() {
     })
 
     next.on('exit', (code, signal) => {
-      console.log(`Next.js exited with code ${code}, signal ${signal}`)
+      console.warn(`Next.js exited with code ${code}, signal ${signal}`)
       if (!serverReady) {
         reject(new Error(`Next.js server exited with code ${code}`))
       } else {
@@ -100,7 +101,7 @@ function startNextServer() {
       const http = require('http')
       const req = http.get(`http://localhost:${PORT}`, (res) => {
         if (res.statusCode === 200 || res.statusCode === 404) {
-          console.log('Next.js server is ready!')
+          console.warn('Next.js server is ready!')
           serverReady = true
           resolve()
         }
@@ -111,7 +112,7 @@ function startNextServer() {
         if (attempts < maxAttempts) {
           setTimeout(checkServer, 200)
         } else {
-          console.log('Server check timeout - assuming ready')
+          console.warn('Server check timeout - assuming ready')
           serverReady = true
           resolve()
         }
@@ -310,5 +311,5 @@ app.on('before-quit', () => {
 
 // Handle app updates (optional - for future implementation)
 app.on('ready', () => {
-  console.log('BusinessOS Desktop started')
+  console.warn('BusinessOS Desktop started')
 })

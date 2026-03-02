@@ -1,7 +1,7 @@
 "use client"
 
-/* eslint-disable @next/next/no-img-element */
 import { useState } from "react"
+import Image from "next/image"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Upload, X, Image as ImageIcon } from "lucide-react"
@@ -75,8 +75,8 @@ export function ImageUpload({ label, name, value, onChange, description, aspectR
       <div className="flex items-start gap-4">
         {preview ? (
           <div className="relative">
-            <div className={`${aspectClasses[aspectRatio]} border rounded-lg overflow-hidden bg-muted flex items-center justify-center`}>
-              <img src={preview} alt={label} className="w-full h-full object-contain" />
+            <div className={`${aspectClasses[aspectRatio]} border rounded-lg overflow-hidden bg-muted flex items-center justify-center relative`}>
+              <Image src={preview} alt={label} fill className="object-contain" unoptimized />
             </div>
             <Button
               type="button"

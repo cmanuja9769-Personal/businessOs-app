@@ -24,7 +24,7 @@ export interface PaginationOptions {
 const DEFAULT_PAGE_SIZE = 50;
 
 export class ApiService {
-  static async get<T>(table: string, filters?: Record<string, any>): Promise<ApiResponse<T[]>> {
+  static async get<T>(table: string, filters?: Record<string, unknown>): Promise<ApiResponse<T[]>> {
     try {
       let query = supabase.from(table).select('*');
 
@@ -47,7 +47,7 @@ export class ApiService {
 
   static async getPaginated<T>(
     table: string,
-    filters?: Record<string, any>,
+    filters?: Record<string, unknown>,
     options?: PaginationOptions
   ): Promise<PaginatedResponse<T>> {
     try {
@@ -147,7 +147,7 @@ export class ApiService {
 
   static async delete(table: string, id: string): Promise<ApiResponse<void>> {
     try {
-      const { error } = await supabase.from(table).delete().eq('id', id);
+      const { error } = await supabase.from(table).update({ deleted_at: new Date().toISOString() }).eq('id', id);
 
       if (error) throw error;
 

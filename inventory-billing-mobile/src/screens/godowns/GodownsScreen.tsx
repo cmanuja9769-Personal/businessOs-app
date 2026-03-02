@@ -28,7 +28,7 @@ interface Godown {
 export default function GodownsScreen() {
   const { colors } = useTheme();
   const { organizationId } = useAuth();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const [godowns, setGodowns] = useState<Godown[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +50,7 @@ export default function GodownsScreen() {
         .from('warehouses')
         .select('*')
         .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('is_default', { ascending: false })
         .order('name');
 

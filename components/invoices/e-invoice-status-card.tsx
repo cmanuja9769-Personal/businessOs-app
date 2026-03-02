@@ -6,6 +6,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -118,7 +119,7 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
             <div className="space-y-2">
               <p className="text-sm font-medium text-gray-700">QR Code</p>
               <div className="p-2 bg-white rounded border border-gray-200 flex items-center justify-center">
-                <img src={invoice.qrCode} alt="E-Invoice QR Code" className="w-32 h-32" />
+                <Image src={invoice.qrCode} alt="E-Invoice QR Code" width={128} height={128} unoptimized />
               </div>
               <p className="text-xs text-gray-600">Scan for invoice verification</p>
             </div>

@@ -17,10 +17,13 @@ import {
   Loader2,
   ArrowDownLeft,
   ArrowUpRight,
-  Layers
+  Layers,
+  AlertCircle
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
 interface StockMovement {
   id: string
@@ -37,16 +40,32 @@ interface StockMovement {
 export default function StockDetailPage() {
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
   const [searchTerm, setSearchTerm] = useState("")
   const [warehouseFilter, setWarehouseFilter] = useState("all")
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    async function fetchWarehouses() {
+      try {
+        const res = await fetch('/api/warehouses')
+        if (res.ok) {
+          const data = await res.json()
+          setWarehouses(Array.isArray(data) ? data : data.data ?? [])
+        }
+      } catch {}
+    }
+    fetchWarehouses()
+  }, [])
 
   const fetchStockMovements = useCallback(async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const response = await fetch('/api/items')
-      if (!response.ok) throw new Error('Failed to fetch')
+      if (!response.ok) throw new Error(`Server returned ${response.status}: ${response.statusText}`)
 
       const allItems = await response.json()
       if (!Array.isArray(allItems) || allItems.length === 0) {
@@ -55,7 +74,7 @@ export default function StockDetailPage() {
       }
 
       const ledgerRes = await fetch(
-        `/api/reports/stock?dateFrom=${dateFrom}&dateTo=${dateTo}` +
+        `/api/reports/stock?dateFrom=${dateFrom}&dateTo=${dateTo}&includeZeroStock=true` +
         (warehouseFilter !== "all" ? `&warehouseIds=${warehouseFilter}` : "")
       )
 
@@ -94,7 +113,9 @@ export default function StockDetailPage() {
 
       setMovements(rows)
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch stock movements'
       console.error('Failed to fetch stock movements:', error)
+      setFetchError(message)
       setMovements([])
     } finally {
       setLoading(false)
@@ -146,6 +167,7 @@ export default function StockDetailPage() {
   }
 
   return (
+    <ClientErrorBoundary>
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -209,6 +231,9 @@ export default function StockDetailPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Warehouses</SelectItem>
+                  {warehouses.map(wh => (
+                    <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -291,6 +316,17 @@ export default function StockDetailPage() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : fetchError ? (
+            <DataEmptyState
+              icon={<AlertCircle className="h-12 w-12" />}
+              title="Failed to load stock data"
+              description={fetchError}
+              action={
+                <Button variant="outline" size="sm" onClick={() => void fetchStockMovements()}>
+                  Retry
+                </Button>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -364,5 +400,6 @@ export default function StockDetailPage() {
         </CardContent>
       </Card>
     </div>
+    </ClientErrorBoundary>
   )
 }

@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
@@ -23,12 +24,13 @@ import ListFooterLoader from '@components/ui/ListFooterLoader';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
+import { lightTap } from '@lib/haptics';
 
 interface Purchase {
   id: string;
-  purchase_no: string;
+  purchase_number: string;
   supplier_name: string;
-  date: string;
+  purchase_date: string;
   total: number;
   paid_amount: number;
   balance: number;
@@ -59,19 +61,25 @@ export default function PurchasesScreen() {
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
 
+  useFocusRefresh(useCallback(() => {
+    fetchPurchases(searchQuery, 0, true);
+    fetchStats();
+  }, [searchQuery]));
+
   const fetchStats = useCallback(async () => {
     if (!organizationId) return;
     try {
       const { data } = await supabase
         .from('purchases')
         .select('total, paid_amount, balance')
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       if (data) {
         setStats({
-          total: data.reduce((sum: number, p: any) => sum + (p.total || 0), 0),
-          paid: data.reduce((sum: number, p: any) => sum + (p.paid_amount || 0), 0),
-          pending: data.reduce((sum: number, p: any) => sum + (p.balance || 0), 0),
+          total: data.reduce((sum: number, p: Record<string, number>) => sum + (p.total || 0), 0),
+          paid: data.reduce((sum: number, p: Record<string, number>) => sum + (p.paid_amount || 0), 0),
+          pending: data.reduce((sum: number, p: Record<string, number>) => sum + (p.balance || 0), 0),
         });
       }
     } catch {}
@@ -108,22 +116,24 @@ export default function PurchasesScreen() {
       let countQuery = supabase
         .from('purchases')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId);
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       let dataQuery = supabase
         .from('purchases')
-        .select('id, purchase_no, supplier_name, date, total, paid_amount, balance, status')
+        .select('id, purchase_number, supplier_name, purchase_date, total, paid_amount, balance, status')
         .eq('organization_id', organizationId)
-        .order('date', { ascending: false })
+        .is('deleted_at', null)
+        .order('purchase_date', { ascending: false })
         .range(from, to);
 
       if (query.trim()) {
         const searchTerm = `%${query.trim()}%`;
         countQuery = countQuery.or(
-          `purchase_no.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
+          `purchase_number.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
         );
         dataQuery = dataQuery.or(
-          `purchase_no.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
+          `purchase_number.ilike.${searchTerm},supplier_name.ilike.${searchTerm}`
         );
       }
 
@@ -150,8 +160,8 @@ export default function PurchasesScreen() {
       setHasMore(items.length === PAGE_SIZE);
       setPage(pageNum);
       setError(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load purchases');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load purchases');
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -223,7 +233,7 @@ export default function PurchasesScreen() {
       <View style={styles.purchaseHeader}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.purchaseNo, { color: colors.text }]} numberOfLines={1}>
-            {item.purchase_no}
+            {item.purchase_number}
           </Text>
           <Text style={[styles.supplierName, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.supplier_name}
@@ -234,7 +244,7 @@ export default function PurchasesScreen() {
         </View>
       </View>
       <View style={[styles.purchaseFooter, { borderTopColor: colors.border }]}>
-        <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.date)}</Text>
+        <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.purchase_date)}</Text>
         <Text style={[styles.purchaseAmount, { color: colors.primary }]}>{formatCurrency(item.total)}</Text>
       </View>
     </TouchableOpacity>

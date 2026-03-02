@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import { AuthError, Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { startAutoSync, stopAutoSync } from '../services/sync';
 
 const CACHED_ORG_KEY = 'cached_organization_id';
 const CACHED_ORG_USER_KEY = 'cached_organization_user_id';
@@ -13,10 +14,10 @@ interface AuthContextType {
   user: User | null;
   organizationId: string | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, userData: any) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, userData: Record<string, unknown>) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -45,31 +46,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cachedUserStr) {
           try {
             const cachedUser = JSON.parse(cachedUserStr);
-            console.log('[AUTH] Restoring cached user:', cachedUser.email);
+            console.warn('[AUTH] Restoring cached user:', cachedUser.email);
             setUser(cachedUser);
-          } catch (e) {
+          } catch {
             console.warn('[AUTH] Failed to parse cached user');
           }
         }
-        
+
         if (cachedOrgId) {
-          console.log('[AUTH] Restoring cached organization:', cachedOrgId);
+          console.warn('[AUTH] Restoring cached organization:', cachedOrgId);
           setOrganizationId(cachedOrgId);
         }
-        
+
         if (cachedSessionStr) {
           try {
             const cachedSession = JSON.parse(cachedSessionStr);
-            console.log('[AUTH] Restoring cached session');
+            console.warn('[AUTH] Restoring cached session');
             setSession(cachedSession);
-          } catch (e) {
+          } catch {
             console.warn('[AUTH] Failed to parse cached session');
           }
         }
-        
-        // If we have cached data, we can stop loading immediately
+
         if (cachedUserStr && cachedOrgId) {
-          console.log('[AUTH] Using cached auth state - app ready');
+          console.warn('[AUTH] Using cached auth state - app ready');
           setLoading(false);
         }
       } catch (e) {
@@ -80,109 +80,113 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Start restoring cached data immediately
     restoreCachedState();
 
-    const resolveOrganizationId = async (userId: string, userMetadata?: any): Promise<string | null> => {
+    const resolveOrganizationId = async (
+      userId: string,
+      userMetadata?: Record<string, unknown>,
+    ): Promise<string | null> => {
       try {
-        // 0. CACHE CHECK: Return cached org if same user
-        const cachedUserId = await AsyncStorage.getItem(CACHED_ORG_USER_KEY);
-        const cachedOrgId = await AsyncStorage.getItem(CACHED_ORG_KEY);
-        
-        if (cachedUserId === userId && cachedOrgId) {
-          console.log('[AUTH] Organization from cache (same user):', cachedOrgId);
-          return cachedOrgId;
-        }
-
-        // 1. FAST PATH: Check user metadata first
-        if (userMetadata?.organization_id) {
-          console.log('[AUTH] Organization from metadata:', userMetadata.organization_id);
-          await AsyncStorage.setItem(CACHED_ORG_KEY, userMetadata.organization_id);
-          await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
-          return userMetadata.organization_id;
-        }
-
-        console.log('[AUTH] Resolving organization from DB for user:', userId);
-        
-        // 2. DB PATH: Query organization
-        try {
-          const { data, error } = await supabase
-            .from('app_user_organizations')
-            .select('organization_id')
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (!error && (data as any)?.organization_id) {
-            const orgId = (data as any).organization_id as string;
-            console.log('[AUTH] Organization from DB:', orgId);
-            await AsyncStorage.setItem(CACHED_ORG_KEY, orgId);
-            await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
-            return orgId;
-          }
-        } catch (e) {
-          console.warn('[AUTH] DB query failed:', e);
-          if (cachedOrgId) {
-            console.log('[AUTH] Using stale cache after DB failure');
-            return cachedOrgId;
-          }
-        }
-
-        // 3. FALLBACK: Try without is_active filter
-        try {
-          const { data: anyData, error: anyError } = await supabase
-            .from('app_user_organizations')
-            .select('organization_id')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (!anyError && (anyData as any)?.organization_id) {
-            const resolvedOrgId = (anyData as any).organization_id as string;
-            console.log('[AUTH] Organization from fallback query:', resolvedOrgId);
-            await AsyncStorage.setItem(CACHED_ORG_KEY, resolvedOrgId);
-            await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
-            return resolvedOrgId;
-          }
-        } catch (e) {
-          console.error('[AUTH] Fallback query failed:', e);
-        }
-
-        return null;
-      } catch (error) {
+        return await resolveOrgIdInner(userId, userMetadata);
+      } catch (error: unknown) {
         console.error('Failed to resolve organization id:', error);
         return null;
       }
     };
 
+    const resolveOrgIdInner = async (
+      userId: string,
+      userMetadata?: Record<string, unknown>,
+    ): Promise<string | null> => {
+      const cachedUserId = await AsyncStorage.getItem(CACHED_ORG_USER_KEY);
+      const cachedOrgId = await AsyncStorage.getItem(CACHED_ORG_KEY);
+
+      if (cachedUserId === userId && cachedOrgId) {
+        console.warn('[AUTH] Organization from cache (same user):', cachedOrgId);
+        return cachedOrgId;
+      }
+
+      if (userMetadata?.organization_id) {
+        const metaOrgId = String(userMetadata.organization_id);
+        console.warn('[AUTH] Organization from metadata:', metaOrgId);
+        await AsyncStorage.setItem(CACHED_ORG_KEY, metaOrgId);
+        await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
+        return metaOrgId;
+      }
+
+      console.warn('[AUTH] Resolving organization from DB for user:', userId);
+
+      const dbResult = await queryOrgFromDb(userId, true, cachedOrgId);
+      if (dbResult) return dbResult;
+
+      const fallbackResult = await queryOrgFromDb(userId, false, null);
+      return fallbackResult;
+    };
+
+    type OrgRow = { organization_id: string };
+
+    const queryOrgFromDb = async (
+      userId: string,
+      filterActive: boolean,
+      fallbackCacheValue: string | null,
+    ): Promise<string | null> => {
+      try {
+        const filters: Record<string, string | boolean> = { user_id: userId };
+        if (filterActive) filters.is_active = true;
+
+        const { data, error } = await supabase
+          .from('app_user_organizations')
+          .select('organization_id')
+          .match(filters)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const row = data as OrgRow | null;
+        if (!error && row?.organization_id) {
+          console.warn('[AUTH] Organization from DB:', row.organization_id);
+          await AsyncStorage.setItem(CACHED_ORG_KEY, row.organization_id);
+          await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
+          return row.organization_id;
+        }
+      } catch (dbErr: unknown) {
+        console.warn('[AUTH] DB query failed:', dbErr);
+        if (fallbackCacheValue) {
+          console.warn('[AUTH] Using stale cache after DB failure');
+          return fallbackCacheValue;
+        }
+      }
+      return null;
+    };
+
     // Background refresh of session - update cache if successful
     const refreshSessionInBackground = async () => {
       try {
-        console.log('[AUTH] Background session refresh starting...');
-        const { data, error } = await supabase.auth.getSession();
-        
+        console.warn('[AUTH] Background session refresh starting...');
+        const { data: sessionData, error } = await supabase.auth.getSession();
+
         if (!isMounted) return;
-        
+
         if (error) {
           console.warn('[AUTH] Background session refresh error:', error.message);
           return;
         }
-        
-        if (data.session) {
-          console.log('[AUTH] Background refresh got valid session');
-          setSession(data.session);
-          setUser(data.session.user);
-          
-          // Update cache
-          await AsyncStorage.setItem(CACHED_SESSION_KEY, JSON.stringify(data.session));
-          await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(data.session.user));
-          
-          const orgId = await resolveOrganizationId(data.session.user.id, data.session.user.user_metadata);
+
+        if (sessionData.session) {
+          console.warn('[AUTH] Background refresh got valid session');
+          setSession(sessionData.session);
+          setUser(sessionData.session.user);
+
+          await AsyncStorage.setItem(CACHED_SESSION_KEY, JSON.stringify(sessionData.session));
+          await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(sessionData.session.user));
+
+          const orgId = await resolveOrganizationId(
+            sessionData.session.user.id,
+            sessionData.session.user.user_metadata as Record<string, unknown>,
+          );
           if (isMounted && orgId) {
             setOrganizationId(orgId);
           }
         } else {
-          console.log('[AUTH] No valid session from background refresh');
+          console.warn('[AUTH] No valid session from background refresh');
           // Only clear state if we didn't have cached data
           const hadCachedUser = await AsyncStorage.getItem(CACHED_USER_KEY);
           if (!hadCachedUser) {
@@ -209,29 +213,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!isMounted) return;
         
-        console.log('[AUTH] Auth state changed:', event);
-        
+        console.warn('[AUTH] Auth state changed:', event);
+
         if (session) {
           setSession(session);
           setUser(session.user);
-          
-          // Cache the session and user immediately (non-blocking)
+
           AsyncStorage.setItem(CACHED_SESSION_KEY, JSON.stringify(session));
           AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(session.user));
-          
-          // Set loading false IMMEDIATELY when we have a session
-          // Don't wait for org resolution - we'll update it when ready
+
           setLoading(false);
-          
-          // Resolve org in background (non-blocking)
-          resolveOrganizationId(session.user.id, session.user.user_metadata)
+
+          resolveOrganizationId(
+            session.user.id,
+            session.user.user_metadata as Record<string, unknown>,
+          )
             .then((orgId) => {
               if (isMounted && orgId) {
-                console.log('[AUTH] Organization resolved (async):', orgId);
+                console.warn('[AUTH] Organization resolved (async):', orgId);
                 setOrganizationId(orgId);
               }
             })
-            .catch((e) => console.error('[AUTH] Org resolution failed:', e));
+            .catch((e: unknown) => console.error('[AUTH] Org resolution failed:', e));
         } else if (event === 'SIGNED_OUT') {
           setSession(null);
           setUser(null);
@@ -254,9 +257,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (organizationId) {
+      startAutoSync(organizationId);
+    }
+    return () => {
+      stopAutoSync();
+    };
+  }, [organizationId]);
+
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -264,14 +276,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       return { error: null };
-    } catch (error: any) {
-      return { error };
+    } catch (error: unknown) {
+      return { error: error as AuthError };
     }
   };
 
-  const signUp = async (email: string, password: string, userData: any) => {
+  const signUp = async (email: string, password: string, userData: Record<string, unknown>) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -282,8 +294,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       return { error: null };
-    } catch (error: any) {
-      return { error };
+    } catch (error: unknown) {
+      return { error: error as AuthError };
     }
   };
 
@@ -313,8 +325,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       return { error: null };
-    } catch (error: any) {
-      return { error };
+    } catch (error: unknown) {
+      return { error: error as AuthError };
     }
   };
 

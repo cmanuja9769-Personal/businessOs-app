@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,18 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MoreStackNavigationProp } from '@navigation/types';
+import { MoreStackNavigationProp, MoreStackParamList } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useToast } from '@contexts/ToastContext';
 import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
+import { lightTap, warningFeedback } from '@lib/haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 10;
@@ -42,6 +45,7 @@ export default function MoreScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const { colors, shadows, isDark } = useTheme();
   const { signOut, user, organizationId } = useAuth();
+  const toast = useToast();
   const [quickStats, setQuickStats] = useState<QuickStat[]>([]);
 
   useEffect(() => {
@@ -58,21 +62,24 @@ export default function MoreScreen() {
             .from('invoices')
             .select('total')
             .eq('organization_id', organizationId)
+            .is('deleted_at', null)
             .gte('created_at', today.toISOString()),
           supabase
             .from('items')
             .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organizationId),
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null),
           supabase
             .from('customers')
             .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organizationId),
+            .eq('organization_id', organizationId)
+            .is('deleted_at', null),
         ]);
 
         if (cancelled) return;
 
         const todaysSale = (invoicesResult.data || []).reduce(
-          (sum: number, inv: any) => sum + (inv.total || 0),
+          (sum: number, inv: { total?: number }) => sum + (inv.total || 0),
           0
         );
 
@@ -126,10 +133,10 @@ export default function MoreScreen() {
     { icon: 'settings-outline', title: 'Settings', screen: 'Settings', gradient: ['#475569', '#94A3B8'] },
   ];
 
-  const renderActionCard = (item: ActionCard, index: number) => (
+  const renderActionCard = (item: ActionCard) => (
     <TouchableOpacity
       key={item.title}
-      onPress={() => navigation.navigate(item.screen as any)}
+      onPress={() => { lightTap(); (navigation as { navigate: (screen: string) => void }).navigate(item.screen); }}
       activeOpacity={0.7}
       style={styles.actionCardWrapper}
     >
@@ -196,10 +203,33 @@ export default function MoreScreen() {
         {title}
       </Text>
       <View style={styles.grid}>
-        {cards.map((card, index) => renderActionCard(card, index))}
+        {cards.map((card) => renderActionCard(card))}
       </View>
     </View>
   );
+
+  const handleSignOut = useCallback(() => {
+    warningFeedback();
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              toast.success('Signed out successfully');
+            } catch {
+              toast.error('Failed to sign out');
+            }
+          },
+        },
+      ]
+    );
+  }, [signOut, toast]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -223,7 +253,7 @@ export default function MoreScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => navigation.navigate('Profile' as any)}
+              onPress={() => navigation.navigate('Profile')}
               activeOpacity={0.7}
               style={[styles.avatarButton, { backgroundColor: colors.primaryLight }]}
             >
@@ -240,7 +270,7 @@ export default function MoreScreen() {
 
         <View style={styles.logoutSection}>
           <TouchableOpacity
-            onPress={signOut}
+            onPress={handleSignOut}
             activeOpacity={0.7}
             style={[
               styles.logoutButton,

@@ -163,6 +163,7 @@ export function Sidebar() {
 
       {/* Sidebar */}
       <aside
+        aria-label="Main navigation"
         className={cn(
           "fixed top-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-transform md:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full",
@@ -188,8 +189,9 @@ export function Sidebar() {
                   key={item.name}
                   href={item.href}
                   onClick={() => setIsOpen(false)}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
@@ -236,8 +238,9 @@ export function Sidebar() {
                       key={item.name}
                       href={item.href}
                       onClick={() => setIsOpen(false)}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+                        "flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors min-h-[2.75rem]",
                         isActive
                           ? "bg-primary/10 text-primary font-medium"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -279,8 +282,9 @@ export function Sidebar() {
                 <Link
                   href="/reports"
                   onClick={() => setIsOpen(false)}
+                  aria-current={pathname === "/reports" ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
                     pathname === "/reports"
                       ? "bg-primary/10 text-primary"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -302,7 +306,7 @@ export function Sidebar() {
                       <button
                         suppressHydrationWarning
                         className={cn(
-                          "w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                          "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
                           group.items.some(i => pathname === i.href)
                             ? "bg-primary/5 text-primary"
                             : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
@@ -325,8 +329,9 @@ export function Sidebar() {
                           key={item.href}
                           href={item.href}
                           onClick={() => setIsOpen(false)}
+                          aria-current={pathname === item.href ? "page" : undefined}
                           className={cn(
-                            "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors",
+                            "flex items-center gap-2 px-3 py-2.5 rounded-md text-sm transition-colors min-h-[2.75rem]",
                             pathname === item.href
                               ? "bg-primary/10 text-primary font-medium"
                               : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
@@ -353,8 +358,9 @@ export function Sidebar() {
                   key={item.name}
                   href={item.href}
                   onClick={() => setIsOpen(false)}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[2.75rem]",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",

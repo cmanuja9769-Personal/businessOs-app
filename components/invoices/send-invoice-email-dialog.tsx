@@ -55,7 +55,7 @@ export function SendInvoiceEmailDialog({ invoice }: SendInvoiceEmailDialogProps)
     setLoading(true)
 
     try {
-      const result = await sendInvoiceEmail(invoice.id, email, "default-org")
+      const result = await sendInvoiceEmail(invoice.id, email)
 
       if (result.success) {
         toast({

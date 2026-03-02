@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import type { IItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,11 +13,11 @@ import { StockBadge } from "@/components/items/stock-badge"
 import { getStockStatus } from "@/lib/stock-utils"
 
 interface ItemMobileCardProps {
-  item: IItem
-  godowns: Array<{ id: string; name: string }>
+  readonly item: IItem
+  readonly godowns: Array<{ id: string; name: string }>
 }
 
-export function ItemMobileCard({ item, godowns }: ItemMobileCardProps) {
+export const ItemMobileCard = memo(function ItemMobileCard({ item, godowns }: ItemMobileCardProps) {
   const stockStatus = getStockStatus(item)
 
   return (
@@ -94,4 +95,4 @@ export function ItemMobileCard({ item, godowns }: ItemMobileCardProps) {
       </div>
     </div>
   )
-}
+})

@@ -6,7 +6,7 @@ interface UseFormOptions<T> {
   validate?: (values: T) => Record<string, string>;
 }
 
-export function useForm<T extends Record<string, any>>({
+export function useForm<T extends Record<string, unknown>>({
   initialValues,
   onSubmit,
   validate,
@@ -15,7 +15,7 @@ export function useForm<T extends Record<string, any>>({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (field: keyof T, value: any) => {
+  const handleChange = (field: keyof T, value: T[keyof T]) => {
     setValues((prev) => ({ ...prev, [field]: value }));
     
     // Clear error for this field

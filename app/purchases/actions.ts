@@ -1,16 +1,24 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
 import type { IPurchase } from "@/types"
 import { purchaseSchema } from "@/lib/schemas"
+import { authorize, orgScope } from "@/lib/authorize"
+import { calculatePurchaseItemAmount, calculatePurchaseTotals } from "@/lib/invoice-calculations"
+import { createJournalEntryForPurchase } from "@/lib/accounting/auto-journal"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
+import { demoPurchases } from "@/app/demo/data"
 
 export async function getPurchases(): Promise<IPurchase[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("purchases")
-    .select("*, purchase_items(*)")
-    .order("created_at", { ascending: false })
+  if (await isDemoMode()) return demoPurchases
+  try {
+    const { supabase, organizationId } = await authorize("purchases", "read")
+    const { data, error } = await supabase
+      .from("purchases")
+      .select("*, purchase_items(*)")
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
 
   if (error) {
     console.error("[v0] Error fetching purchases:", error)
@@ -54,11 +62,16 @@ export async function getPurchases(): Promise<IPurchase[]> {
       updatedAt: new Date(purchase.updated_at),
     })) || []
   )
+  } catch {
+    return []
+  }
 }
 
 export async function getPurchase(id: string): Promise<IPurchase | undefined> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.from("purchases").select("*, purchase_items(*)").eq("id", id).single()
+  if (await isDemoMode()) return demoPurchases.find(p => p.id === id)
+  try {
+    const { supabase, organizationId } = await authorize("purchases", "read")
+    const { data, error } = await supabase.from("purchases").select("*, purchase_items(*)").eq("id", id).or(orgScope(organizationId)).single()
 
   if (error || !data) {
     console.error("[v0] Error fetching purchase:", error)
@@ -100,138 +113,213 @@ export async function getPurchase(id: string): Promise<IPurchase | undefined> {
     createdAt: new Date(data.created_at),
     updatedAt: new Date(data.updated_at),
   }
+  } catch {
+    return undefined
+  }
 }
 
 export async function createPurchase(data: unknown) {
-  const validated = purchaseSchema.parse(data)
+  if (await isDemoMode()) throwDemoMutationError()
+  try {
+    const validated = purchaseSchema.parse(data)
+    const { supabase, organizationId, userId } = await authorize("purchases", "create")
 
-  const supabase = await createClient()
+    const totals = calculatePurchaseTotals(
+      validated.items.map((item) => ({
+        quantity: item.quantity,
+        rate: item.rate,
+        discount: item.discount || 0,
+        discountType: item.discountType || "percentage",
+        taxRate: item.taxRate,
+      })),
+      validated.gstEnabled,
+    )
+    const serverTotal = Math.round(totals.total * 100) / 100
+    const serverBalance = Math.round((serverTotal - (validated.paidAmount || 0)) * 100) / 100
 
-  // Create purchase
-  const { data: newPurchase, error: purchaseError } = await supabase
-    .from("purchases")
-    .insert({
-      purchase_number: validated.purchaseNo,
-      supplier_id: validated.supplierId || null,
-      supplier_name: validated.supplierName,
-      supplier_phone: validated.supplierPhone || null,
-      supplier_address: validated.supplierAddress || null,
-      supplier_gst: validated.supplierGst || null,
-      purchase_date: validated.date.toISOString().split("T")[0],
-      subtotal: validated.subtotal,
-      discount: validated.discount,
-      discount_type: validated.discountType,
-      cgst: validated.cgst,
-      sgst: validated.sgst,
-      igst: validated.igst,
-      total: validated.total,
-      paid_amount: validated.paidAmount || 0,
-      balance: validated.balance || validated.total,
-      status: validated.status,
-      gst_enabled: validated.gstEnabled,
-      notes: validated.notes || null,
-    })
-    .select()
-    .single()
+    const { data: newPurchase, error: purchaseError } = await supabase
+      .from("purchases")
+      .insert({
+        organization_id: organizationId,
+        purchase_number: validated.purchaseNo,
+        supplier_id: validated.supplierId || null,
+        supplier_name: validated.supplierName,
+        supplier_phone: validated.supplierPhone || null,
+        supplier_address: validated.supplierAddress || null,
+        supplier_gst: validated.supplierGst || null,
+        purchase_date: validated.date.toISOString().split("T")[0],
+        subtotal: Math.round(totals.subtotal * 100) / 100,
+        discount: validated.discount,
+        discount_type: validated.discountType,
+        cgst: Math.round(totals.cgst * 100) / 100,
+        sgst: Math.round(totals.sgst * 100) / 100,
+        igst: Math.round(totals.igst * 100) / 100,
+        total: serverTotal,
+        paid_amount: validated.paidAmount || 0,
+        balance: serverBalance,
+        status: validated.status,
+        gst_enabled: validated.gstEnabled,
+        notes: validated.notes || null,
+      })
+      .select()
+      .single()
 
-  if (purchaseError || !newPurchase) {
-    console.error("[v0] Error creating purchase:", purchaseError)
-    return { success: false, error: purchaseError?.message }
+    if (purchaseError || !newPurchase) {
+      console.error("[v0] Error creating purchase:", purchaseError)
+      return { success: false, error: purchaseError?.message }
+    }
+
+    const purchaseItems = validated.items.map((item) => ({
+      purchase_id: newPurchase.id,
+      item_id: item.itemId || null,
+      item_name: item.name,
+      hsn: item.hsn || null,
+      quantity: item.quantity,
+      rate: item.rate,
+      discount: item.discount || 0,
+      discount_type: item.discountType,
+      tax_rate: item.taxRate,
+      amount: Math.round(
+        calculatePurchaseItemAmount(item.quantity, item.rate, item.discount || 0, item.discountType || "percentage", item.taxRate, validated.gstEnabled) * 100
+      ) / 100,
+    }))
+
+    const { error: itemsError } = await supabase.from("purchase_items").insert(purchaseItems)
+
+    if (itemsError) {
+      await supabase.from("purchases").delete().eq("id", newPurchase.id)
+      console.error("[v0] Error creating purchase items:", itemsError)
+      return { success: false, error: itemsError.message }
+    }
+
+    try {
+      await createJournalEntryForPurchase({
+        organizationId,
+        userId,
+        purchaseId: newPurchase.id,
+        purchaseNo: validated.purchaseNo,
+        supplierName: validated.supplierName,
+        subtotal: Math.round(totals.subtotal * 100) / 100,
+        cgst: Math.round(totals.cgst * 100) / 100,
+        sgst: Math.round(totals.sgst * 100) / 100,
+        igst: Math.round(totals.igst * 100) / 100,
+        total: serverTotal,
+      })
+    } catch (journalError) {
+      console.error("[auto-journal] Failed to create journal entry for purchase:", journalError)
+    }
+
+    revalidatePath("/purchases")
+    return { success: true, purchase: newPurchase }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to create purchase" }
   }
-
-  // Create purchase items
-  const purchaseItems = validated.items.map((item) => ({
-    purchase_id: newPurchase.id,
-    item_id: item.itemId || null,
-    item_name: item.name,
-    hsn: item.hsn || null,
-    quantity: item.quantity,
-    rate: item.rate,
-    discount: item.discount || 0,
-    discount_type: item.discountType,
-    tax_rate: item.taxRate,
-    amount: item.amount,
-  }))
-
-  const { error: itemsError } = await supabase.from("purchase_items").insert(purchaseItems)
-
-  if (itemsError) {
-    console.error("[v0] Error creating purchase items:", itemsError)
-    return { success: false, error: itemsError.message }
-  }
-
-  revalidatePath("/purchases")
-  return { success: true, purchase: newPurchase }
 }
 
 export async function updatePurchase(id: string, data: unknown) {
-  const validated = purchaseSchema.parse(data)
+  if (await isDemoMode()) throwDemoMutationError()
+  try {
+    const validated = purchaseSchema.parse(data)
+    const { supabase, organizationId } = await authorize("purchases", "update")
 
-  const supabase = await createClient()
+    const totals = calculatePurchaseTotals(
+      validated.items.map((item) => ({
+        quantity: item.quantity,
+        rate: item.rate,
+        discount: item.discount || 0,
+        discountType: item.discountType || "percentage",
+        taxRate: item.taxRate,
+      })),
+      validated.gstEnabled,
+    )
+    const serverTotal = Math.round(totals.total * 100) / 100
+    const serverBalance = Math.round((serverTotal - (validated.paidAmount || 0)) * 100) / 100
 
-  // Update purchase
-  const { error: purchaseError } = await supabase
-    .from("purchases")
-    .update({
-      purchase_number: validated.purchaseNo,
-      supplier_id: validated.supplierId || null,
-      supplier_name: validated.supplierName,
-      supplier_phone: validated.supplierPhone || null,
-      supplier_address: validated.supplierAddress || null,
-      supplier_gst: validated.supplierGst || null,
-      purchase_date: validated.date.toISOString().split("T")[0],
-      subtotal: validated.subtotal,
-      discount: validated.discount,
-      discount_type: validated.discountType,
-      cgst: validated.cgst,
-      sgst: validated.sgst,
-      igst: validated.igst,
-      total: validated.total,
-      paid_amount: validated.paidAmount || 0,
-      balance: validated.balance || validated.total,
-      status: validated.status,
-      gst_enabled: validated.gstEnabled,
-      notes: validated.notes || null,
-    })
-    .eq("id", id)
+    const { error: purchaseError } = await supabase
+      .from("purchases")
+      .update({
+        purchase_number: validated.purchaseNo,
+        supplier_id: validated.supplierId || null,
+        supplier_name: validated.supplierName,
+        supplier_phone: validated.supplierPhone || null,
+        supplier_address: validated.supplierAddress || null,
+        supplier_gst: validated.supplierGst || null,
+        purchase_date: validated.date.toISOString().split("T")[0],
+        subtotal: Math.round(totals.subtotal * 100) / 100,
+        discount: validated.discount,
+        discount_type: validated.discountType,
+        cgst: Math.round(totals.cgst * 100) / 100,
+        sgst: Math.round(totals.sgst * 100) / 100,
+        igst: Math.round(totals.igst * 100) / 100,
+        total: serverTotal,
+        paid_amount: validated.paidAmount || 0,
+        balance: serverBalance,
+        status: validated.status,
+        gst_enabled: validated.gstEnabled,
+        notes: validated.notes || null,
+      })
+      .eq("id", id)
+      .or(orgScope(organizationId))
 
-  if (purchaseError) {
-    console.error("[v0] Error updating purchase:", purchaseError)
-    return { success: false, error: purchaseError.message }
+    if (purchaseError) {
+      console.error("[v0] Error updating purchase:", purchaseError)
+      return { success: false, error: purchaseError.message }
+    }
+
+    const { data: existingItems } = await supabase
+      .from("purchase_items")
+      .select("*")
+      .eq("purchase_id", id)
+
+    await supabase.from("purchase_items").delete().eq("purchase_id", id)
+
+    const purchaseItems = validated.items.map((item) => ({
+      purchase_id: id,
+      item_id: item.itemId || null,
+      item_name: item.name,
+      hsn: item.hsn || null,
+      quantity: item.quantity,
+      rate: item.rate,
+      discount: item.discount || 0,
+      discount_type: item.discountType,
+      tax_rate: item.taxRate,
+      amount: Math.round(
+        calculatePurchaseItemAmount(item.quantity, item.rate, item.discount || 0, item.discountType || "percentage", item.taxRate, validated.gstEnabled) * 100
+      ) / 100,
+    }))
+
+    const { error: itemsError } = await supabase.from("purchase_items").insert(purchaseItems)
+
+    if (itemsError) {
+      console.error("[v0] Error updating purchase items:", itemsError)
+      if (existingItems && existingItems.length > 0) {
+        const restoreRows = existingItems.map((row: Record<string, unknown>) => {
+          const filtered = Object.fromEntries(Object.entries(row).filter(([k]) => k !== "id"))
+          return { ...filtered, purchase_id: id }
+        })
+        await supabase.from("purchase_items").insert(restoreRows)
+      }
+      return { success: false, error: itemsError.message }
+    }
+
+    revalidatePath("/purchases")
+    revalidatePath(`/purchases/${id}`)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to update purchase" }
   }
-
-  // Delete old purchase items
-  await supabase.from("purchase_items").delete().eq("purchase_id", id)
-
-  // Create new purchase items
-  const purchaseItems = validated.items.map((item) => ({
-    purchase_id: id,
-    item_id: item.itemId || null,
-    item_name: item.name,
-    hsn: item.hsn || null,
-    quantity: item.quantity,
-    rate: item.rate,
-    discount: item.discount || 0,
-    discount_type: item.discountType,
-    tax_rate: item.taxRate,
-    amount: item.amount,
-  }))
-
-  const { error: itemsError } = await supabase.from("purchase_items").insert(purchaseItems)
-
-  if (itemsError) {
-    console.error("[v0] Error updating purchase items:", itemsError)
-    return { success: false, error: itemsError.message }
-  }
-
-  revalidatePath("/purchases")
-  revalidatePath(`/purchases/${id}`)
-  return { success: true }
 }
 
 export async function deletePurchase(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from("purchases").delete().eq("id", id)
+  if (await isDemoMode()) throwDemoMutationError()
+  try {
+    const { supabase, organizationId } = await authorize("purchases", "delete")
+    const { error } = await supabase
+      .from("purchases")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .or(orgScope(organizationId))
 
   if (error) {
     console.error("[v0] Error deleting purchase:", error)
@@ -240,19 +328,25 @@ export async function deletePurchase(id: string) {
 
   revalidatePath("/purchases")
   return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to delete purchase" }
+  }
 }
 
 export async function bulkDeletePurchases(ids: string[]) {
+  if (await isDemoMode()) throwDemoMutationError()
   if (!ids || ids.length === 0) {
     return { success: false, error: "No purchases selected" }
   }
 
-  const supabase = await createClient()
-  const { error, count } = await supabase
-    .from("purchases")
-    .delete()
-    .in("id", ids)
-    .select()
+  try {
+    const { supabase, organizationId } = await authorize("purchases", "delete")
+    const { error, count } = await supabase
+      .from("purchases")
+      .delete()
+      .in("id", ids)
+      .or(orgScope(organizationId))
+      .select()
 
   if (error) {
     console.error("[v0] Error bulk deleting purchases:", error)
@@ -265,14 +359,20 @@ export async function bulkDeletePurchases(ids: string[]) {
     deleted: count || ids.length,
     message: `Successfully deleted ${count || ids.length} purchase(s)` 
   }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to delete purchases" }
+  }
 }
 
 export async function deleteAllPurchases() {
-  const supabase = await createClient()
+  if (await isDemoMode()) throwDemoMutationError()
+  try {
+    const { supabase, organizationId } = await authorize("purchases", "delete")
   
-  const { count } = await supabase
-    .from("purchases")
-    .select("*", { count: "exact", head: true })
+    const { count } = await supabase
+      .from("purchases")
+      .select("*", { count: "exact", head: true })
+      .or(orgScope(organizationId))
   
   if (!count || count === 0) {
     return { success: false, error: "No purchases to delete" }
@@ -281,6 +381,7 @@ export async function deleteAllPurchases() {
   const { error } = await supabase
     .from("purchases")
     .delete()
+    .or(orgScope(organizationId))
     .neq("id", "00000000-0000-0000-0000-000000000000")
 
   if (error) {
@@ -294,15 +395,32 @@ export async function deleteAllPurchases() {
     deleted: count,
     message: `Successfully deleted all ${count} purchase(s)` 
   }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Failed to delete purchases" }
+  }
 }
 
 export async function generatePurchaseNumber(): Promise<string> {
-  const supabase = await createClient()
+  if (await isDemoMode()) return "DEMO-PUR-001"
+  const { supabase, organizationId } = await authorize("purchases", "read")
   const year = new Date().getFullYear()
-  const { count } = await supabase
-    .from("purchases")
-    .select("*", { count: "exact", head: true })
-    .like("purchase_number", `PO/${year}/%`)
+  const likePattern = `PO/${year}/%`
 
-  return `PO/${year}/${((count || 0) + 1).toString().padStart(4, "0")}`
+  const { data } = await supabase
+    .from("purchases")
+    .select("purchase_number")
+    .or(orgScope(organizationId))
+    .like("purchase_number", likePattern)
+    .order("purchase_number", { ascending: false })
+    .limit(1)
+
+  let nextNum = 1
+  if (data && data.length > 0) {
+    const lastNumber = data[0].purchase_number as string
+    const parts = lastNumber.split("/")
+    const parsed = parseInt(parts[parts.length - 1], 10)
+    if (!isNaN(parsed)) nextNum = parsed + 1
+  }
+
+  return `PO/${year}/${nextNum.toString().padStart(4, "0")}`
 }

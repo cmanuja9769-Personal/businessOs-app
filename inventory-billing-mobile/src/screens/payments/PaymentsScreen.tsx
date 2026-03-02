@@ -22,15 +22,20 @@ import { NetworkService } from '@services/network';
 
 interface Payment {
   id: string;
-  invoice_id: string;
+  invoice_id: string | null;
+  purchase_id: string | null;
   amount: number;
   payment_date: string;
-  payment_method: string;
-  reference_number: string | null;
+  payment_mode: string;
+  reference_no: string | null;
   notes: string | null;
   invoices?: {
     invoice_number: string;
     customer_name: string;
+  } | null;
+  purchases?: {
+    purchase_number: string;
+    supplier_name: string;
   } | null;
 }
 
@@ -86,23 +91,25 @@ export default function PaymentsScreen() {
 
       let countQuery = supabase
         .from('payments')
-        .select('id, invoices!inner(organization_id)', { count: 'exact', head: true })
-        .eq('invoices.organization_id', organizationId);
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
 
       let dataQuery = supabase
         .from('payments')
-        .select('id, invoice_id, amount, payment_date, payment_method, reference_number, notes, invoices!inner(invoice_number, customer_name, organization_id)')
-        .eq('invoices.organization_id', organizationId)
+        .select('id, invoice_id, purchase_id, amount, payment_date, payment_mode, reference_no, notes, invoices(invoice_number, customer_name), purchases(purchase_number, supplier_name)')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
         .order('payment_date', { ascending: false })
         .range(from, to);
 
       if (query.trim()) {
         const searchTerm = `%${query.trim()}%`;
         countQuery = countQuery.or(
-          `reference_number.ilike.${searchTerm},payment_method.ilike.${searchTerm}`
+          `reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`
         );
         dataQuery = dataQuery.or(
-          `reference_number.ilike.${searchTerm},payment_method.ilike.${searchTerm}`
+          `reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`
         );
       }
 
@@ -114,9 +121,10 @@ export default function PaymentsScreen() {
       if (currentQueryRef.current !== query) return;
       if (dataResult.error) throw dataResult.error;
 
-      const items = (dataResult.data || []).map((row: any) => ({
+      const items = (dataResult.data || []).map((row: Record<string, unknown>) => ({
         ...row,
-        invoices: Array.isArray(row.invoices) ? row.invoices[0] : row.invoices,
+        invoices: Array.isArray(row.invoices) ? (row.invoices as unknown[])[0] : row.invoices,
+        purchases: Array.isArray(row.purchases) ? (row.purchases as unknown[])[0] : row.purchases,
       })) as Payment[];
 
       if (isFirstPage) {
@@ -132,8 +140,8 @@ export default function PaymentsScreen() {
       setHasMore(items.length === PAGE_SIZE);
       setPage(pageNum);
       setError(null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load payments');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load payments');
     } finally {
       setLoading(false);
       setIsLoadingMore(false);
@@ -207,7 +215,7 @@ export default function PaymentsScreen() {
           </Text>
         </View>
         <Text style={styles.methodIcon}>
-          {getPaymentMethodIcon(item.payment_method)}
+          {getPaymentMethodIcon(item.payment_mode)}
         </Text>
       </View>
 
@@ -224,15 +232,28 @@ export default function PaymentsScreen() {
         </View>
       )}
 
-      {item.reference_number && (
+      {item.purchases && (
+        <View style={styles.paymentDetails}>
+          <Text style={[styles.invoiceNumber, { color: colors.textSecondary }]} numberOfLines={1}>
+            Purchase: {item.purchases.purchase_number}
+          </Text>
+          {item.purchases.supplier_name && (
+            <Text style={[styles.customerName, { color: colors.textSecondary }]} numberOfLines={1}>
+              Supplier: {item.purchases.supplier_name}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {item.reference_no && (
         <Text style={[styles.reference, { color: colors.textSecondary }]} numberOfLines={1}>
-          Ref: {item.reference_number}
+          Ref: {item.reference_no}
         </Text>
       )}
 
       <View style={[styles.methodBadge, { backgroundColor: colors.primary + '20' }]}>
         <Text style={[styles.methodText, { color: colors.primary }]}>
-          {(item.payment_method || '').replace('_', ' ').toUpperCase()}
+          {(item.payment_mode || '').replace('_', ' ').toUpperCase()}
         </Text>
       </View>
     </Card>

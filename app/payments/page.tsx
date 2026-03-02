@@ -103,14 +103,14 @@ export default async function PaymentsPage() {
                 <Table containerClassName="flex-1 min-h-0 max-h-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead resizable className="w-[100px] min-w-[80px]">Invoice</TableHead>
-                      <TableHead resizable className="w-[180px] min-w-[120px]">Customer</TableHead>
-                      <TableHead resizable className="w-[100px] min-w-[80px]">Date</TableHead>
-                      <TableHead resizable className="w-[90px] min-w-[70px]">Total</TableHead>
-                      <TableHead resizable className="w-[80px] min-w-[60px]">Paid</TableHead>
-                      <TableHead resizable className="w-[80px] min-w-[60px]">Balance</TableHead>
-                      <TableHead resizable className="w-[70px] min-w-[60px]">Status</TableHead>
-                      <TableHead className="w-[140px] min-w-[120px] text-right">Action</TableHead>
+                      <TableHead resizable className="w-[6.25rem] min-w-[5rem]">Invoice</TableHead>
+                      <TableHead resizable className="w-[11.25rem] min-w-[7.5rem]">Customer</TableHead>
+                      <TableHead resizable className="w-[6.25rem] min-w-[5rem]">Date</TableHead>
+                      <TableHead resizable className="w-[5.625rem] min-w-[4.375rem]">Total</TableHead>
+                      <TableHead resizable className="w-[5rem] min-w-[3.75rem]">Paid</TableHead>
+                      <TableHead resizable className="w-[5rem] min-w-[3.75rem]">Balance</TableHead>
+                      <TableHead resizable className="w-[4.375rem] min-w-[3.75rem]">Status</TableHead>
+                      <TableHead className="w-[8.75rem] min-w-[7.5rem] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -167,14 +167,14 @@ export default async function PaymentsPage() {
                 <Table containerClassName="flex-1 min-h-0 max-h-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead resizable className="w-[100px] min-w-[80px]">PO Number</TableHead>
-                      <TableHead resizable className="w-[180px] min-w-[120px]">Supplier</TableHead>
-                      <TableHead resizable className="w-[100px] min-w-[80px]">Date</TableHead>
-                      <TableHead resizable className="w-[90px] min-w-[70px]">Total</TableHead>
-                      <TableHead resizable className="w-[80px] min-w-[60px]">Paid</TableHead>
-                      <TableHead resizable className="w-[80px] min-w-[60px]">Balance</TableHead>
-                      <TableHead resizable className="w-[70px] min-w-[60px]">Status</TableHead>
-                      <TableHead className="w-[140px] min-w-[120px] text-right">Action</TableHead>
+                      <TableHead resizable className="w-[6.25rem] min-w-[5rem]">PO Number</TableHead>
+                      <TableHead resizable className="w-[11.25rem] min-w-[7.5rem]">Supplier</TableHead>
+                      <TableHead resizable className="w-[6.25rem] min-w-[5rem]">Date</TableHead>
+                      <TableHead resizable className="w-[5.625rem] min-w-[4.375rem]">Total</TableHead>
+                      <TableHead resizable className="w-[5rem] min-w-[3.75rem]">Paid</TableHead>
+                      <TableHead resizable className="w-[5rem] min-w-[3.75rem]">Balance</TableHead>
+                      <TableHead resizable className="w-[4.375rem] min-w-[3.75rem]">Status</TableHead>
+                      <TableHead className="w-[8.75rem] min-w-[7.5rem] text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

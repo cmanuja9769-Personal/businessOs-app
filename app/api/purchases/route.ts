@@ -1,27 +1,36 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { authorize, orgScope } from "@/lib/authorize"
+
+const stateCodeMap: Record<string, string> = {
+  "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+  "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan",
+  "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+  "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura",
+  "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand",
+  "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+  "26": "Dadra & Nagar Haveli", "27": "Maharashtra", "29": "Karnataka",
+  "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
+  "34": "Puducherry", "35": "Andaman & Nicobar", "36": "Telangana",
+  "37": "Andhra Pradesh", "38": "Ladakh",
+}
+
+function deriveStateFromGstin(gstin: string): { placeOfSupply: string; stateCode: string } | null {
+  if (!gstin || gstin.length < 2) return null
+  const code = gstin.substring(0, 2)
+  const stateName = stateCodeMap[code]
+  if (!stateName) return null
+  return { placeOfSupply: `${code}-${stateName}`, stateCode: code }
+}
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    
-    // Get user's organization
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: userOrg } = await supabase
-      .from("app_user_organizations")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .single()
+    const { supabase, organizationId } = await authorize("purchases", "read")
 
     const { data, error } = await supabase
       .from("purchases")
       .select("*, purchase_items(*)")
-      .eq("organization_id", userOrg?.organization_id)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -29,16 +38,30 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Transform to frontend format
-    const purchases = data?.map((purchase) => ({
+    const purchases = data?.map((purchase) => {
+      const gst = purchase.supplier_gst || ""
+      const cgst = Number(purchase.cgst || 0)
+      const sgst = Number(purchase.sgst || 0)
+      const igst = Number(purchase.igst || 0)
+      const cess = Number(purchase.cess || 0)
+      const totalTax = cgst + sgst + igst + cess
+      const total = Number(purchase.total)
+      const derived = deriveStateFromGstin(gst)
+
+      return {
       id: purchase.id,
       purchaseNo: purchase.purchase_number,
       supplierId: purchase.supplier_id || "",
       supplierName: purchase.supplier_name,
       supplierPhone: purchase.supplier_phone || "",
       supplierAddress: purchase.supplier_address || "",
-      supplierGst: purchase.supplier_gst || "",
+      supplierGst: gst,
+      supplierGstin: gst,
+      placeOfSupply: derived?.placeOfSupply || "",
+      stateCode: derived?.stateCode || "",
+      state: derived?.placeOfSupply || "",
       date: purchase.purchase_date || purchase.created_at,
+      dueDate: purchase.due_date || purchase.purchase_date || purchase.created_at,
       items: purchase.purchase_items?.map((item: Record<string, unknown>) => ({
         itemId: item.item_id || "",
         name: item.item_name,
@@ -53,18 +76,20 @@ export async function GET() {
       subtotal: Number(purchase.subtotal),
       discount: Number(purchase.discount || 0),
       discountType: purchase.discount_type || "percentage",
-      cgst: Number(purchase.cgst),
-      sgst: Number(purchase.sgst),
-      igst: Number(purchase.igst),
-      total: Number(purchase.total),
+      cgst,
+      sgst,
+      igst,
+      cess,
+      totalTax,
+      total,
       paidAmount: Number(purchase.paid_amount || 0),
-      balance: Number(purchase.balance || purchase.total),
+      balance: Number(purchase.balance || total),
       status: purchase.status,
       gstEnabled: purchase.gst_enabled,
       notes: purchase.notes || "",
       createdAt: purchase.created_at,
       updatedAt: purchase.updated_at,
-    })) || []
+    }}) || []
 
     return NextResponse.json(purchases)
   } catch (error) {

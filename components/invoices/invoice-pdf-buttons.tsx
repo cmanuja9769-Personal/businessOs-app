@@ -3,8 +3,6 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Download, Printer, Loader2 } from "lucide-react"
-import { pdf } from "@react-pdf/renderer"
-import { InvoicePDFDocument } from "@/components/pdf/invoice-pdf-document"
 import type { IInvoice } from "@/types"
 import type { ISettings } from "@/app/settings/actions"
 
@@ -19,6 +17,8 @@ export function InvoicePDFButtons({ invoice, settings }: InvoicePDFButtonsProps)
   const handleDownloadPDF = async () => {
     setIsGenerating(true)
     try {
+      const { pdf } = await import("@react-pdf/renderer")
+      const { InvoicePDFDocument } = await import("@/components/pdf/invoice-pdf-document")
       const blob = await pdf(
         <InvoicePDFDocument invoice={invoice} settings={settings} />
       ).toBlob()
@@ -41,6 +41,8 @@ export function InvoicePDFButtons({ invoice, settings }: InvoicePDFButtonsProps)
   const handlePrintPDF = async () => {
     setIsGenerating(true)
     try {
+      const { pdf } = await import("@react-pdf/renderer")
+      const { InvoicePDFDocument } = await import("@/components/pdf/invoice-pdf-document")
       const blob = await pdf(
         <InvoicePDFDocument invoice={invoice} settings={settings} />
       ).toBlob()

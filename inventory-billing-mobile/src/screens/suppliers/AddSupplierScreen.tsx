@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { useTheme } from '@contexts/ThemeContext';
@@ -25,8 +25,20 @@ type DbSupplier = {
   gstin?: string | null;
 };
 
+function trimOrNull(val: string): string | null {
+  const trimmed = val.trim();
+  return trimmed || null;
+}
+
+function getButtonTitle(isLoading: boolean, isEditing: boolean): string {
+  if (isLoading) {
+    return isEditing ? 'Updating...' : 'Adding...';
+  }
+  return isEditing ? 'Update Supplier' : 'Add Supplier';
+}
+
 export default function AddSupplierScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const route = useRoute<AddSupplierRouteProp>();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
@@ -83,7 +95,7 @@ export default function AddSupplierScreen() {
           .maybeSingle();
 
         if (error) throw error;
-        const s = (data as any as DbSupplier) ?? null;
+        const s = (data as unknown as DbSupplier) ?? null;
         if (!s) return;
 
         const fetchedData = {
@@ -105,8 +117,8 @@ export default function AddSupplierScreen() {
     fetchSupplier();
   }, [supplierId, organizationId]);
 
-  const saveWithFallback = async (payloadPreferred: any, payloadLegacy: any) => {
-    const run = async (payload: any) => {
+  const saveWithFallback = async (payloadPreferred: Record<string, unknown>, payloadLegacy: Record<string, unknown>) => {
+    const run = async (payload: Record<string, unknown>) => {
       if (isEdit) {
         return supabase
           .from('suppliers')
@@ -120,7 +132,7 @@ export default function AddSupplierScreen() {
     const first = await run(payloadPreferred);
     if (!first.error) return first;
 
-    const msg = String((first.error as any)?.message || '');
+    const msg = String(first.error?.message || '');
     const schemaCache = msg.toLowerCase().includes('schema cache');
     const mentionsPreferredCol = msg.includes('gst_number');
     if (schemaCache && mentionsPreferredCol) {
@@ -147,31 +159,34 @@ export default function AddSupplierScreen() {
       const preferred = {
         organization_id: organizationId,
         name: formData.name.trim(),
-        email: formData.email.trim() ? formData.email.trim() : null,
-        phone: formData.phone.trim() ? formData.phone.trim() : null,
-        gst_number: formData.gst_number.trim() ? formData.gst_number.trim().toUpperCase() : null,
-        address: formData.address.trim() ? formData.address.trim() : null,
+        email: trimOrNull(formData.email),
+        phone: trimOrNull(formData.phone),
+        gst_number: trimOrNull(formData.gst_number)?.toUpperCase() ?? null,
+        address: trimOrNull(formData.address),
       };
 
       const legacy = {
         organization_id: organizationId,
         name: formData.name.trim(),
-        email: formData.email.trim() ? formData.email.trim() : null,
-        phone: formData.phone.trim() ? formData.phone.trim() : null,
-        gstin: formData.gst_number.trim() ? formData.gst_number.trim().toUpperCase() : null,
-        address: formData.address.trim() ? formData.address.trim() : null,
+        email: trimOrNull(formData.email),
+        phone: trimOrNull(formData.phone),
+        gstin: trimOrNull(formData.gst_number)?.toUpperCase() ?? null,
+        address: trimOrNull(formData.address),
       };
 
-      const { error } = await saveWithFallback(preferred, legacy);
-      if (error) throw error;
+      const { error: saveError } = await saveWithFallback(preferred, legacy);
+      if (saveError) throw saveError;
 
       setSavedSuccessfully(true);
-      Alert.alert('Success', isEdit ? 'Supplier updated successfully' : 'Supplier added successfully', [
+      const successMsg = isEdit ? 'Supplier updated successfully' : 'Supplier added successfully';
+      Alert.alert('Success', successMsg, [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
-    } catch (error: any) {
-      console.error('Error saving supplier:', error);
-      Alert.alert('Error', error.message || (isEdit ? 'Failed to update supplier' : 'Failed to add supplier'));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const fallback = isEdit ? 'Failed to update supplier' : 'Failed to add supplier';
+      console.error('Error saving supplier:', err);
+      Alert.alert('Error', message || fallback);
     } finally {
       setLoading(false);
     }
@@ -233,7 +248,7 @@ export default function AddSupplierScreen() {
       </Card>
 
       <Button
-        title={loading ? (isEdit ? 'Updating...' : 'Adding...') : (isEdit ? 'Update Supplier' : 'Add Supplier')}
+        title={getButtonTitle(loading, isEdit)}
         onPress={handleSubmit}
         disabled={loading}
         style={styles.submitButton}

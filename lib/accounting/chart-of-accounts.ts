@@ -1,6 +1,4 @@
-// Chart of Accounts Management
-
-import { createClient } from "@/lib/supabase/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 const DEFAULT_ACCOUNTS = [
   // Assets
@@ -45,8 +43,7 @@ const DEFAULT_ACCOUNTS = [
   { code: "1152", name: "Input IGST", type: "asset", parent: "1100", system: true },
 ]
 
-export async function seedChartOfAccounts(organizationId: string) {
-  const supabase = await createClient()
+export async function seedChartOfAccounts(supabase: SupabaseClient, organizationId: string) {
 
   // Check if accounts already exist
   const { count } = await supabase
@@ -109,8 +106,7 @@ export async function seedChartOfAccounts(organizationId: string) {
   return { success: true, message: "Chart of accounts created successfully", count: DEFAULT_ACCOUNTS.length }
 }
 
-export async function getAccountsByType(organizationId: string, type: string) {
-  const supabase = await createClient()
+export async function getAccountsByType(supabase: SupabaseClient, organizationId: string, type: string) {
 
   const { data, error } = await supabase
     .from("accounts")
@@ -128,8 +124,7 @@ export async function getAccountsByType(organizationId: string, type: string) {
   return data || []
 }
 
-export async function getAccountHierarchy(organizationId: string) {
-  const supabase = await createClient()
+export async function getAccountHierarchy(supabase: SupabaseClient, organizationId: string) {
 
   const { data, error } = await supabase
     .from("accounts")
@@ -146,8 +141,7 @@ export async function getAccountHierarchy(organizationId: string) {
   return data || []
 }
 
-export async function getAccountBalance(accountId: string) {
-  const supabase = await createClient()
+export async function getAccountBalance(supabase: SupabaseClient, accountId: string) {
 
   const { data, error } = await supabase
     .from("accounts")

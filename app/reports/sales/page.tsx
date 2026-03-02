@@ -15,12 +15,14 @@ import {
   FileSpreadsheet,
   LayoutList,
   LayoutGrid,
+  AlertCircle,
 } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { pdf } from "@react-pdf/renderer"
 import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/components/reports/report-filter"
-import { CompactReportPDF, type ReportColumn } from "@/components/reports/compact-report-pdf"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+import { DataEmptyState } from "@/components/ui/data-empty-state"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 
 interface InvoiceItem {
   id: string
@@ -40,6 +42,7 @@ interface Invoice {
   invoiceNo: string
   customerName: string
   customerGstin?: string
+  customerGst?: string
   invoiceDate: string
   total: number
   paidAmount: number
@@ -50,26 +53,37 @@ interface Invoice {
   sgst: number
   igst: number
   taxableAmount?: number
-  invoice_items?: InvoiceItem[]
+  items?: InvoiceItem[]
 }
 
 export default function SalesReportPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [pdfGenerating, setPdfGenerating] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [filters, setFilters] = useState<ReportFilters>(getDefaultFilters)
   const [viewMode, setViewMode] = useState<"summary" | "itemwise">("summary")
 
   const fetchInvoices = async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const response = await fetch("/api/invoices")
-      if (response.ok) {
-        const data = await response.json()
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`)
+      }
+      const data = await response.json()
+      if (Array.isArray(data)) {
         setInvoices(data)
+      } else if (data?.error) {
+        throw new Error(data.error)
+      } else {
+        setInvoices([])
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch invoices"
       console.error("Failed to fetch invoices:", error)
+      setFetchError(message)
     } finally {
       setLoading(false)
     }
@@ -88,7 +102,7 @@ export default function SalesReportPage() {
         !filters.search ||
         inv.invoiceNo.toLowerCase().includes(filters.search.toLowerCase()) ||
         inv.customerName.toLowerCase().includes(filters.search.toLowerCase()) ||
-        (inv.customerGstin || "").toLowerCase().includes(filters.search.toLowerCase())
+        (inv.customerGstin || inv.customerGst || "").toLowerCase().includes(filters.search.toLowerCase())
 
       return dateMatch && statusMatch && searchMatch
     })
@@ -116,12 +130,12 @@ export default function SalesReportPage() {
     if (viewMode !== "itemwise") return []
     const rows: Array<Record<string, unknown>> = []
     for (const inv of activeInvoices) {
-      for (const item of inv.invoice_items || []) {
+      for (const item of inv.items || []) {
         rows.push({
           invoiceNo: inv.invoiceNo,
           date: format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
           customerName: inv.customerName,
-          gstin: inv.customerGstin || "-",
+          gstin: inv.customerGstin || inv.customerGst || "-",
           itemName: item.itemName,
           hsn: item.hsnCode || "-",
           qty: item.quantity,
@@ -198,7 +212,7 @@ export default function SalesReportPage() {
             invoiceNo: inv.invoiceNo,
             date: format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
             customerName: inv.customerName,
-            gstin: inv.customerGstin || "-",
+            gstin: inv.customerGstin || inv.customerGst || "-",
             taxable: inv.taxableAmount || inv.total - (inv.cgst || 0) - (inv.sgst || 0) - (inv.igst || 0),
             gst: (inv.cgst || 0) + (inv.sgst || 0) + (inv.igst || 0),
             total: inv.total,
@@ -221,6 +235,8 @@ export default function SalesReportPage() {
             status: `${activeInvoices.length} invoices`,
           }
 
+      const { pdf } = await import("@react-pdf/renderer")
+      const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
       const blob = await pdf(
         <CompactReportPDF
           title={isItemWise ? "Sales Register - Item Wise" : "Sales & GST Register"}
@@ -256,7 +272,7 @@ export default function SalesReportPage() {
     const rows = activeInvoices.map((inv) => [
       inv.invoiceNo,
       inv.customerName,
-      inv.customerGstin || "",
+      inv.customerGstin || inv.customerGst || "",
       format(new Date(inv.invoiceDate), "dd/MM/yyyy"),
       (inv.taxableAmount || inv.total - (inv.cgst || 0) - (inv.sgst || 0) - (inv.igst || 0)).toFixed(2),
       (inv.cgst || 0).toFixed(2),
@@ -295,6 +311,7 @@ export default function SalesReportPage() {
   }
 
   return (
+    <ClientErrorBoundary fallbackTitle="Sales report encountered an error">
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -429,7 +446,19 @@ export default function SalesReportPage() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           )}
-          {!loading && viewMode === "summary" && (
+          {!loading && fetchError && (
+            <DataEmptyState
+              icon={<AlertCircle className="h-12 w-12" />}
+              title="Failed to load sales data"
+              description={fetchError}
+              action={
+                <Button variant="outline" size="sm" onClick={fetchInvoices}>
+                  Retry
+                </Button>
+              }
+            />
+          )}
+          {!loading && !fetchError && viewMode === "summary" && (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -461,7 +490,7 @@ export default function SalesReportPage() {
                         <TableRow key={inv.id} className={isCancelled ? "opacity-50" : ""}>
                           <TableCell className={`font-mono ${isCancelled ? "line-through" : ""}`}>{inv.invoiceNo}</TableCell>
                           <TableCell className={isCancelled ? "line-through" : ""}>{inv.customerName}</TableCell>
-                          <TableCell className="text-xs font-mono">{inv.customerGstin || "-"}</TableCell>
+                          <TableCell className="text-xs font-mono">{inv.customerGstin || inv.customerGst || "-"}</TableCell>
                           <TableCell>{format(new Date(inv.invoiceDate), "dd MMM yyyy")}</TableCell>
                           <TableCell className="text-right">{formatCurrency(taxable)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(gst)}</TableCell>
@@ -476,7 +505,7 @@ export default function SalesReportPage() {
               </Table>
             </div>
           )}
-          {!loading && viewMode !== "summary" && (
+          {!loading && !fetchError && viewMode !== "summary" && (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -525,5 +554,6 @@ export default function SalesReportPage() {
         </CardContent>
       </Card>
     </div>
+    </ClientErrorBoundary>
   )
 }

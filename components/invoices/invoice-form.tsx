@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,18 +8,23 @@ import { InvoiceHeader } from "@/components/invoices/invoice-header"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { DocumentTypeSelector } from "@/components/invoices/document-type-selector"
 import { ParentInvoiceSelector } from "@/components/invoices/parent-invoice-selector"
-import { Save, Send, FileText, Loader2 } from "lucide-react"
+import { InvoiceFormSkeleton } from "@/components/invoices/invoice-form-skeleton"
+import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { Save, Send, FileText, Loader2, Keyboard } from "lucide-react"
 import { createInvoice, updateInvoice, generateInvoiceNumber, getInvoices } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
-import { getItems } from "@/app/items/actions"
-import { getSettings } from "@/app/settings/actions"
+import { getItemsForInvoice, type LightweightItem } from "@/app/items/lightweight-actions"
+import { getSettings, getOrganizationDetails } from "@/app/settings/actions"
 import { toast } from "sonner"
 import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, PackingType, DocumentType } from "@/types"
 import { DOCUMENT_TYPE_CONFIG } from "@/types"
-import { calculateInvoiceTotals } from "@/lib/invoice-calculations"
+import { calculateInvoiceTotals, isInterStateSale } from "@/lib/invoice-calculations"
+import { numberToWords } from "@/lib/number-to-words"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface InvoiceFormProps {
   invoice?: IInvoice // If provided, we're in edit mode
@@ -29,9 +34,10 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   const router = useRouter()
   const isEditMode = !!invoice
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [customers, setCustomers] = useState<ICustomer[]>([])
-  const [items, setItems] = useState<IItem[]>([])
+  const [items, setItems] = useState<(IItem | LightweightItem)[]>([])
   const [allInvoices, setAllInvoices] = useState<IInvoice[]>([])
 
   // Invoice state
@@ -60,20 +66,27 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   const [notes, setNotes] = useState(invoice?.notes || "")
   const [parentInvoice, setParentInvoice] = useState<IInvoice | null>(null)
   const [customFieldsConfig, setCustomFieldsConfig] = useState({ field1Enabled: false, field1Label: "", field2Enabled: false, field2Label: "" })
+  const [orgGstNumber, setOrgGstNumber] = useState<string | undefined>(undefined)
+
+  const initialDocTypeRef = useRef(documentType)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, itemsData, invoicesData, settingsData] = await Promise.all([
+        const [customersData, itemsData, invoicesData, settingsData, orgDetails] = await Promise.all([
           getCustomers(),
-          getItems(),
+          getItemsForInvoice(),
           getInvoices(),
           getSettings(),
+          getOrganizationDetails(),
         ])
         
         setCustomers(customersData)
         setItems(itemsData)
         setAllInvoices(invoicesData)
+        if (orgDetails?.gstNumber) {
+          setOrgGstNumber(orgDetails.gstNumber)
+        }
         setCustomFieldsConfig({
           field1Enabled: settingsData.customField1Enabled,
           field1Label: settingsData.customField1Label,
@@ -82,11 +95,9 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
         })
 
         if (isEditMode && invoice) {
-          // Find and set the customer in edit mode
           const customer = customersData.find((c) => c.id === invoice.customerId)
           setSelectedCustomer(customer || null)
           
-          // If this is a credit/debit note, load parent invoice
           if (invoice.parentDocumentId && (invoice.documentType === "credit_note" || invoice.documentType === "debit_note")) {
             const parent = invoicesData.find((inv) => inv.id === invoice.parentDocumentId)
             if (parent) {
@@ -94,22 +105,24 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             }
           }
         } else {
-          // Generate invoice number for new invoice
           const invoiceNumber = await generateInvoiceNumber(documentType)
           setInvoiceNo(invoiceNumber)
         }
-      } catch {
-        toast.error("Failed to load data")
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load form data"
+        setLoadError(message)
+        toast.error(message)
       } finally {
         setIsLoading(false)
       }
     }
     loadData()
-  }, [isEditMode, invoice, documentType])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode])
 
-  // Regenerate invoice number when document type changes
   useEffect(() => {
-    if (!isEditMode) {
+    if (!isEditMode && documentType !== initialDocTypeRef.current) {
+      initialDocTypeRef.current = documentType
       generateInvoiceNumber(documentType).then(setInvoiceNo)
     }
   }, [documentType, isEditMode])
@@ -125,9 +138,25 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
     }
   }, [parentInvoice, documentType, customers])
 
-  const totals = calculateInvoiceTotals(invoiceItems, billingMode)
+  const interState = isInterStateSale(orgGstNumber, selectedCustomer?.gstinNo)
+  const totals = calculateInvoiceTotals(invoiceItems, billingMode, interState)
+  const isDirty = useRef(false)
 
-  const handleSave = async (status?: "draft" | "sent") => {
+  useEffect(() => {
+    if (!isLoading) isDirty.current = true
+  }, [invoiceItems, selectedCustomer, notes, billingMode, pricingMode, isLoading])
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty.current && !isSaving) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [isSaving])
+
+  const handleSave = useCallback(async (status?: "draft" | "sent") => {
     if (!selectedCustomer) {
       toast.error("Please select a customer")
       return
@@ -138,7 +167,19 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
       return
     }
 
-    // Validate credit/debit notes have parent invoice
+    const hasInvalidItems = invoiceItems.some(
+      (item) => !item.itemId || item.quantity <= 0 || item.rate <= 0
+    )
+    if (hasInvalidItems) {
+      toast.error("Please ensure all items have valid quantity and rate")
+      return
+    }
+
+    if (new Date(dueDate) < new Date(invoiceDate)) {
+      toast.error("Due date cannot be before invoice date")
+      return
+    }
+
     if ((documentType === "credit_note" || documentType === "debit_note") && !parentInvoice && !invoice?.parentDocumentId) {
       toast.error(`Please select an original invoice for this ${DOCUMENT_TYPE_CONFIG[documentType].label}`)
       return
@@ -164,13 +205,15 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
         items: invoiceItems,
         ...totals,
         paidAmount: invoice?.paidAmount || 0,
-        balance: totals.total - (invoice?.paidAmount || 0),
+        balance: totals.grandTotal - (invoice?.paidAmount || 0),
         gstEnabled: billingMode === "gst",
         notes,
         status: status || invoice?.status || "draft",
         discountType: "percentage" as const,
         ...(parentInvoice && { parentDocumentId: parentInvoice.id }),
       }
+
+      isDirty.current = false
 
       if (isEditMode && invoice) {
         const result = await updateInvoice(invoice.id, invoiceData)
@@ -195,17 +238,45 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [selectedCustomer, invoiceItems, dueDate, invoiceDate, documentType, parentInvoice, invoice, invoiceNo, validityDate, billingMode, pricingMode, totals, notes, isEditMode, router])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault()
+        if (!isSaving) {
+          handleSave(isEditMode ? undefined : "draft")
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+        e.preventDefault()
+        if (!isSaving && !isEditMode) {
+          handleSave("sent")
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleSave, isSaving, isEditMode])
 
   if (isLoading) {
+    return <InvoiceFormSkeleton />
+  }
+
+  if (loadError) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
+      <Card className="border-destructive/50">
+        <CardContent className="pt-6 text-center space-y-4">
+          <p className="text-sm text-destructive font-medium">Failed to load invoice form</p>
+          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
+    <ClientErrorBoundary fallbackTitle="Invoice form encountered an error">
     <div className="space-y-6">
       {/* Document Type Selector - Only show for new documents */}
       {!isEditMode && (
@@ -300,15 +371,31 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
       <Card>
         <CardContent className="pt-6">
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes / Terms & Conditions</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add any additional notes, payment terms, or conditions..."
-                rows={4}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes / Terms & Conditions</Label>
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add any additional notes, payment terms, or conditions..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline" className="gap-1">
+                  {invoiceItems.length} {invoiceItems.length === 1 ? "item" : "items"}
+                </Badge>
+                <Badge variant="outline" className="gap-1">
+                  {invoiceItems.reduce((sum, item) => sum + item.quantity, 0)} total qty
+                </Badge>
+                {pricingMode !== "sale" && (
+                  <Badge variant="secondary" className="gap-1 capitalize">
+                    {pricingMode} pricing
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3 bg-muted/50 p-4 rounded-lg">
@@ -318,14 +405,23 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
               </div>
               {billingMode === "gst" && (
                 <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">CGST:</span>
-                    <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">SGST:</span>
-                    <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
-                  </div>
+                  {interState ? (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">IGST:</span>
+                      <span className="font-medium">₹{totals.igst.toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">CGST:</span>
+                        <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">SGST:</span>
+                        <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   {totals.cess > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Cess:</span>
@@ -340,41 +436,73 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
                   <span className="font-medium text-green-600">-₹{totals.discount.toFixed(2)}</span>
                 </div>
               )}
+              {totals.roundOff !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Round Off:</span>
+                  <span className="font-medium">{totals.roundOff > 0 ? "+" : ""}₹{totals.roundOff.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-lg font-bold pt-3 border-t border-border">
                 <span>Total Amount:</span>
-                <span className="text-primary">₹{totals.total.toFixed(2)}</span>
+                <span className="text-primary">₹{totals.grandTotal.toFixed(2)}</span>
               </div>
+              {totals.grandTotal > 0 && (
+                <p className="text-xs text-muted-foreground italic pt-1">
+                  {numberToWords(totals.grandTotal)}
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-3">
-        <Button
-          variant="outline"
-          onClick={() => router.push(isEditMode && invoice ? `/invoices/${invoice.id}` : "/invoices")}
-          disabled={isSaving}
-        >
-          Cancel
-        </Button>
-        {isEditMode ? (
-          <Button onClick={() => handleSave()} disabled={isSaving}>
-            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Update {DOCUMENT_TYPE_CONFIG[documentType].label}
+      <div className="flex items-center justify-between gap-3">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Keyboard className="w-3.5 h-3.5" />
+                <kbd className="px-1.5 py-0.5 bg-muted rounded text-[0.625rem] font-mono">Ctrl+S</kbd> Save
+                {!isEditMode && (
+                  <>
+                    <span className="mx-1">|</span>
+                    <kbd className="px-1.5 py-0.5 bg-muted rounded text-[0.625rem] font-mono">Ctrl+Shift+S</kbd> Create
+                  </>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Keyboard shortcuts for quick save</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => router.push(isEditMode && invoice ? `/invoices/${invoice.id}` : "/invoices")}
+            disabled={isSaving}
+          >
+            Cancel
           </Button>
-        ) : (
-          <>
-            <Button variant="outline" onClick={() => handleSave("draft")} disabled={isSaving}>
+          {isEditMode ? (
+            <Button onClick={() => handleSave()} disabled={isSaving}>
               {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save as Draft
+              Update {DOCUMENT_TYPE_CONFIG[documentType].label}
             </Button>
-            <Button onClick={() => handleSave("sent")} disabled={isSaving}>
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Create {DOCUMENT_TYPE_CONFIG[documentType].label}
-            </Button>
-          </>
-        )}
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => handleSave("draft")} disabled={isSaving}>
+                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                Save as Draft
+              </Button>
+              <Button onClick={() => handleSave("sent")} disabled={isSaving}>
+                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                Create {DOCUMENT_TYPE_CONFIG[documentType].label}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
+    </ClientErrorBoundary>
   )
 }

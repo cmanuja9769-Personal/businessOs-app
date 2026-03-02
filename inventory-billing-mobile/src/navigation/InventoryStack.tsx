@@ -44,7 +44,9 @@ export default function InventoryStack() {
       <Stack.Screen 
         name="AddItem" 
         component={AddItemScreen}
-        options={{ title: 'Add Item' }}
+        options={({ route }) => ({
+          title: route.params?.itemId ? 'Edit Item' : 'Add Item',
+        })}
       />
       <Stack.Screen 
         name="StockAdjustment" 

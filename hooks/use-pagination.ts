@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
+import { PAGINATION } from "@/lib/design-tokens"
 
 const EDGE_PAGE_COUNT = 3
 const ADJACENT_PAGE_COUNT = 1
-const DEFAULT_ITEMS_PER_PAGE = 50
 
 interface UsePaginationOptions {
   totalItems: number
@@ -28,7 +28,7 @@ interface UsePaginationReturn {
 
 export function usePagination({
   totalItems,
-  itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
+  itemsPerPage = PAGINATION.defaultPageSize,
   initialPage = 1,
 }: UsePaginationOptions): UsePaginationReturn {
   const [currentPage, setCurrentPageRaw] = useState(initialPage)

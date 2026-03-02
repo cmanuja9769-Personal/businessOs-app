@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
-import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
@@ -33,17 +32,15 @@ interface PurchaseItem {
 
 interface Purchase {
   id: string;
-  purchase_no: string;
+  purchase_number: string;
   supplier_id: string;
   supplier_name: string;
   supplier_phone?: string;
   supplier_address?: string;
   supplier_gst?: string;
-  date: string;
+  purchase_date: string;
   items: PurchaseItem[];
   subtotal: number;
-  discount: number;
-  discount_type: string;
   cgst: number;
   sgst: number;
   igst: number;
@@ -60,9 +57,8 @@ export default function PurchaseDetailScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const route = useRoute();
   const { colors, shadows } = useTheme();
-  const { organizationId } = useAuth();
 
-  const purchaseId = (route.params as any)?.purchaseId as string;
+  const purchaseId = (route.params as Record<string, string>)?.purchaseId as string;
 
   const [loading, setLoading] = useState(true);
   const [purchase, setPurchase] = useState<Purchase | null>(null);
@@ -80,13 +76,35 @@ export default function PurchaseDetailScreen() {
         .from('purchases')
         .select('*')
         .eq('id', purchaseId)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;
 
       if (data) {
-        const items = typeof data.items === 'string' ? JSON.parse(data.items) : data.items;
-        setPurchase({ ...data, items: items || [] });
+        const { data: itemsData } = await supabase
+          .from('purchase_items')
+          .select('*')
+          .eq('purchase_id', purchaseId);
+
+        const items: PurchaseItem[] = (itemsData || []).map((item: Record<string, unknown>) => ({
+          itemId: (item.item_id as string) || '',
+          name: (item.item_name as string) || '',
+          hsn: (item.hsn as string) || '',
+          quantity: Number(item.quantity) || 0,
+          rate: Number(item.rate) || 0,
+          discount: Number(item.discount) || 0,
+          discountType: (item.discount_type as 'percentage' | 'flat') || 'percentage',
+          taxRate: Number(item.tax_rate) || 0,
+          amount: Number(item.amount) || 0,
+        }));
+
+        setPurchase({
+          ...data,
+          purchase_number: data.purchase_number,
+          purchase_date: data.purchase_date || data.created_at,
+          items,
+        });
       }
     } catch (error) {
       console.error('Error loading purchase:', error);
@@ -112,7 +130,7 @@ export default function PurchaseDetailScreen() {
           onPress: async () => {
             setDeleting(true);
             try {
-              await supabase.from('purchases').delete().eq('id', purchaseId);
+              await supabase.from('purchases').update({ deleted_at: new Date().toISOString() }).eq('id', purchaseId);
               navigation.goBack();
             } catch (error) {
               console.error('Error deleting purchase:', error);
@@ -134,8 +152,8 @@ export default function PurchaseDetailScreen() {
       .join('\n');
 
     const message = `
-Purchase: ${purchase.purchase_no}
-Date: ${formatDate(purchase.date)}
+Purchase: ${purchase.purchase_number}
+Date: ${formatDate(purchase.purchase_date)}
 Supplier: ${purchase.supplier_name}
 
 Items:
@@ -149,7 +167,7 @@ Status: ${purchase.status.toUpperCase()}
   };
 
   const handleRecordPayment = () => {
-    navigation.navigate('RecordPayment', { invoiceId: purchaseId });
+    navigation.navigate('RecordPayment', { purchaseId });
   };
 
   const getStatusColor = (status: string) => {
@@ -180,7 +198,7 @@ Status: ${purchase.status.toUpperCase()}
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{purchase.purchase_no}</Text>
+          <Text style={styles.headerTitle}>{purchase.purchase_number}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(purchase.status) }]}>
             <Text style={styles.statusText}>{purchase.status.toUpperCase()}</Text>
           </View>
@@ -227,7 +245,7 @@ Status: ${purchase.status.toUpperCase()}
           <View style={styles.cardContent}>
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
-              <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(purchase.date)}</Text>
+              <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(purchase.purchase_date)}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Billing Type</Text>

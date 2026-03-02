@@ -79,7 +79,7 @@ export default async function UsersPage() {
             <Table containerClassName="flex-1 min-h-0 max-h-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead resizable className="w-[200px] min-w-[150px]">User ID</TableHead>
+                  <TableHead resizable className="w-[12.5rem] min-w-[9.375rem]">User ID</TableHead>
                   <TableHead resizable>Role</TableHead>
                   <TableHead resizable>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>

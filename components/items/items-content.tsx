@@ -24,8 +24,7 @@ import { Button } from "@/components/ui/button"
 import { BarcodeQueueModal } from "@/components/items/barcode-queue-modal"
 import { useBarcodeQueueStore } from "@/store/use-barcode-queue-store"
 import { bulkDeleteItems } from "@/app/items/actions"
-
-const ITEMS_PER_PAGE = 50
+import { PAGINATION } from "@/lib/design-tokens"
 
 type ItemsFilterState = {
   q: string
@@ -166,7 +165,7 @@ export function ItemsContent({ items, godowns, printLogs, initialFilters }: Item
     visiblePages,
   } = usePagination({
     totalItems: filteredItems.length,
-    itemsPerPage: ITEMS_PER_PAGE,
+    itemsPerPage: PAGINATION.defaultPageSize,
   })
 
   // Reset to page 1 when filters change (useEffect, not useMemo — side effects belong in effects)
@@ -227,7 +226,7 @@ export function ItemsContent({ items, godowns, printLogs, initialFilters }: Item
               <Package className="w-4 h-4 sm:w-5 sm:h-5" />
               <span className="hidden sm:inline">All Items</span>
               <span className="sm:hidden">Items</span>
-              <span className="text-muted-foreground font-normal">({filteredItems.length})</span>
+              <span className="text-muted-foreground font-normal" aria-live="polite" aria-atomic="true">({filteredItems.length})</span>
             </CardTitle>
             <ItemsFilters
               q={filters.q}

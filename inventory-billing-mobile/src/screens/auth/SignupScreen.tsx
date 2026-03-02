@@ -46,13 +46,13 @@ export default function SignupScreen() {
     }
 
     if (!formData.password) {
-      newErrors.password = 'Password is required';
+      newErrors.pass = 'Password is required';
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.pass = 'Password must be at least 6 characters';
     }
 
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPass = 'Passwords do not match';
     }
 
     setErrors(newErrors);
@@ -81,10 +81,17 @@ export default function SignupScreen() {
     }
   };
 
+  const errorKeyFor = (field: keyof typeof formData): string => {
+    if (field === 'password') return 'pass';
+    if (field === 'confirmPassword') return 'confirmPass';
+    return field;
+  };
+
   const updateField = (field: keyof typeof formData, value: string) => {
     setFormData({ ...formData, [field]: value });
-    if (errors[field]) {
-      setErrors({ ...errors, [field]: "" });
+    const errKey = errorKeyFor(field);
+    if (errors[errKey]) {
+      setErrors({ ...errors, [errKey]: "" });
     }
   };
 
@@ -132,7 +139,7 @@ export default function SignupScreen() {
             placeholder="Enter your password"
             value={formData.password}
             onChangeText={(text) => updateField('password', text)}
-            error={errors.password}
+            error={errors.pass}
             secureTextEntry
             leftIcon="lock-closed-outline"
           />
@@ -142,7 +149,7 @@ export default function SignupScreen() {
             placeholder="Confirm your password"
             value={formData.confirmPassword}
             onChangeText={(text) => updateField('confirmPassword', text)}
-            error={errors.confirmPassword}
+            error={errors.confirmPass}
             secureTextEntry
             leftIcon="lock-closed-outline"
           />

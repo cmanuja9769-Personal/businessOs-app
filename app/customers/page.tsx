@@ -102,7 +102,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="truncate">{customer.email || "No email"}</span>
                       {customer.gstinNo && (
-                        <Badge variant="outline" className="text-[10px] shrink-0">GST</Badge>
+                        <Badge variant="outline" className="text-[0.625rem] shrink-0">GST</Badge>
                       )}
                     </div>
                   </Link>

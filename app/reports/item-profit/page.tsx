@@ -53,8 +53,8 @@ function processInvoiceItem(itemMap: Map<string, ItemProfit>, item: ApiInvoiceIt
   }
   
   const qty = item.quantity || 0
-  const sellingPrice = item.price || 0
-  const costPrice = item.purchasePrice || item.costPrice || (sellingPrice * 0.7)
+  const sellingPrice = item.rate || item.price || 0
+  const costPrice = item.purchasePrice || item.costPrice || 0
   
   existing.unitsSold += qty
   existing.totalRevenue += qty * sellingPrice

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import type { IInvoice, DocumentType } from "@/types";
 import { DOCUMENT_TYPE_CONFIG } from "@/types";
 import type { ISettings } from "@/app/settings/actions";
+import { numberToWords } from "@/lib/number-to-words";
 
 interface ModernTemplateProps {
   invoice: IInvoice;
@@ -49,9 +50,11 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
               {(settings.businessGst || settings.businessPhone) && (
                 <div className="text-white/80 text-xs mt-0.5 truncate">
                   {(() => {
-                    if (settings.businessGst) return `GSTIN: ${settings.businessGst}`
-                    if (settings.businessPhone) return `Phone: ${settings.businessPhone}`
-                    return ""
+                    if (settings.businessGst)
+                      return `GSTIN: ${settings.businessGst}`;
+                    if (settings.businessPhone)
+                      return `Phone: ${settings.businessPhone}`;
+                    return "";
                   })()}
                 </div>
               )}
@@ -148,6 +151,9 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
                 <th className="py-3 px-3 text-left text-xs font-semibold text-white">
                   DESCRIPTION
                 </th>
+                <th className="py-3 px-2 text-left text-xs font-semibold text-white">
+                  HSN
+                </th>
                 <th className="py-3 px-3 text-center text-xs font-semibold text-white">
                   QTY
                 </th>
@@ -174,6 +180,9 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
                     {item.unit && (
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     )}
+                  </td>
+                  <td className="py-3 px-2 text-xs text-gray-500 font-mono">
+                    {item.hsnCode || "-"}
                   </td>
                   <td className="py-3 px-3 text-center text-sm text-gray-900">
                     {item.quantity}
@@ -291,6 +300,14 @@ export function ModernTemplate({ invoice, settings }: ModernTemplateProps) {
             </div>
           </div>
         </div>
+
+        {invoice.total > 0 && (
+          <div className="px-6 pt-3">
+            <p className="text-xs text-gray-600">
+              <span className="font-semibold" style={{ color: 'var(--invoice-primary)' }}>Amount in Words:</span>{" "}{numberToWords(invoice.total)}
+            </p>
+          </div>
+        )}
 
         {/* Notes / Payment / Terms */}
         <div className="px-6 pt-6 space-y-4">

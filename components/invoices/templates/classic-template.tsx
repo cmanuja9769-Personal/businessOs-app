@@ -1,12 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import type { IInvoice } from "@/types";
+import type { IInvoice, DocumentType } from "@/types";
+import { DOCUMENT_TYPE_CONFIG } from "@/types";
 import type { ISettings } from "@/app/settings/actions";
+import { numberToWords } from "@/lib/number-to-words";
 
 interface ClassicTemplateProps {
   invoice: IInvoice;
   settings: ISettings;
+}
+
+function documentLabel(documentType: DocumentType) {
+  return DOCUMENT_TYPE_CONFIG[documentType]?.label || "Invoice";
 }
 
 export function ClassicTemplate({ invoice, settings }: ClassicTemplateProps) {
@@ -57,7 +63,7 @@ export function ClassicTemplate({ invoice, settings }: ClassicTemplateProps) {
 
             <div className="text-right">
               <h2 className="text-3xl font-bold mb-2 text-(--invoice-primary)">
-                INVOICE
+                {documentLabel(invoice.documentType).toUpperCase()}
               </h2>
               <div className="text-sm space-y-1">
                 <p className="font-semibold">{invoice.invoiceNo}</p>
@@ -117,6 +123,9 @@ export function ClassicTemplate({ invoice, settings }: ClassicTemplateProps) {
                   <th className="text-left py-3 px-4 font-semibold text-(--invoice-primary)">
                     Description
                   </th>
+                  <th className="text-left py-3 px-3 font-semibold text-(--invoice-primary)">
+                    HSN
+                  </th>
                   <th className="text-center py-3 px-4 font-semibold text-(--invoice-primary)">
                     Qty
                   </th>
@@ -140,6 +149,9 @@ export function ClassicTemplate({ invoice, settings }: ClassicTemplateProps) {
                     <td className="py-3 px-4">
                       <div className="font-medium">{item.itemName}</div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
+                    </td>
+                    <td className="py-3 px-3 text-xs text-gray-600 font-mono">
+                      {item.hsnCode || "-"}
                     </td>
                     <td className="py-3 px-4 text-center">{item.quantity}</td>
                     <td className="py-3 px-4 text-right">
@@ -220,6 +232,14 @@ export function ClassicTemplate({ invoice, settings }: ClassicTemplateProps) {
               </div>
             </div>
           </div>
+
+          {invoice.total > 0 && (
+            <div className="mt-4 px-1">
+              <p className="text-xs text-gray-600">
+                <span className="font-semibold" style={{ color: 'var(--invoice-primary)' }}>Amount in Words:</span>{" "}{numberToWords(invoice.total)}
+              </p>
+            </div>
+          )}
 
           {/* Bank Details */}
           {settings.bankName && (

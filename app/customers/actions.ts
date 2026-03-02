@@ -1,14 +1,18 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
 import type { ICustomer } from "@/types"
 import { customerSchema } from "@/lib/schemas"
+import { authorize, orgScope } from "@/lib/authorize"
 import { fetchGSTDetails, type GSTDetails } from "@/lib/gst-lookup"
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
+import { demoCustomers } from "@/app/demo/data"
 
 export async function getCustomers(): Promise<ICustomer[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false })
+  if (await isDemoMode()) return demoCustomers
+  try {
+  const { supabase, organizationId } = await authorize("customers", "read")
+  const { data, error } = await supabase.from("customers").select("*").or(orgScope(organizationId)).is("deleted_at", null).order("created_at", { ascending: false })
 
   if (error) {
     console.error("[Customers] Error fetching customers:", error.message || error)
@@ -29,9 +33,13 @@ export async function getCustomers(): Promise<ICustomer[]> {
       updatedAt: new Date(customer.updated_at),
     })) || []
   )
+  } catch {
+    return []
+  }
 }
 
 export async function createCustomer(formData: FormData) {
+  if (await isDemoMode()) throwDemoMutationError()
   const data = {
     name: formData.get("name"),
     contactNo: formData.get("contactNo"),
@@ -44,7 +52,7 @@ export async function createCustomer(formData: FormData) {
 
   const validated = customerSchema.parse(data)
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "create")
   const { data: newCustomer, error } = await supabase
     .from("customers")
     .insert({
@@ -53,6 +61,7 @@ export async function createCustomer(formData: FormData) {
       email: validated.email || null,
       address: validated.address || null,
       gst_number: validated.gstinNo || null,
+      organization_id: organizationId,
     })
     .select()
     .single()
@@ -67,6 +76,7 @@ export async function createCustomer(formData: FormData) {
 }
 
 export async function updateCustomer(id: string, formData: FormData) {
+  if (await isDemoMode()) throwDemoMutationError()
   const data = {
     name: formData.get("name"),
     contactNo: formData.get("contactNo"),
@@ -79,7 +89,7 @@ export async function updateCustomer(id: string, formData: FormData) {
 
   const validated = customerSchema.parse(data)
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "update")
   const { error } = await supabase
     .from("customers")
     .update({
@@ -90,6 +100,7 @@ export async function updateCustomer(id: string, formData: FormData) {
       gst_number: validated.gstinNo || null,
     })
     .eq("id", id)
+    .or(orgScope(organizationId))
 
   if (error) {
     console.error("[v0] Error updating customer:", error)
@@ -101,8 +112,14 @@ export async function updateCustomer(id: string, formData: FormData) {
 }
 
 export async function deleteCustomer(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from("customers").delete().eq("id", id)
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("customers", "delete")
+  const { error } = await supabase
+    .from("customers")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("deleted_at", null)
+    .or(orgScope(organizationId))
 
   if (error) {
     console.error("[v0] Error deleting customer:", error)
@@ -114,15 +131,17 @@ export async function deleteCustomer(id: string) {
 }
 
 export async function bulkDeleteCustomers(ids: string[]) {
+  if (await isDemoMode()) throwDemoMutationError()
   if (!ids || ids.length === 0) {
     return { success: false, error: "No customers selected" }
   }
 
-  const supabase = await createClient()
+  const { supabase, organizationId } = await authorize("customers", "delete")
   const { error, count } = await supabase
     .from("customers")
     .delete()
     .in("id", ids)
+    .or(orgScope(organizationId))
     .select()
 
   if (error) {
@@ -139,12 +158,13 @@ export async function bulkDeleteCustomers(ids: string[]) {
 }
 
 export async function deleteAllCustomers() {
-  const supabase = await createClient()
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("customers", "delete")
   
-  // Get count first for confirmation
   const { count } = await supabase
     .from("customers")
     .select("*", { count: "exact", head: true })
+    .or(orgScope(organizationId))
   
   if (!count || count === 0) {
     return { success: false, error: "No customers to delete" }
@@ -153,7 +173,8 @@ export async function deleteAllCustomers() {
   const { error } = await supabase
     .from("customers")
     .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000") // Delete all
+    .or(orgScope(organizationId))
+    .neq("id", "00000000-0000-0000-0000-000000000000")
 
   if (error) {
     console.error("[v0] Error deleting all customers:", error)
@@ -169,7 +190,8 @@ export async function deleteAllCustomers() {
 }
 
 export async function bulkImportCustomers(customersData: ICustomer[]) {
-  const supabase = await createClient()
+  if (await isDemoMode()) throwDemoMutationError()
+  const { supabase, organizationId } = await authorize("customers", "create")
 
   const records = customersData.map((customer) => ({
     name: customer.name,
@@ -177,6 +199,7 @@ export async function bulkImportCustomers(customersData: ICustomer[]) {
     email: customer.email || null,
     address: customer.address || null,
     gst_number: customer.gstinNo || null,
+    organization_id: organizationId,
   }))
 
   const { error } = await supabase.from("customers").insert(records)

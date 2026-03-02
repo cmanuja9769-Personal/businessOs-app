@@ -133,8 +133,8 @@ function MultiSelectDropdown({
           <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[220px] p-2" align="start">
-        <div className="space-y-1 max-h-[200px] overflow-y-auto">
+      <PopoverContent className="w-[13.75rem] p-2" align="start">
+        <div className="space-y-1 max-h-[12.5rem] overflow-y-auto">
           {options.map((opt) => (
             <button
               key={opt.value}

@@ -1,25 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
+import { authorize } from "@/lib/authorize"
 import type { IBarcodePrintLog } from "@/types"
-
-async function getOrgContext() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error("Unauthorized")
-
-  const { data: orgData } = await supabase
-    .from("app_user_organizations")
-    .select("organization_id")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle()
-
-  if (!orgData?.organization_id) throw new Error("No organization found")
-
-  return { supabase, userId: user.id, organizationId: orgData.organization_id }
-}
+import { isDemoMode, throwDemoMutationError } from "@/app/demo/helpers"
+import { demoBarcodeLogs } from "@/app/demo/data"
 
 function mapRow(row: Record<string, unknown>): IBarcodePrintLog {
   return {
@@ -45,8 +30,9 @@ export async function logBarcodePrint(entries: {
   printType: "individual" | "batch"
   layoutId: string
 }[]) {
+  if (await isDemoMode()) throwDemoMutationError()
   try {
-    const { supabase, userId, organizationId } = await getOrgContext()
+    const { supabase, userId, organizationId } = await authorize("items", "update")
     const rows = entries.map((e) => ({
       item_id: e.itemId,
       item_name: e.itemName,
@@ -77,8 +63,9 @@ export async function getBarcodePrintLogs(params?: {
   page?: number
   pageSize?: number
 }): Promise<{ data: IBarcodePrintLog[]; count: number }> {
+  if (await isDemoMode()) return { data: Object.values(demoBarcodeLogs), count: Object.values(demoBarcodeLogs).length }
   try {
-    const { supabase, organizationId } = await getOrgContext()
+    const { supabase, organizationId } = await authorize("items", "read")
     const page = params?.page ?? 1
     const pageSize = params?.pageSize ?? 25
     const from = (page - 1) * pageSize
@@ -123,8 +110,9 @@ export async function getBarcodePrintLogs(params?: {
 }
 
 export async function deleteBarcodePrintLog(id: string) {
+  if (await isDemoMode()) throwDemoMutationError()
   try {
-    const { supabase, organizationId } = await getOrgContext()
+    const { supabase, organizationId } = await authorize("items", "read")
     const { error } = await supabase
       .from("barcode_print_logs")
       .delete()
@@ -138,9 +126,10 @@ export async function deleteBarcodePrintLog(id: string) {
 }
 
 export async function deleteBarcodePrintLogs(ids: string[]) {
+  if (await isDemoMode()) throwDemoMutationError()
   if (ids.length === 0) return { success: true, deletedCount: 0 }
   try {
-    const { supabase, organizationId } = await getOrgContext()
+    const { supabase, organizationId } = await authorize("items", "read")
     const { error, count } = await supabase
       .from("barcode_print_logs")
       .delete({ count: "exact" })
@@ -156,8 +145,9 @@ export async function deleteBarcodePrintLogs(ids: string[]) {
 export async function getItemLatestPrintLog(
   itemId: string
 ): Promise<IBarcodePrintLog | null> {
+  if (await isDemoMode()) return demoBarcodeLogs[itemId] ?? null
   try {
-    const { supabase, organizationId } = await getOrgContext()
+    const { supabase, organizationId } = await authorize("items", "read")
     const { data, error } = await supabase
       .from("barcode_print_logs")
       .select("*")
@@ -176,9 +166,14 @@ export async function getItemLatestPrintLog(
 export async function getLatestPrintLogsForItems(
   itemIds: string[]
 ): Promise<Record<string, IBarcodePrintLog>> {
+  if (await isDemoMode()) {
+    const result: Record<string, IBarcodePrintLog> = {}
+    for (const id of itemIds) { if (demoBarcodeLogs[id]) result[id] = demoBarcodeLogs[id] }
+    return result
+  }
   if (itemIds.length === 0) return {}
   try {
-    const { supabase, organizationId } = await getOrgContext()
+    const { supabase, organizationId } = await authorize("items", "read")
     const { data, error } = await supabase
       .from("barcode_print_logs")
       .select("*")

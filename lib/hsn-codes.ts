@@ -1,15 +1,9 @@
-// Official HSN (Harmonized System of Nomenclature) codes from GST Portal
-// Source: https://tutorial.gst.gov.in/downloads/HSN_SAC.xlsx
-// Total: 21,789 codes covering all product categories
-
 export interface HSNCode {
   code: string
   description: string
   category: string
-  gstRate?: number // Default GST rate for the category
+  gstRate?: number
 }
-
-// Chapter to Category mapping based on HSN classification
 const CHAPTER_CATEGORIES: Record<string, string> = {
   '01': 'Live Animals', '02': 'Meat', '03': 'Fish & Seafood', '04': 'Dairy Products',
   '05': 'Animal Products', '06': 'Plants & Flowers', '07': 'Vegetables', '08': 'Fruits & Nuts',
@@ -39,7 +33,6 @@ const CHAPTER_CATEGORIES: Record<string, string> = {
   '97': 'Art & Antiques', '98': 'Special Transactions', '99': 'Services'
 }
 
-// Default GST rates by chapter (common rates - actual rates may vary by specific item)
 const CHAPTER_GST_RATES: Record<string, number> = {
   '01': 0, '02': 5, '03': 5, '04': 5, '05': 5, '06': 0, '07': 0, '08': 0,
   '09': 5, '10': 0, '11': 0, '12': 5, '13': 5, '14': 5, '15': 5, '16': 12,
@@ -55,41 +48,30 @@ const CHAPTER_GST_RATES: Record<string, number> = {
   '90': 18, '91': 18, '92': 18, '93': 18, '94': 18, '95': 18, '96': 18, '97': 12
 }
 
-// Complete HSN codes from GST Portal (21,789 codes)
-// This is loaded from the official GST portal data
-import hsnDataFull from '../hsn-codes-full.json'
+let _hsnCodesCache: HSNCode[] | null = null
 
-// Type the imported data
-const HSN_CODES_FULL: HSNCode[] = hsnDataFull as HSNCode[]
+async function loadHSNCodes(): Promise<HSNCode[]> {
+  if (_hsnCodesCache) return _hsnCodesCache
+  const hsnDataFull = (await import('../hsn-codes-full.json')).default
+  _hsnCodesCache = hsnDataFull as HSNCode[]
+  return _hsnCodesCache
+}
 
-// Export the full HSN codes array
-export const HSN_CODES: HSNCode[] = HSN_CODES_FULL
-
-// Helper function to get category from chapter code
 export function getChapterCategory(code: string): string {
   const chapter = code.substring(0, 2)
   return CHAPTER_CATEGORIES[chapter] || 'Other'
 }
 
-// Helper function to get default GST rate from chapter code
 export function getChapterGstRate(code: string): number {
   const chapter = code.substring(0, 2)
   return CHAPTER_GST_RATES[chapter] ?? 18
 }
 
-// Search HSN codes by query (code or description) with indexed approach
-export function searchHSNCodes(query: string, limit: number = 50): HSNCode[] {
-  const searchTerm = query.toLowerCase().trim()
-
-  if (!searchTerm) {
-    return HSN_CODES.filter(h => h.code.length <= 4).slice(0, limit)
-  }
-
-  if (searchTerm.length < 2) {
-    return HSN_CODES.filter(h => h.code.startsWith(searchTerm)).slice(0, limit)
-  }
-
-  const isNumeric = /^\d+$/.test(searchTerm)
+function searchByNumericCode(
+  hsnData: HSNCode[],
+  searchTerm: string,
+  limit: number
+): HSNCode[] {
   const results: HSNCode[] = []
   const seen = new Set<string>()
 
@@ -100,75 +82,101 @@ export function searchHSNCodes(query: string, limit: number = 50): HSNCode[] {
     }
   }
 
-  if (isNumeric) {
-    for (const h of HSN_CODES) {
-      if (h.code === searchTerm) add(h)
-      if (results.length >= limit) return results
-    }
-    for (const h of HSN_CODES) {
-      if (h.code.startsWith(searchTerm)) add(h)
-      if (results.length >= limit) return results
-    }
-    for (const h of HSN_CODES) {
-      if (h.code.includes(searchTerm)) add(h)
-      if (results.length >= limit) return results
-    }
-  } else {
-    const words = searchTerm.split(/\s+/).filter(w => w.length >= 2)
-    if (words.length === 0) return results
-
-    const scored: Array<{ hsn: HSNCode; score: number }> = []
-
-    for (const h of HSN_CODES) {
-      const desc = h.description.toLowerCase()
-      const cat = (h.category || "").toLowerCase()
-      const allMatch = words.every(w => desc.includes(w) || cat.includes(w))
-      if (!allMatch) continue
-
-      let score = 0
-      if (desc.startsWith(words[0])) score += 100
-      if (desc === searchTerm) score += 200
-      for (const w of words) {
-        const idx = desc.indexOf(w)
-        if (idx === 0) score += 50
-        else if (idx > 0) score += 20
-        if (cat.includes(w)) score += 10
-      }
-      score += Math.max(0, 20 - h.code.length)
-      scored.push({ hsn: h, score })
-    }
-
-    scored.sort((a, b) => b.score - a.score)
-    for (const s of scored) {
-      add(s.hsn)
-      if (results.length >= limit) break
-    }
+  for (const h of hsnData) {
+    if (h.code === searchTerm) add(h)
+    if (results.length >= limit) return results
   }
-
+  for (const h of hsnData) {
+    if (h.code.startsWith(searchTerm)) add(h)
+    if (results.length >= limit) return results
+  }
+  for (const h of hsnData) {
+    if (h.code.includes(searchTerm)) add(h)
+    if (results.length >= limit) return results
+  }
   return results
 }
 
-// Get all unique categories
+function searchByDescription(
+  hsnData: HSNCode[],
+  searchTerm: string,
+  limit: number
+): HSNCode[] {
+  const words = searchTerm.split(/\s+/).filter(w => w.length >= 2)
+  if (words.length === 0) return []
+
+  const scored: Array<{ hsn: HSNCode; score: number }> = []
+
+  for (const h of hsnData) {
+    const desc = h.description.toLowerCase()
+    const cat = (h.category || "").toLowerCase()
+    const allMatch = words.every(w => desc.includes(w) || cat.includes(w))
+    if (!allMatch) continue
+
+    let score = 0
+    if (desc.startsWith(words[0])) score += 100
+    if (desc === searchTerm) score += 200
+    for (const w of words) {
+      const idx = desc.indexOf(w)
+      if (idx === 0) score += 50
+      else if (idx > 0) score += 20
+      if (cat.includes(w)) score += 10
+    }
+    score += Math.max(0, 20 - h.code.length)
+    scored.push({ hsn: h, score })
+  }
+
+  scored.sort((a, b) => b.score - a.score)
+
+  const results: HSNCode[] = []
+  const seen = new Set<string>()
+  for (const s of scored) {
+    if (!seen.has(s.hsn.code)) {
+      seen.add(s.hsn.code)
+      results.push(s.hsn)
+    }
+    if (results.length >= limit) break
+  }
+  return results
+}
+
+export async function searchHSNCodes(query: string, limit: number = 50): Promise<HSNCode[]> {
+  const HSN_DATA = await loadHSNCodes()
+  const searchTerm = query.toLowerCase().trim()
+
+  if (!searchTerm) {
+    return HSN_DATA.filter(h => h.code.length <= 4).slice(0, limit)
+  }
+
+  if (searchTerm.length < 2) {
+    return HSN_DATA.filter(h => h.code.startsWith(searchTerm)).slice(0, limit)
+  }
+
+  const isNumeric = /^\d+$/.test(searchTerm)
+  return isNumeric
+    ? searchByNumericCode(HSN_DATA, searchTerm, limit)
+    : searchByDescription(HSN_DATA, searchTerm, limit)
+}
+
 export function getHSNCategories(): string[] {
   return Object.values(CHAPTER_CATEGORIES).sort()
 }
 
-// Get HSN codes by category
-export function getHSNCodesByCategory(category: string): HSNCode[] {
-  return HSN_CODES.filter(hsn => hsn.category === category)
+export async function getHSNCodesByCategory(category: string): Promise<HSNCode[]> {
+  const HSN_DATA = await loadHSNCodes()
+  return HSN_DATA.filter(hsn => hsn.category === category)
 }
 
-// Get a specific HSN code
-export function getHSNCode(code: string): HSNCode | undefined {
-  return HSN_CODES.find(hsn => hsn.code === code)
+export async function getHSNCode(code: string): Promise<HSNCode | undefined> {
+  const HSN_DATA = await loadHSNCodes()
+  return HSN_DATA.find(hsn => hsn.code === code)
 }
 
-// Get HSN codes by chapter (2-digit code)
-export function getHSNCodesByChapter(chapter: string): HSNCode[] {
-  return HSN_CODES.filter(hsn => hsn.code.startsWith(chapter))
+export async function getHSNCodesByChapter(chapter: string): Promise<HSNCode[]> {
+  const HSN_DATA = await loadHSNCodes()
+  return HSN_DATA.filter(hsn => hsn.code.startsWith(chapter))
 }
 
-// Get all chapter codes with their categories
 export function getAllChapters(): { code: string; category: string; gstRate: number }[] {
   return Object.entries(CHAPTER_CATEGORIES).map(([code, category]) => ({
     code,
@@ -177,7 +185,3 @@ export function getAllChapters(): { code: string; category: string; gstRate: num
   }))
 }
 
-// Search with smart matching (handles partial codes and descriptions)
-export function smartSearchHSN(query: string, limit: number = 30): HSNCode[] {
-  return searchHSNCodes(query, limit)
-}

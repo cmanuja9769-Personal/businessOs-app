@@ -252,14 +252,14 @@ export function PurchaseEditor({ purchase }: PurchaseEditorProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[250px]">Item</TableHead>
-                  <TableHead className="w-[100px]">HSN</TableHead>
-                  <TableHead className="w-[100px]">Qty</TableHead>
-                  <TableHead className="w-[120px]">Rate</TableHead>
-                  <TableHead className="w-[120px]">Discount</TableHead>
-                  <TableHead className="w-[100px]">Tax %</TableHead>
-                  <TableHead className="w-[120px]">Amount</TableHead>
-                  <TableHead className="w-[60px]"></TableHead>
+                  <TableHead className="w-[15.625rem]">Item</TableHead>
+                  <TableHead className="w-[6.25rem]">HSN</TableHead>
+                  <TableHead className="w-[6.25rem]">Qty</TableHead>
+                  <TableHead className="w-[7.5rem]">Rate</TableHead>
+                  <TableHead className="w-[7.5rem]">Discount</TableHead>
+                  <TableHead className="w-[6.25rem]">Tax %</TableHead>
+                  <TableHead className="w-[7.5rem]">Amount</TableHead>
+                  <TableHead className="w-[3.75rem]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

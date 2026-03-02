@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, StyleProp, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ViewStyle, StyleProp, TouchableOpacity, Text } from 'react-native';
 import { useTheme } from '@contexts/ThemeContext';
 
 interface CardProps {
@@ -9,6 +9,20 @@ interface CardProps {
   variant?: 'default' | 'elevated' | 'outlined' | 'glass';
   onPress?: () => void;
   disabled?: boolean;
+}
+
+type TrendDirection = 'up' | 'down' | 'neutral';
+
+function getTrendColor(trend: TrendDirection, successColor: string, errorColor: string, neutralColor: string): string {
+  if (trend === 'up') return successColor;
+  if (trend === 'down') return errorColor;
+  return neutralColor;
+}
+
+function getTrendIcon(trend: TrendDirection): string {
+  if (trend === 'up') return '↑';
+  if (trend === 'down') return '↓';
+  return '→';
 }
 
 export default function Card({ 
@@ -101,12 +115,14 @@ export function MetricCard({
   label: string;
   value: string | number;
   icon?: React.ReactNode;
-  trend?: 'up' | 'down' | 'neutral';
+  trend?: TrendDirection;
   trendLabel?: string;
   onPress?: () => void;
   color?: string;
 }) {
-  const { colors, typography, spacing, borderRadius, shadows } = useTheme();
+  const { colors, borderRadius, shadows } = useTheme();
+  const trendColor = trend ? getTrendColor(trend, colors.success, colors.error, colors.textSecondary) : colors.textSecondary;
+  const trendIcon = trend ? getTrendIcon(trend) : '→';
 
   return (
     <TouchableOpacity 
@@ -158,13 +174,9 @@ export function MetricCard({
           <View style={styles.trendContainer}>
             <Text style={[
               styles.trendText,
-              { 
-                color: trend === 'up' ? colors.success : 
-                       trend === 'down' ? colors.error : 
-                       colors.textSecondary 
-              }
+              { color: trendColor }
             ]}>
-              {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'} {trendLabel}
+              {trendIcon} {trendLabel}
             </Text>
           </View>
         )}
@@ -172,9 +184,6 @@ export function MetricCard({
     </TouchableOpacity>
   );
 }
-
-// Text component imported for MetricCard
-import { Text } from 'react-native';
 
 const styles = StyleSheet.create({
   metricCard: {

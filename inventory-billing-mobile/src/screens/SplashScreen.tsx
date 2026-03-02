@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,22 +17,20 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
-  // Track if animation is finishing to disable touch
-  const [isFadingOut, setIsFadingOut] = useState(false);
-  
-  // Animation values
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoRotate = useRef(new Animated.Value(0)).current;
-  const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleTranslateY = useRef(new Animated.Value(30)).current;
-  const subtitleOpacity = useRef(new Animated.Value(0)).current;
-  const subtitleTranslateY = useRef(new Animated.Value(20)).current;
-  const circleScale1 = useRef(new Animated.Value(0)).current;
-  const circleScale2 = useRef(new Animated.Value(0)).current;
-  const circleScale3 = useRef(new Animated.Value(0)).current;
-  const loaderOpacity = useRef(new Animated.Value(0)).current;
-  const loaderWidth = useRef(new Animated.Value(0)).current;
-  const fadeOut = useRef(new Animated.Value(1)).current;
+  const [, setIsFadingOut] = useState(false);
+
+  const logoScale = useMemo(() => new Animated.Value(0), []);
+  const logoRotate = useMemo(() => new Animated.Value(0), []);
+  const titleOpacity = useMemo(() => new Animated.Value(0), []);
+  const titleTranslateY = useMemo(() => new Animated.Value(30), []);
+  const subtitleOpacity = useMemo(() => new Animated.Value(0), []);
+  const subtitleTranslateY = useMemo(() => new Animated.Value(20), []);
+  const circleScale1 = useMemo(() => new Animated.Value(0), []);
+  const circleScale2 = useMemo(() => new Animated.Value(0), []);
+  const circleScale3 = useMemo(() => new Animated.Value(0), []);
+  const loaderOpacity = useMemo(() => new Animated.Value(0), []);
+  const loaderWidth = useMemo(() => new Animated.Value(0), []);
+  const fadeOut = useMemo(() => new Animated.Value(1), []);
 
   useEffect(() => {
     // Sequence of animations

@@ -1,6 +1,7 @@
 // Stock Adjustment Management
 
 import { createClient } from "@/lib/supabase/server"
+import { logStockMovement } from "@/lib/stock-management"
 
 export interface AdjustmentData {
   itemId: string
@@ -8,6 +9,7 @@ export interface AdjustmentData {
   adjustmentType: "increase" | "decrease"
   reason: "damage" | "theft" | "found" | "correction" | "opening_balance" | "expired" | "other"
   batchId?: string
+  warehouseId?: string
   notes?: string
 }
 
@@ -19,9 +21,22 @@ export async function createAdjustment(
 ) {
   const supabase = await createClient()
 
-  const { count } = await supabase.from("stock_adjustments").select("*", { count: "exact", head: true })
+  const { data: lastAdj } = await supabase
+    .from("stock_adjustments")
+    .select("adjustment_no")
+    .like("adjustment_no", "ADJ-%")
+    .order("created_at", { ascending: false })
+    .limit(1)
 
-  const adjustmentNo = `ADJ-${Date.now()}-${((count || 0) + 1).toString().padStart(4, "0")}`
+  let nextNum = 1
+  if (lastAdj && lastAdj.length > 0) {
+    const lastNo = (lastAdj[0] as Record<string, unknown>).adjustment_no as string
+    const parts = lastNo.split("-")
+    const parsed = parseInt(parts[parts.length - 1], 10)
+    if (!isNaN(parsed)) nextNum = parsed + 1
+  }
+
+  const adjustmentNo = `ADJ-${Date.now()}-${nextNum.toString().padStart(4, "0")}`
 
   const insertData: Record<string, unknown> = {
     organization_id: organizationId,
@@ -52,6 +67,26 @@ export async function createAdjustment(
     return { success: false, error: error.message }
   }
 
+  if (status === "approved") {
+    const stockQuantity = data.adjustmentType === "increase" ? data.quantity : -data.quantity
+    const movementResult = await logStockMovement({
+      itemId: data.itemId,
+      organizationId,
+      warehouseId: data.warehouseId,
+      transactionType: "ADJUSTMENT",
+      entryQuantity: stockQuantity,
+      entryUnit: "PCS",
+      referenceType: "adjustment",
+      referenceId: adjustment.id,
+      referenceNo: adjustmentNo,
+      notes: `Stock ${data.adjustmentType}: ${data.reason}${data.notes ? ` - ${data.notes}` : ""}`,
+    }, userId)
+
+    if (!movementResult.success) {
+      return { success: false, error: movementResult.error || "Failed to update stock" }
+    }
+  }
+
   return { success: true, adjustment }
 }
 
@@ -80,6 +115,26 @@ export async function approveAdjustment(adjustmentId: string, userId: string) {
   if (updateError) {
     console.error("[v0] Error approving adjustment:", updateError)
     return { success: false, error: updateError.message }
+  }
+
+  const stockQuantity = adjustment.adjustment_type === "increase"
+    ? adjustment.quantity
+    : -adjustment.quantity
+
+  const movementResult = await logStockMovement({
+    itemId: adjustment.item_id,
+    organizationId: adjustment.organization_id,
+    transactionType: "ADJUSTMENT",
+    entryQuantity: stockQuantity,
+    entryUnit: "PCS",
+    referenceType: "adjustment",
+    referenceId: adjustmentId,
+    referenceNo: adjustment.adjustment_no,
+    notes: `Approved adjustment: ${adjustment.reason}`,
+  }, userId)
+
+  if (!movementResult.success) {
+    return { success: false, error: movementResult.error || "Failed to update stock" }
   }
 
   return { success: true }

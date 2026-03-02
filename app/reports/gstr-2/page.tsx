@@ -75,13 +75,13 @@ export default function GSTR2Page() {
             supplierGstin: pur.supplierGstin || 'N/A',
             placeOfSupply: pur.placeOfSupply || pur.state || 'N/A',
             invoiceType: 'B2B',
-            taxableValue: pur.subtotal || 0,
-            cgst: isInterState ? 0 : (pur.cgst || (pur.totalTax ?? 0) / 2 || 0),
-            sgst: isInterState ? 0 : (pur.sgst || (pur.totalTax ?? 0) / 2 || 0),
-            igst: isInterState ? (pur.igst || pur.totalTax || 0) : 0,
-            cess: pur.cess || 0,
-            totalTax: pur.totalTax || 0,
-            invoiceValue: pur.total || 0,
+            taxableValue: pur.subtotal ?? 0,
+            cgst: isInterState ? 0 : (pur.cgst ?? (pur.totalTax ?? 0) / 2),
+            sgst: isInterState ? 0 : (pur.sgst ?? (pur.totalTax ?? 0) / 2),
+            igst: isInterState ? (pur.igst ?? pur.totalTax ?? 0) : 0,
+            cess: pur.cess ?? 0,
+            totalTax: pur.totalTax ?? 0,
+            invoiceValue: pur.total ?? 0,
             itcEligible: pur.supplierGstin && pur.supplierGstin.length === 15
           }
         })
@@ -346,7 +346,7 @@ export default function GSTR2Page() {
                       <TableRow key={e.id}>
                         <TableCell className="font-mono">{e.purchaseNo}</TableCell>
                         <TableCell>{format(new Date(e.purchaseDate), 'dd/MM/yy')}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{e.supplierName}</TableCell>
+                        <TableCell className="max-w-[9.375rem] truncate">{e.supplierName}</TableCell>
                         <TableCell className="font-mono text-xs">{e.supplierGstin}</TableCell>
                         <TableCell className="text-right">{formatCurrency(e.taxableValue)}</TableCell>
                         <TableCell className="text-right">{e.cgst > 0 ? formatCurrency(e.cgst) : '-'}</TableCell>

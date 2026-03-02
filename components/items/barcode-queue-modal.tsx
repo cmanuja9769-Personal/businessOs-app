@@ -38,8 +38,6 @@ import {
   getLayoutById,
 } from "@/lib/label-layouts"
 import { translateToHindi } from "@/lib/translate"
-import { pdf } from "@react-pdf/renderer"
-import { BarcodePDFDocument } from "@/components/pdf/barcode-pdf-document"
 import { cn } from "@/lib/utils"
 import { logBarcodePrint } from "@/app/barcode-logs/actions"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
@@ -175,6 +173,8 @@ export function BarcodeQueueModal({ logoUrl }: BarcodeQueueModalProps) {
     if (queue.length === 0) return
     setIsGenerating(true)
     try {
+      const { pdf } = await import("@react-pdf/renderer")
+      const { BarcodePDFDocument } = await import("@/components/pdf/barcode-pdf-document")
       const blob = await pdf(
         <BarcodePDFDocument
           queue={queue}
@@ -219,6 +219,8 @@ export function BarcodeQueueModal({ logoUrl }: BarcodeQueueModalProps) {
     if (queue.length === 0) return
     setIsGenerating(true)
     try {
+      const { pdf } = await import("@react-pdf/renderer")
+      const { BarcodePDFDocument } = await import("@/components/pdf/barcode-pdf-document")
       const blob = await pdf(
         <BarcodePDFDocument
           queue={queue}

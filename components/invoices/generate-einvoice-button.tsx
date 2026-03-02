@@ -77,7 +77,7 @@ export function GenerateEInvoiceButton({
   const handleGenerateEInvoice = async () => {
     setIsGenerating(true);
     try {
-      const result = await generateEInvoice(invoiceId, "default-org");
+      const result = await generateEInvoice(invoiceId);
 
       if (result.success) {
         toast.success("E-Invoice generated successfully! IRN received.");

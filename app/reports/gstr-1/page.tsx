@@ -64,23 +64,27 @@ export default function GSTR1Page() {
           return invDate >= monthStart && invDate <= monthEnd
         })
         .map((inv: ApiInvoiceResponse) => {
-          const hasGstin = inv.customerGstin && inv.customerGstin.length === 15
-          const isInterState = inv.placeOfSupply !== inv.stateCode
+          const hasGstin = !!inv.customerGstin && inv.customerGstin.length === 15
+          const cgstVal = inv.cgst || 0
+          const sgstVal = inv.sgst || 0
+          const igstVal = inv.igst || 0
+          const cessVal = inv.cess || 0
+          const totalTaxVal = inv.totalTax || (cgstVal + sgstVal + igstVal + cessVal)
           
           return {
             id: inv.id,
             invoiceNo: inv.invoiceNo,
             invoiceDate: inv.invoiceDate,
             customerName: inv.customerName,
-            customerGstin: inv.customerGstin || 'N/A',
+            customerGstin: inv.customerGstin || inv.customerGst || 'N/A',
             placeOfSupply: inv.placeOfSupply || inv.state || 'N/A',
             invoiceType: hasGstin ? 'B2B' : 'B2C',
             taxableValue: inv.subtotal || 0,
-            cgst: isInterState ? 0 : (inv.cgst || (inv.totalTax ?? 0) / 2 || 0),
-            sgst: isInterState ? 0 : (inv.sgst || (inv.totalTax ?? 0) / 2 || 0),
-            igst: isInterState ? (inv.igst || inv.totalTax || 0) : 0,
-            cess: inv.cess || 0,
-            totalTax: inv.totalTax || 0,
+            cgst: cgstVal,
+            sgst: sgstVal,
+            igst: igstVal,
+            cess: cessVal,
+            totalTax: totalTaxVal,
             invoiceValue: inv.total || 0
           }
         })
@@ -429,7 +433,7 @@ export default function GSTR1Page() {
                       <TableRow key={e.id}>
                         <TableCell className="font-mono">{e.invoiceNo}</TableCell>
                         <TableCell>{format(new Date(e.invoiceDate), 'dd/MM/yy')}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{e.customerName}</TableCell>
+                        <TableCell className="max-w-[9.375rem] truncate">{e.customerName}</TableCell>
                         <TableCell className="font-mono text-xs">{e.customerGstin}</TableCell>
                         <TableCell>
                           <Badge variant={e.invoiceType === 'B2B' ? 'default' : 'secondary'}>

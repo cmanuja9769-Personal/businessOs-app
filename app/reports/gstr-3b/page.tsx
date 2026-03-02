@@ -89,10 +89,9 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
       let b2bTaxable = 0, b2cTaxable = 0
 
         monthInvoices.forEach((inv: ApiInvoiceResponse) => {
-        const hasGstin = inv.customerGstin && inv.customerGstin.length === 15
-        const isInterState = inv.placeOfSupply !== inv.stateCode
+        const gstin = inv.customerGstin || inv.customerGst || ''
+        const hasGstin = gstin.length === 15
         const taxable = inv.subtotal || 0
-        const tax = inv.totalTax || 0
 
         if (hasGstin) {
           b2bTaxable += taxable
@@ -100,12 +99,9 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
           b2cTaxable += taxable
         }
 
-        if (isInterState) {
-          outwardIgst += tax
-        } else {
-          outwardCgst += tax / 2
-          outwardSgst += tax / 2
-        }
+        outwardCgst += inv.cgst || 0
+        outwardSgst += inv.sgst || 0
+        outwardIgst += inv.igst || 0
         outwardCess += inv.cess || 0
       })
 
@@ -115,20 +111,19 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
 
         monthPurchases.forEach((pur: ApiPurchaseResponse) => {
         const hasGstin = pur.supplierGstin && pur.supplierGstin.length === 15
-        if (!hasGstin) return // ITC only for registered suppliers
+        if (!hasGstin) return
 
-        const isInterState = pur.placeOfSupply !== pur.stateCode
         const tax = pur.totalTax || 0
+        inwardCgst += pur.cgst || 0
+        inwardSgst += pur.sgst || 0
+        inwardIgst += pur.igst || 0
+        inwardCess += pur.cess || 0
 
-        if (isInterState) {
-          inwardIgst += tax
+        if (pur.igst && pur.igst > 0) {
           interStateItc += tax
         } else {
-          inwardCgst += tax / 2
-          inwardSgst += tax / 2
           intraStateItc += tax
         }
-        inwardCess += pur.cess || 0
       })
 
       // Calculate tax payable
@@ -196,6 +191,30 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
     return options
   }
 
+  const exportToCSV = () => {
+    if (!data) return
+    const monthLabel = format(new Date(month + '-01'), 'MMMM yyyy')
+    const lines = [
+      `GSTR-3B Summary - ${monthLabel}`,
+      '',
+      'Section,Description,CGST,SGST,IGST,Cess,Total',
+      `3.1,B2B Taxable Value,,,,,${data.outwardSupplies.b2bTaxable.toFixed(2)}`,
+      `3.1,B2C Taxable Value,,,,,${data.outwardSupplies.b2cTaxable.toFixed(2)}`,
+      `3.1,Total Outward Tax,${data.outwardSupplies.cgst.toFixed(2)},${data.outwardSupplies.sgst.toFixed(2)},${data.outwardSupplies.igst.toFixed(2)},${data.outwardSupplies.cess.toFixed(2)},${data.outwardSupplies.totalTax.toFixed(2)}`,
+      '',
+      `4,Inter-State ITC,,,,,${data.inwardSupplies.interStateItc.toFixed(2)}`,
+      `4,Intra-State ITC,,,,,${data.inwardSupplies.intraStateItc.toFixed(2)}`,
+      `4,Total ITC,${data.inwardSupplies.cgstItc.toFixed(2)},${data.inwardSupplies.sgstItc.toFixed(2)},${data.inwardSupplies.igstItc.toFixed(2)},${data.inwardSupplies.cessItc.toFixed(2)},${data.inwardSupplies.totalItc.toFixed(2)}`,
+      '',
+      `6.1,Tax Payable,${data.taxPayable.cgst.toFixed(2)},${data.taxPayable.sgst.toFixed(2)},${data.taxPayable.igst.toFixed(2)},${data.taxPayable.cess.toFixed(2)},${data.taxPayable.total.toFixed(2)}`
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `gstr3b-${month}.csv`
+    link.click()
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
@@ -215,7 +234,7 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button onClick={exportToCSV} variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

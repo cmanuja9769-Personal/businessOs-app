@@ -26,7 +26,13 @@ interface Purchase {
   id: string
   purchaseNo: string
   supplierName: string
+  supplierGstin?: string
   date: string
+  subtotal?: number
+  cgst?: number
+  sgst?: number
+  igst?: number
+  totalTax?: number
   total: number
   paidAmount: number
   balance: number
@@ -81,7 +87,11 @@ export default function PurchaseReportPage() {
     total: acc.total + pur.total,
     paid: acc.paid + pur.paidAmount,
     balance: acc.balance + pur.balance,
-  }), { total: 0, paid: 0, balance: 0 })
+    taxable: acc.taxable + (pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0)),
+    cgst: acc.cgst + (pur.cgst || 0),
+    sgst: acc.sgst + (pur.sgst || 0),
+    igst: acc.igst + (pur.igst || 0),
+  }), { total: 0, paid: 0, balance: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0 })
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -98,11 +108,16 @@ export default function PurchaseReportPage() {
   }
 
   const exportToCSV = () => {
-    const headers = ['PO Number', 'Supplier', 'Date', 'Total', 'Paid', 'Balance', 'Status']
+    const headers = ['PO Number', 'Supplier', 'GSTIN', 'Date', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Paid', 'Balance', 'Status']
     const rows = filteredPurchases.map(pur => [
       pur.purchaseNo,
       pur.supplierName,
+      pur.supplierGstin || '',
       format(new Date(pur.date), 'dd/MM/yyyy'),
+      (pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0)).toFixed(2),
+      (pur.cgst || 0).toFixed(2),
+      (pur.sgst || 0).toFixed(2),
+      (pur.igst || 0).toFixed(2),
       pur.total.toFixed(2),
       pur.paidAmount.toFixed(2),
       pur.balance.toFixed(2),
@@ -173,6 +188,8 @@ export default function PurchaseReportPage() {
             <th>PO Number</th>
             <th>Supplier</th>
             <th>Date</th>
+            <th style={{ textAlign: 'right' }}>Taxable</th>
+            <th style={{ textAlign: 'right' }}>GST</th>
             <th style={{ textAlign: 'right' }}>Total</th>
             <th style={{ textAlign: 'right' }}>Paid</th>
             <th style={{ textAlign: 'right' }}>Balance</th>
@@ -186,6 +203,8 @@ export default function PurchaseReportPage() {
               <td>{pur.purchaseNo}</td>
               <td>{pur.supplierName}</td>
               <td>{format(new Date(pur.date), 'dd/MM/yyyy')}</td>
+              <td style={{ textAlign: 'right' }}>{formatCurrency(pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0))}</td>
+              <td style={{ textAlign: 'right' }}>{formatCurrency((pur.cgst || 0) + (pur.sgst || 0) + (pur.igst || 0))}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(pur.total)}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(pur.paidAmount)}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(pur.balance)}</td>
@@ -196,6 +215,8 @@ export default function PurchaseReportPage() {
         <tfoot>
           <tr className="totals-row">
             <td colSpan={4} style={{ textAlign: 'right', fontWeight: 'bold' }}>TOTAL:</td>
+            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(totals.taxable)}</td>
+            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(totals.cgst + totals.sgst + totals.igst)}</td>
             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(totals.total)}</td>
             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(totals.paid)}</td>
             <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{formatCurrency(totals.balance)}</td>
@@ -371,6 +392,8 @@ export default function PurchaseReportPage() {
                     <TableHead>PO Number</TableHead>
                     <TableHead>Supplier</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Taxable</TableHead>
+                    <TableHead className="text-right">GST</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right">Paid</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
@@ -380,7 +403,7 @@ export default function PurchaseReportPage() {
                 <TableBody>
                   {filteredPurchases.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                         No purchase orders found for the selected filters
                       </TableCell>
                     </TableRow>
@@ -390,6 +413,8 @@ export default function PurchaseReportPage() {
                         <TableCell className="font-mono">{pur.purchaseNo}</TableCell>
                         <TableCell>{pur.supplierName}</TableCell>
                         <TableCell>{format(new Date(pur.date), 'dd MMM yyyy')}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0))}</TableCell>
+                        <TableCell className="text-right">{formatCurrency((pur.cgst || 0) + (pur.sgst || 0) + (pur.igst || 0))}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(pur.total)}</TableCell>
                         <TableCell className="text-right text-green-600">{formatCurrency(pur.paidAmount)}</TableCell>
                         <TableCell className="text-right text-red-600">{formatCurrency(pur.balance)}</TableCell>

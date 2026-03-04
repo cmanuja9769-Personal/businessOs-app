@@ -34,15 +34,39 @@ export interface IRNResponse {
  * This is a placeholder - integrate with actual GST e-invoice system
  */
 export async function generateIRN(invoiceData: EInvoiceData): Promise<IRNResponse> {
-  
-  const irn = `IRN-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
-  const qrCode = await generateQRCode(invoiceData, irn)
-  
+  const apiUrl = process.env.IRP_API_URL
+  const apiKey = process.env.IRP_API_KEY
+
+  if (!apiUrl || !apiKey) {
+    throw new Error("E-Invoice API not configured. Set IRP_API_URL and IRP_API_KEY environment variables.")
+  }
+
+  const payload = formatForEInvoiceAPI(invoiceData)
+
+  const response = await fetch(`${apiUrl}/eicore/dec/v1.03/Invoice`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+      "client-id": process.env.IRP_CLIENT_ID ?? "",
+      "client-secret": process.env.IRP_CLIENT_SECRET ?? "",
+      "gstin": process.env.IRP_GSTIN ?? "",
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    throw new Error(`IRP API error (${response.status}): ${errorBody}`)
+  }
+
+  const result = await response.json()
+
   return {
-    irn,
-    qrCode,
-    ackNo: `ACK-${Date.now()}`,
-    ackDate: new Date(),
+    irn: result.Irn ?? result.irn,
+    qrCode: result.SignedQRCode ?? result.qrCode ?? "",
+    ackNo: String(result.AckNo ?? result.ackNo ?? ""),
+    ackDate: new Date(result.AckDt ?? result.ackDate ?? new Date()),
   }
 }
 

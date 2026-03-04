@@ -18,6 +18,7 @@ export function usePermissions() {
     invoices: { create: false, read: false, update: false, delete: false },
     purchases: { create: false, read: false, update: false, delete: false },
     customers: { create: false, read: false, update: false, delete: false },
+    suppliers: { create: false, read: false, update: false, delete: false },
     items: { create: false, read: false, update: false, delete: false },
     reports: { create: false, read: false, update: false, delete: false },
     settings: { create: false, read: false, update: false, delete: false },

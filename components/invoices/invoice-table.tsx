@@ -14,8 +14,9 @@ import { Plus, Trash2, Barcode } from "lucide-react";
 import type { IItem, IInvoiceItem, BillingMode, PricingMode, PackingType, PackagingUnit } from "@/types";
 import type { LightweightItem } from "@/app/items/lightweight-actions";
 import { calculateItemAmount } from "@/lib/invoice-calculations";
-import { useEffect, useRef, useState } from "react";
-import { ItemSelect } from "@/components/items/item-select";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { AsyncItemSelect } from "@/components/items/async-item-select";
+import { searchItemsForInvoice } from "@/app/items/lightweight-actions";
 import { toast } from "sonner";
 
 type InvoiceItem = IItem | LightweightItem;
@@ -135,6 +136,7 @@ interface InvoiceTableProps {
   items: InvoiceItem[];
   invoiceItems: IInvoiceItem[];
   onItemsChange: (items: IInvoiceItem[]) => void;
+  onItemsPoolChange?: (items: InvoiceItem[]) => void;
   billingMode: BillingMode;
   pricingMode: PricingMode;
   packingType: PackingType;
@@ -148,6 +150,7 @@ export function InvoiceTable({
   items,
   invoiceItems,
   onItemsChange,
+  onItemsPoolChange,
   billingMode,
   pricingMode,
   packingType,
@@ -279,13 +282,24 @@ export function InvoiceTable({
     toast.success(`Added ${item.name} to invoice`);
   };
 
-  const handleBarcodeSubmit = (e: React.FormEvent) => {
+  const handleBarcodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!barcodeInput.trim()) return;
 
-    const item = items.find(
+    let item = items.find(
       (i) => i.barcodeNo === barcodeInput.trim() || i.itemCode === barcodeInput.trim()
     );
+
+    if (!item) {
+      const serverResults = await searchItemsForInvoice(barcodeInput.trim(), 1);
+      if (serverResults.length > 0) {
+        const found = serverResults[0];
+        if (found.barcodeNo === barcodeInput.trim() || found.itemCode === barcodeInput.trim()) {
+          item = found;
+          onItemsPoolChange?.([...items, found]);
+        }
+      }
+    }
 
     if (!item) {
       toast.error(`No item found with barcode: ${barcodeInput}`);
@@ -350,9 +364,18 @@ export function InvoiceTable({
     onItemsChange(updatedItems);
   };
 
+  const handleItemsFetched = useCallback((fetched: InvoiceItem[]) => {
+    if (onItemsPoolChange) {
+      const existingIds = new Set(items.map((i) => i.id));
+      const newItems = fetched.filter((i) => !existingIds.has(i.id));
+      if (newItems.length > 0) {
+        onItemsPoolChange([...items, ...newItems]);
+      }
+    }
+  }, [items, onItemsPoolChange]);
+
   return (
     <div className="space-y-4">
-      {/* Barcode Scanner Input */}
       <form onSubmit={handleBarcodeSubmit} className="flex gap-2 p-4 bg-muted/50 rounded-lg border-2 border-dashed border-primary/20">
         <div className="flex-1 relative">
           <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -371,38 +394,39 @@ export function InvoiceTable({
         </Button>
       </form>
 
-      <div className="overflow-x-auto">
-        <Table>
+      <div className="overflow-x-auto -mx-2 sm:-mx-4">
+        <div className="min-w-[50rem] px-2 sm:px-4">
+        <Table containerClassName="overflow-visible border-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-62.5">Item</TableHead>
+              <TableHead className="w-[15rem]">Item</TableHead>
               {customField1Enabled && (
-                <TableHead className="w-30">{customField1Label}</TableHead>
+                <TableHead className="w-28">{customField1Label}</TableHead>
               )}
               {customField2Enabled && (
-                <TableHead className="w-30">{customField2Label}</TableHead>
+                <TableHead className="w-28">{customField2Label}</TableHead>
               )}
-              <TableHead className="w-25">Quantity</TableHead>
+              <TableHead className="w-24">Quantity</TableHead>
               <TableHead className="w-20">Unit</TableHead>
-              <TableHead className="w-30">Rate</TableHead>
+              <TableHead className="w-28">Rate</TableHead>
               {billingMode === "gst" && (
                 <TableHead className="w-20">GST %</TableHead>
               )}
-              <TableHead className="w-25">Discount %</TableHead>
-              
-              <TableHead className="w-30">Amount</TableHead>
-              <TableHead className="w-15"></TableHead>
+              <TableHead className="w-24">Discount %</TableHead>
+              <TableHead className="w-28">Amount</TableHead>
+              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {invoiceItems.map((invoiceItem, index) => (
               <TableRow key={index}>
                 <TableCell>
-                  <ItemSelect
+                  <AsyncItemSelect
                     items={items}
                     value={invoiceItem.itemId}
                     onValueChange={(value) => updateRow(index, "itemId", value)}
                     placeholder="Select item"
+                    onItemsFetched={handleItemsFetched}
                   />
                 </TableCell>
                  {customField1Enabled && (
@@ -522,6 +546,7 @@ export function InvoiceTable({
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       <Button

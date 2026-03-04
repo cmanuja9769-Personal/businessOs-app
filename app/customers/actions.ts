@@ -40,6 +40,97 @@ export async function getCustomers(): Promise<ICustomer[]> {
   }
 }
 
+export async function searchCustomers(
+  query: string,
+  limit = 30
+): Promise<ICustomer[]> {
+  if (await isDemoMode()) {
+    if (!query.trim()) return demoCustomers.slice(0, limit)
+    const words = query.toLowerCase().trim().split(/\s+/)
+    return demoCustomers
+      .filter((c) => {
+        const text = `${c.name} ${c.contactNo} ${c.email || ""} ${c.gstinNo || ""}`.toLowerCase()
+        return words.every((w) => text.includes(w))
+      })
+      .slice(0, limit)
+  }
+
+  try {
+    const { supabase, organizationId } = await authorize("customers", "read")
+
+    let queryBuilder = supabase
+      .from("customers")
+      .select("*")
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
+
+    if (query.trim()) {
+      const searchTerm = `%${query.trim()}%`
+      queryBuilder = queryBuilder.or(
+        `name.ilike.${searchTerm},phone.ilike.${searchTerm},email.ilike.${searchTerm},gst_number.ilike.${searchTerm}`
+      )
+    }
+
+    const { data, error } = await queryBuilder
+      .order("name", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      console.error("[Customers/Search] Error:", error.message)
+      return []
+    }
+
+    return (
+      data?.map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        contactNo: customer.phone,
+        email: customer.email,
+        address: customer.address,
+        gstinNo: customer.gst_number,
+        openingBalance: 0,
+        openingDate: new Date(),
+        createdAt: new Date(customer.created_at),
+        updatedAt: new Date(customer.updated_at),
+      })) || []
+    )
+  } catch {
+    return []
+  }
+}
+
+export async function getCustomerById(id: string): Promise<ICustomer | null> {
+  if (await isDemoMode()) return demoCustomers.find((c) => c.id === id) || null
+
+  try {
+    const { supabase, organizationId } = await authorize("customers", "read")
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("id", id)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
+      .single()
+
+    if (error || !data) return null
+
+    return {
+      id: data.id,
+      name: data.name,
+      contactNo: data.phone,
+      email: data.email,
+      address: data.address,
+      gstinNo: data.gst_number,
+      openingBalance: 0,
+      openingDate: new Date(),
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function createCustomer(formData: FormData) {
   if (await isDemoMode()) throwDemoMutationError()
   const data = {

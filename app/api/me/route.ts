@@ -41,7 +41,9 @@ export async function GET() {
     .eq("user_id", user.id)
 
   const organizations =
-    orgData?.filter((row: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => row.app_organizations.length > 0).map((row: { app_organizations: { id: string; name: string; email: string; phone: string }[] }) => row.app_organizations[0]) || []
+    orgData
+      ?.map((row: Record<string, unknown>) => row.app_organizations as { id: string; name: string; email: string; phone: string } | null)
+      .filter(Boolean) ?? []
 
   return NextResponse.json({ user, userRole: roleData ?? null, organizations }, { status: 200 })
 }

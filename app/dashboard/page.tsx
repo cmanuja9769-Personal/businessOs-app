@@ -73,27 +73,11 @@ export default function DashboardPage() {
   return (
     <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-4" suppressHydrationWarning>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Dashboard</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Welcome back! Here&apos;s what&apos;s happening with your business.
-          </p>
-        </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh}
-          disabled={refreshing}
-          suppressHydrationWarning
-        >
-          {refreshing ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Refresh
-        </Button>
+      <div>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Dashboard</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Welcome back! Here&apos;s what&apos;s happening with your business.
+        </p>
       </div>
 
       <QuickActions />
@@ -244,6 +228,23 @@ export default function DashboardPage() {
           purchasesDue={stats.purchasesDue}
           loading={loading}
         />
+      </div>
+
+      <div className="flex justify-center">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          suppressHydrationWarning
+        >
+          {refreshing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Refresh
+        </Button>
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ const SUPPLIERS_PATH = "/suppliers"
 export async function getSuppliers(): Promise<ISupplier[]> {
   if (await isDemoMode()) return demoSuppliers
   try {
-  const { supabase, organizationId } = await authorize("customers", "read")
+  const { supabase, organizationId } = await authorize("suppliers", "read")
   const { data, error } = await supabase.from("suppliers").select("*").or(orgScope(organizationId)).is("deleted_at", null).order("created_at", { ascending: false })
 
   if (error) {
@@ -49,7 +49,7 @@ export async function createSupplier(formData: FormData) {
 
   const validated = supplierSchema.parse(data)
 
-  const { supabase, organizationId } = await authorize("customers", "create")
+  const { supabase, organizationId } = await authorize("suppliers", "create")
   const { data: newSupplier, error } = await supabase
     .from("suppliers")
     .insert({
@@ -84,7 +84,7 @@ export async function updateSupplier(id: string, formData: FormData) {
 
   const validated = supplierSchema.parse(data)
 
-  const { supabase, organizationId } = await authorize("customers", "update")
+  const { supabase, organizationId } = await authorize("suppliers", "update")
   const { error } = await supabase
     .from("suppliers")
     .update({
@@ -108,7 +108,7 @@ export async function updateSupplier(id: string, formData: FormData) {
 
 export async function deleteSupplier(id: string) {
   if (await isDemoMode()) throwDemoMutationError()
-  const { supabase, organizationId } = await authorize("customers", "delete")
+  const { supabase, organizationId } = await authorize("suppliers", "delete")
   const { error } = await supabase
     .from("suppliers")
     .update({ deleted_at: new Date().toISOString() })
@@ -131,7 +131,7 @@ export async function bulkDeleteSuppliers(ids: string[]) {
     return { success: false, error: "No suppliers selected" }
   }
 
-  const { supabase, organizationId } = await authorize("customers", "delete")
+  const { supabase, organizationId } = await authorize("suppliers", "delete")
   const { error, count } = await supabase
     .from("suppliers")
     .delete()
@@ -154,7 +154,7 @@ export async function bulkDeleteSuppliers(ids: string[]) {
 
 export async function deleteAllSuppliers() {
   if (await isDemoMode()) throwDemoMutationError()
-  const { supabase, organizationId } = await authorize("customers", "delete")
+  const { supabase, organizationId } = await authorize("suppliers", "delete")
   
   const { count } = await supabase
     .from("suppliers")

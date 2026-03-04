@@ -23,12 +23,14 @@ function derivePaymentStatus(balance: number, paidAmount: number): "paid" | "par
 async function updateInvoiceBalance(
   supabase: SupabaseClient,
   invoiceId: string,
-  amountDelta: number
+  amountDelta: number,
+  organizationId: string,
 ) {
   const { data: invoice } = await supabase
     .from("invoices")
     .select(TOTAL_PAID_SELECT)
     .eq("id", invoiceId)
+    .or(orgScope(organizationId))
     .single()
 
   if (!invoice) return
@@ -44,6 +46,7 @@ async function updateInvoiceBalance(
       status: derivePaymentStatus(newBalance, newPaidAmount),
     })
     .eq("id", invoiceId)
+    .or(orgScope(organizationId))
 
   revalidatePath("/invoices")
   revalidatePath(`/invoices/${invoiceId}`)
@@ -52,12 +55,14 @@ async function updateInvoiceBalance(
 async function updatePurchaseBalance(
   supabase: SupabaseClient,
   purchaseId: string,
-  amountDelta: number
+  amountDelta: number,
+  organizationId: string,
 ) {
   const { data: purchase } = await supabase
     .from("purchases")
     .select(TOTAL_PAID_SELECT)
     .eq("id", purchaseId)
+    .or(orgScope(organizationId))
     .single()
 
   if (!purchase) return
@@ -73,6 +78,7 @@ async function updatePurchaseBalance(
       status: derivePaymentStatus(newBalance, newPaidAmount),
     })
     .eq("id", purchaseId)
+    .or(orgScope(organizationId))
 
   revalidatePath("/purchases")
   revalidatePath(`/purchases/${purchaseId}`)
@@ -82,11 +88,13 @@ async function updateCustomerOutstanding(
   supabase: SupabaseClient,
   customerId: string,
   amountDelta: number,
+  organizationId: string,
 ) {
   const { data: customer } = await supabase
     .from("customers")
     .select("outstanding_balance")
     .eq("id", customerId)
+    .or(orgScope(organizationId))
     .single()
 
   if (!customer) return
@@ -100,6 +108,7 @@ async function updateCustomerOutstanding(
       last_transaction_date: new Date().toISOString().split("T")[0],
     })
     .eq("id", customerId)
+    .or(orgScope(organizationId))
 }
 
 async function validatePaymentAmount(
@@ -107,11 +116,13 @@ async function validatePaymentAmount(
   table: "invoices" | "purchases",
   recordId: string,
   amount: number,
+  organizationId: string,
 ): Promise<string | null> {
   const { data: record } = await supabase
     .from(table)
     .select(TOTAL_PAID_SELECT)
     .eq("id", recordId)
+    .or(orgScope(organizationId))
     .single()
 
   if (!record) return null
@@ -135,15 +146,17 @@ async function applyInvoicePaymentSideEffects(
   supabase: SupabaseClient,
   invoiceId: string,
   amount: number,
+  organizationId: string,
 ) {
-  await updateInvoiceBalance(supabase, invoiceId, amount)
+  await updateInvoiceBalance(supabase, invoiceId, amount, organizationId)
   const { data: invoice } = await supabase
     .from("invoices")
     .select("customer_id")
     .eq("id", invoiceId)
+    .or(orgScope(organizationId))
     .single()
   if (invoice?.customer_id) {
-    await updateCustomerOutstanding(supabase, invoice.customer_id, -amount)
+    await updateCustomerOutstanding(supabase, invoice.customer_id, -amount, organizationId)
   }
 }
 
@@ -157,12 +170,12 @@ export async function createPayment(data: unknown) {
   const { supabase, organizationId, userId } = await authorize("invoices", "update")
 
   if (validated.invoiceId) {
-    const err = await validatePaymentAmount(supabase, "invoices", validated.invoiceId, validated.amount)
+    const err = await validatePaymentAmount(supabase, "invoices", validated.invoiceId, validated.amount, organizationId)
     if (err) return { success: false, error: err }
   }
 
   if (validated.purchaseId) {
-    const err = await validatePaymentAmount(supabase, "purchases", validated.purchaseId, validated.amount)
+    const err = await validatePaymentAmount(supabase, "purchases", validated.purchaseId, validated.amount, organizationId)
     if (err) return { success: false, error: err }
   }
 
@@ -187,11 +200,11 @@ export async function createPayment(data: unknown) {
   }
 
   if (validated.invoiceId) {
-    await applyInvoicePaymentSideEffects(supabase, validated.invoiceId, validated.amount)
+    await applyInvoicePaymentSideEffects(supabase, validated.invoiceId, validated.amount, organizationId)
   }
 
   if (validated.purchaseId) {
-    await updatePurchaseBalance(supabase, validated.purchaseId, validated.amount)
+    await updatePurchaseBalance(supabase, validated.purchaseId, validated.amount, organizationId)
   }
 
   await createJournalEntrySafe({
@@ -344,11 +357,11 @@ export async function deletePayment(id: string, invoiceId?: string, purchaseId?:
   const reverseAmount = -Number(paymentData.amount)
 
   if (invoiceId) {
-    await updateInvoiceBalance(supabase, invoiceId, reverseAmount)
+    await updateInvoiceBalance(supabase, invoiceId, reverseAmount, organizationId)
   }
 
   if (purchaseId) {
-    await updatePurchaseBalance(supabase, purchaseId, reverseAmount)
+    await updatePurchaseBalance(supabase, purchaseId, reverseAmount, organizationId)
   }
 
   revalidatePath("/payments")

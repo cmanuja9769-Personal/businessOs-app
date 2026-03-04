@@ -16,6 +16,7 @@ export interface Permissions {
   invoices: Permission
   purchases: Permission
   customers: Permission
+  suppliers: Permission
   items: Permission
   reports: Permission
   settings: Permission
@@ -29,6 +30,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permissions> = {
     invoices: { create: true, read: true, update: true, delete: true },
     purchases: { create: true, read: true, update: true, delete: true },
     customers: { create: true, read: true, update: true, delete: true },
+    suppliers: { create: true, read: true, update: true, delete: true },
     items: { create: true, read: true, update: true, delete: true },
     reports: { create: true, read: true, update: true, delete: true },
     settings: { read: true, update: true, create: false, delete: false },
@@ -39,6 +41,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permissions> = {
     invoices: { create: true, read: true, update: true, delete: false },
     purchases: { create: false, read: true, update: false, delete: false },
     customers: { create: true, read: true, update: true, delete: false },
+    suppliers: { create: false, read: true, update: false, delete: false },
     items: { create: false, read: true, update: false, delete: false },
     reports: { read: true, create: false, update: false, delete: false },
     settings: { read: false, update: false, create: false, delete: false },
@@ -49,6 +52,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permissions> = {
     invoices: { create: false, read: true, update: false, delete: false },
     purchases: { create: false, read: true, update: false, delete: false },
     customers: { create: false, read: true, update: false, delete: false },
+    suppliers: { create: false, read: true, update: false, delete: false },
     items: { create: false, read: true, update: false, delete: false },
     reports: { create: true, read: true, update: true, delete: false },
     settings: { read: false, update: false, create: false, delete: false },
@@ -59,6 +63,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permissions> = {
     invoices: { create: false, read: true, update: false, delete: false },
     purchases: { create: false, read: true, update: false, delete: false },
     customers: { create: false, read: true, update: false, delete: false },
+    suppliers: { create: false, read: true, update: false, delete: false },
     items: { create: false, read: true, update: false, delete: false },
     reports: { read: true, create: false, update: false, delete: false },
     settings: { read: false, update: false, create: false, delete: false },

@@ -138,3 +138,77 @@ export async function getItemsForInvoice(): Promise<LightweightItem[]> {
     return []
   }
 }
+
+export async function searchItemsForInvoice(
+  query: string,
+  limit = 30
+): Promise<LightweightItem[]> {
+  if (await isDemoMode()) {
+    const items = demoItems.map(demoToLightweight)
+    if (!query.trim()) return items.slice(0, limit)
+    const words = query.toLowerCase().trim().split(/\s+/)
+    return items
+      .filter((item) => {
+        const text = `${item.name} ${item.itemCode} ${item.hsnCode} ${item.category} ${item.barcodeNo}`.toLowerCase()
+        return words.every((w) => text.includes(w))
+      })
+      .slice(0, limit)
+  }
+
+  const { supabase, organizationId } = await authorize("items", "read")
+  try {
+    let queryBuilder = supabase
+      .from("items")
+      .select(LIGHTWEIGHT_SELECT)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
+
+    if (query.trim()) {
+      const searchTerm = `%${query.trim()}%`
+      queryBuilder = queryBuilder.or(
+        `name.ilike.${searchTerm},item_code.ilike.${searchTerm},hsn.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`
+      )
+    }
+
+    const { data, error } = await queryBuilder
+      .order("name", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      console.error("[Items/Search] Error searching items:", error.message)
+      return []
+    }
+
+    return (data || []).map(toLightweightItem)
+  } catch {
+    return []
+  }
+}
+
+export async function getItemsByIds(ids: string[]): Promise<LightweightItem[]> {
+  if (ids.length === 0) return []
+  if (await isDemoMode()) {
+    return demoItems
+      .filter((item) => ids.includes(item.id))
+      .map(demoToLightweight)
+  }
+
+  const { supabase, organizationId } = await authorize("items", "read")
+  try {
+    const { data, error } = await supabase
+      .from("items")
+      .select(LIGHTWEIGHT_SELECT)
+      .or(orgScope(organizationId))
+      .is("deleted_at", null)
+      .in("id", ids)
+
+    if (error) {
+      console.error("[Items/ByIds] Error fetching items:", error.message)
+      return []
+    }
+
+    return (data || []).map(toLightweightItem)
+  } catch {
+    return []
+  }
+}

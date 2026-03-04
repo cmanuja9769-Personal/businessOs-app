@@ -13,7 +13,7 @@ import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
 import { Save, Send, FileText, Loader2, Keyboard } from "lucide-react"
 import { createInvoice, updateInvoice, generateInvoiceNumber, getInvoices } from "@/app/invoices/actions"
 import { getCustomers } from "@/app/customers/actions"
-import { getItemsForInvoice, type LightweightItem } from "@/app/items/lightweight-actions"
+import { getItemsByIds, type LightweightItem } from "@/app/items/lightweight-actions"
 import { getSettings, getOrganizationDetails } from "@/app/settings/actions"
 import { toast } from "sonner"
 import type { ICustomer, IItem, IInvoice, IInvoiceItem, BillingMode, PricingMode, PackingType, DocumentType } from "@/types"
@@ -263,20 +263,34 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
 
   const initialDocTypeRef = useRef(documentType)
 
+  async function loadEditModeData(inv: IInvoice) {
+    const editItemIds = inv.items
+      .map((item) => item.itemId)
+      .filter((id): id is string => !!id)
+    const needsInvoices = isCreditOrDebitNote(inv.documentType) && !!inv.parentDocumentId
+    const [customersData, editItems, invoicesData] = await Promise.all([
+      getCustomers(),
+      editItemIds.length > 0 ? getItemsByIds(editItemIds) : Promise.resolve([]),
+      needsInvoices ? getInvoices() : Promise.resolve([]),
+    ])
+    return { customersData, editItems, invoicesData }
+  }
+
   useEffect(() => {
     async function loadData() {
       try {
-        const [customersData, itemsData, invoicesData, settingsData, orgDetails] = await Promise.all([
-          getCustomers(),
-          getItemsForInvoice(),
-          getInvoices(),
+        const essentialPromises: [
+          ReturnType<typeof getSettings>,
+          ReturnType<typeof getOrganizationDetails>,
+          ReturnType<typeof generateInvoiceNumber> | Promise<string>,
+        ] = [
           getSettings(),
           getOrganizationDetails(),
-        ])
-        
-        setCustomers(customersData)
-        setItems(itemsData)
-        setAllInvoices(invoicesData)
+          isEditMode ? Promise.resolve("") : generateInvoiceNumber(documentType),
+        ]
+
+        const [settingsData, orgDetails, invoiceNumber] = await Promise.all(essentialPromises)
+
         if (orgDetails?.gstNumber) {
           setOrgGstNumber(orgDetails.gstNumber)
         }
@@ -287,13 +301,19 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
           field2Label: settingsData.customField2Label,
         })
 
+        if (!isEditMode) {
+          setInvoiceNo(invoiceNumber)
+        }
+
         if (isEditMode && invoice) {
+          const { customersData, editItems, invoicesData } = await loadEditModeData(invoice)
+          setCustomers(customersData)
+          setItems(editItems)
+          setAllInvoices(invoicesData)
+
           const { customer, parent } = resolveEditModeData(invoice, customersData, invoicesData)
           setSelectedCustomer(customer)
           if (parent) setParentInvoice(parent)
-        } else {
-          const invoiceNumber = await generateInvoiceNumber(documentType)
-          setInvoiceNo(invoiceNumber)
         }
       } catch (err) {
         const message = extractErrorMessage(err, "Failed to load form data")
@@ -312,7 +332,10 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
       initialDocTypeRef.current = documentType
       generateInvoiceNumber(documentType).then(setInvoiceNo)
     }
-  }, [documentType, isEditMode])
+    if (!isEditMode && isCreditOrDebitNote(documentType) && allInvoices.length === 0) {
+      getInvoices().then(setAllInvoices)
+    }
+  }, [documentType, isEditMode, allInvoices.length])
 
   useEffect(() => {
     if (parentInvoice && isCreditOrDebitNote(documentType)) {
@@ -503,6 +526,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             items={items}
             invoiceItems={invoiceItems}
             onItemsChange={setInvoiceItems}
+            onItemsPoolChange={setItems}
             billingMode={billingMode}
             pricingMode={pricingMode}
             packingType={packingType}

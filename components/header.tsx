@@ -1,7 +1,6 @@
 "use client"
 
-import { Bell, Search, Package, Users, FileText, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Search, Package, Users, FileText, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useState, useEffect, useRef } from "react"
 import { globalSearch } from "@/app/actions"
@@ -164,14 +163,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2">
-          <Button variant="ghost" size="icon" className="relative flex-shrink-0">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
-          </Button>
-
-          <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-3 border-l border-border">
-            <UserMenu />
-          </div>
+          <UserMenu />
         </div>
       </div>
     </header>

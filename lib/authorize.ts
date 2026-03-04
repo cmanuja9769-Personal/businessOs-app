@@ -11,7 +11,7 @@ export interface AuthContext {
 }
 
 export function orgScope(organizationId: string): string {
-  return `organization_id.eq.${organizationId},organization_id.is.null`
+  return `organization_id.eq.${organizationId}`
 }
 
 export async function authorize(

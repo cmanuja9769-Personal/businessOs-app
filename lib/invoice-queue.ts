@@ -1,7 +1,4 @@
-/**
- * Queue service for async invoice operations
- * Uses Upstash Redis as the queue backend
- */
+import { createClient } from "@/lib/supabase/server"
 
 interface QueueJob {
   id: string
@@ -14,42 +11,48 @@ interface QueueJob {
   completedAt?: Date
 }
 
-// For now, use in-memory queue (replace with BullMQ + Upstash in production)
-const jobQueue: Map<string, QueueJob> = new Map()
-
-const Deno = {
-  env: {
-    get: (key: string) => {
-      // Placeholder for Deno.env.get implementation
-      // In a real scenario, this would fetch environment variables
-      return process.env[key]
-    },
-  },
-}
-
 export async function enqueueJob(type: QueueJob["type"], data: Record<string, unknown>): Promise<string> {
   const jobId = `job_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
 
-  const job: QueueJob = {
-    id: jobId,
-    type,
-    data,
-    status: "pending",
-    retries: 0,
-    createdAt: new Date(),
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("queue_jobs")
+    .insert({
+      id: jobId,
+      type,
+      data,
+      status: "pending",
+      retries: 0,
+    })
+
+  if (error) {
+    console.error("[Queue] Failed to enqueue job:", error)
+    throw new Error(`Failed to enqueue job: ${error.message}`)
   }
-
-  jobQueue.set(jobId, job)
-
-  // In production: Push to Upstash Redis queue
-  // const redis = new Redis({ url: UPSTASH_REDIS_URL })
-  // await redis.lpush('invoice-queue', JSON.stringify(job))
 
   return jobId
 }
 
 export async function getJobStatus(jobId: string): Promise<QueueJob | null> {
-  return jobQueue.get(jobId) || null
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("queue_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .single()
+
+  if (error || !data) return null
+
+  return {
+    id: data.id,
+    type: data.type,
+    data: data.data as Record<string, unknown>,
+    status: data.status,
+    retries: data.retries,
+    error: data.error ?? undefined,
+    createdAt: new Date(data.created_at),
+    completedAt: data.completed_at ? new Date(data.completed_at) : undefined,
+  }
 }
 
 const jobHandlers: Record<QueueJob["type"], (job: QueueJob) => Promise<void>> = {
@@ -59,26 +62,44 @@ const jobHandlers: Record<QueueJob["type"], (job: QueueJob) => Promise<void>> = 
   file_gst: processFileGST,
 }
 
-function handleJobFailure(job: QueueJob, error: unknown) {
-  job.retries++
-  if (job.retries < 3) {
-    job.status = "pending"
-  } else {
-    job.status = "failed"
-    job.error = String(error)
-  }
-}
-
 export async function processQueueJobs() {
-  for (const [, job] of jobQueue.entries()) {
-    if (job.status !== "pending") continue
+  const supabase = await createClient()
+
+  const { data: pendingJobs, error } = await supabase
+    .from("queue_jobs")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(50)
+
+  if (error || !pendingJobs?.length) return
+
+  for (const row of pendingJobs) {
+    const job: QueueJob = {
+      id: row.id,
+      type: row.type,
+      data: row.data as Record<string, unknown>,
+      status: row.status,
+      retries: row.retries,
+      error: row.error ?? undefined,
+      createdAt: new Date(row.created_at),
+    }
+
+    await supabase.from("queue_jobs").update({ status: "processing" }).eq("id", job.id)
+
     try {
-      job.status = "processing"
       await jobHandlers[job.type](job)
-      job.status = "completed"
-      job.completedAt = new Date()
-    } catch (error) {
-      handleJobFailure(job, error)
+      await supabase
+        .from("queue_jobs")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", job.id)
+    } catch (err) {
+      const newRetries = job.retries + 1
+      const newStatus = newRetries >= 3 ? "failed" : "pending"
+      await supabase
+        .from("queue_jobs")
+        .update({ status: newStatus, retries: newRetries, error: String(err) })
+        .eq("id", job.id)
     }
   }
 }
@@ -86,11 +107,11 @@ export async function processQueueJobs() {
 async function processSendEmail(job: QueueJob) {
   const { invoiceId, recipientEmail, organizationId } = job.data
 
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-invoice-email`, {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-invoice-email`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ invoiceId, recipientEmail, organizationId }),
   })
@@ -103,11 +124,11 @@ async function processSendEmail(job: QueueJob) {
 async function processGenerateEInvoice(job: QueueJob) {
   const { invoiceId, organizationId } = job.data
 
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-einvoice`, {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-einvoice`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ invoiceId, organizationId }),
   })
@@ -118,10 +139,9 @@ async function processGenerateEInvoice(job: QueueJob) {
 }
 
 async function processSendSMS(_job: QueueJob) {
-  // Placeholder for SMS sending via Twilio or MSG91
-  console.warn("[v0] SMS sending not yet implemented")
+  throw new Error("SMS sending not yet configured. Set up MSG91 or Twilio integration.")
 }
 
 async function processFileGST(_job: QueueJob) {
-  console.warn("[v0] GST filing not yet implemented")
+  throw new Error("GST filing not yet configured. Set up GST portal integration.")
 }

@@ -83,16 +83,9 @@ export async function fetchGSTDetails(gstin: string): Promise<GSTDetails | null>
   const apiKey = process.env.GST_API_KEY
   const apiUrl = process.env.GST_API_URL
 
-  // If no API configured, return mock data for development
   if (!apiKey || !apiUrl) {
     console.warn("GST API not configured. Add GST_API_KEY and GST_API_URL to .env file")
-    
-    // Return mock data for development/testing
-    if (process.env.NODE_ENV === "development") {
-      return getMockGSTDetails(gstin)
-    }
-    
-    throw new Error("GST API not configured. Please contact administrator.")
+    throw new Error("GST lookup is not configured. Please add GST_API_KEY and GST_API_URL environment variables.")
   }
 
   try {
@@ -165,54 +158,4 @@ function formatAddress(addressObj: string | GSTAddressObject | null | undefined)
   return parts.filter(Boolean).join(", ")
 }
 
-/**
- * Returns mock GST details for development/testing
- */
-function getMockGSTDetails(gstin: string): GSTDetails {
-  const stateCode = gstin.substring(0, 2)
-  const stateNames: Record<string, string> = {
-    "01": "Jammu and Kashmir",
-    "02": "Himachal Pradesh",
-    "03": "Punjab",
-    "04": "Chandigarh",
-    "05": "Uttarakhand",
-    "06": "Haryana",
-    "07": "Delhi",
-    "08": "Rajasthan",
-    "09": "Uttar Pradesh",
-    "10": "Bihar",
-    "11": "Sikkim",
-    "12": "Arunachal Pradesh",
-    "13": "Nagaland",
-    "14": "Manipur",
-    "15": "Mizoram",
-    "16": "Tripura",
-    "17": "Meghalaya",
-    "18": "Assam",
-    "19": "West Bengal",
-    "20": "Jharkhand",
-    "21": "Odisha",
-    "22": "Chhattisgarh",
-    "23": "Madhya Pradesh",
-    "24": "Gujarat",
-    "27": "Maharashtra",
-    "29": "Karnataka",
-    "32": "Kerala",
-    "33": "Tamil Nadu",
-    "36": "Telangana",
-    "37": "Andhra Pradesh",
-  }
 
-  return {
-    gstin,
-    legalName: "Sample Business Pvt Ltd",
-    tradeName: "Sample Business",
-    address: `123, Sample Street, Sample Area, Sample City, ${stateNames[stateCode] || "Unknown"} - 400001`,
-    state: stateNames[stateCode] || "Unknown",
-    stateCode,
-    pincode: "400001",
-    businessType: "Private Limited Company",
-    registrationDate: "2020-01-01",
-    status: "Active",
-  }
-}

@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const nextConfig = {
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
   images: {
-    unoptimized: true,
+    remotePatterns: [],
   },
   turbopack: {
     root: __dirname,

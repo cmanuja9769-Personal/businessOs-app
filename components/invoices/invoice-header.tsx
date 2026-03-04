@@ -2,8 +2,8 @@
 
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { AsyncCustomerSelect } from "@/components/invoices/async-customer-select"
 import type { ICustomer, BillingMode, PricingMode, PackingType } from "@/types"
 
 interface InvoiceHeaderProps {
@@ -17,10 +17,10 @@ interface InvoiceHeaderProps {
   onDueDateChange: (date: string) => void
   billingMode: BillingMode
   onBillingModeChange: (mode: BillingMode) => void
-  pricingMode: PricingMode // Added pricing mode prop
-  onPricingModeChange: (mode: PricingMode) => void // Added pricing mode change handler
-  packingType: PackingType // Added packing type prop
-  onPackingTypeChange: (type: PackingType) => void // Added packing type change handler
+  pricingMode: PricingMode
+  onPricingModeChange: (mode: PricingMode) => void
+  packingType: PackingType
+  onPackingTypeChange: (type: PackingType) => void
 }
 
 export function InvoiceHeader({
@@ -70,27 +70,11 @@ export function InvoiceHeader({
           <Label htmlFor="customer">
             Customer <span className="text-destructive">*</span>
           </Label>
-          <Select
-            value={selectedCustomer?.id}
-            onValueChange={(value) => {
-              const customer = customers.find((c) => c.id === value)
-              onCustomerChange(customer || null)
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select customer" />
-            </SelectTrigger>
-            <SelectContent>
-              {customers.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id}>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{customer.name}</span>
-                    <span className="text-xs text-muted-foreground">{customer.contactNo}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <AsyncCustomerSelect
+            value={selectedCustomer}
+            onValueChange={onCustomerChange}
+            initialCustomers={customers}
+          />
 
           {selectedCustomer && (
             <div className="p-3 bg-muted/50 rounded-lg space-y-1 text-sm mt-2">

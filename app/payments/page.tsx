@@ -23,7 +23,7 @@ export default async function PaymentsPage() {
   const totalPayables = unpaidPurchases.reduce((sum, pur) => sum + pur.balance, 0)
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+    <div className="p-4 sm:p-6 space-y-4 flex flex-col md:h-[calc(100vh-64px)] md:overflow-hidden">
       <PageHeader
         title="Payment Management"
         description="Track receivables, payables, and record payments"
@@ -72,27 +72,27 @@ export default async function PaymentsPage() {
       </div>
 
       {/* Tabs for Receivables and Payables */}
-      <Tabs defaultValue="receivables" className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <Tabs defaultValue="receivables" className="md:flex-1 md:min-h-0 flex flex-col md:overflow-hidden">
         <TabsList className="shrink-0">
           <TabsTrigger value="receivables">Receivables</TabsTrigger>
           <TabsTrigger value="payables">Payables</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="receivables" className="flex-1 min-h-0 overflow-hidden mt-4">
-          <Card className="h-full flex flex-col overflow-hidden">
+        <TabsContent value="receivables" className="md:flex-1 md:min-h-0 md:overflow-hidden mt-4">
+          <Card className="md:h-full flex flex-col md:overflow-hidden">
             <CardHeader className="shrink-0">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
                   Outstanding Receivables ({unpaidInvoices.length})
                 </CardTitle>
-                <div className="relative w-80">
+                <div className="relative w-full sm:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input type="search" placeholder="Search invoices..." className="pl-9" />
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
+            <CardContent className="md:flex-1 md:min-h-0 md:overflow-hidden p-0 sm:px-6 sm:pb-6">
               {unpaidInvoices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
@@ -142,21 +142,21 @@ export default async function PaymentsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="payables" className="flex-1 min-h-0 overflow-hidden mt-4">
-          <Card className="h-full flex flex-col overflow-hidden">
+        <TabsContent value="payables" className="md:flex-1 md:min-h-0 md:overflow-hidden mt-4">
+          <Card className="md:h-full flex flex-col md:overflow-hidden">
             <CardHeader className="shrink-0">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5" />
                   Outstanding Payables ({unpaidPurchases.length})
                 </CardTitle>
-                <div className="relative w-80">
+                <div className="relative w-full sm:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input type="search" placeholder="Search purchases..." className="pl-9" />
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
+            <CardContent className="md:flex-1 md:min-h-0 md:overflow-hidden p-0 sm:px-6 sm:pb-6">
               {unpaidPurchases.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />

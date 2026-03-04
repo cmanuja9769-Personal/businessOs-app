@@ -53,13 +53,13 @@ export default async function UsersPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+    <div className="p-4 sm:p-6 space-y-4 flex flex-col md:h-[calc(100vh-64px)] md:overflow-hidden">
       <PageHeader
         title="Users"
         description="Manage user access and permissions"
       />
 
-      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <Card className="md:flex-1 md:min-h-0 flex flex-col md:overflow-hidden">
         <CardHeader className="pb-3 shrink-0">
           <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <Users className="w-5 h-5" />
@@ -68,7 +68,7 @@ export default async function UsersPage() {
             <span className="text-muted-foreground">({users?.length || 0})</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 overflow-hidden p-0 sm:px-6 sm:pb-6">
+          <CardContent className="md:flex-1 md:min-h-0 md:overflow-hidden p-0 sm:px-6 sm:pb-6">
           {!users || users.length === 0 ? (
             <DataEmptyState
               icon={<Users className="w-12 h-12" />}

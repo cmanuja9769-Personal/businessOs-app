@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function PurchasesLoading() {
   return (
-    <div className="h-full flex flex-col overflow-hidden px-4 sm:px-6 py-3 sm:py-4 space-y-3">
+    <div className="flex flex-col md:h-full md:overflow-hidden px-4 sm:px-6 py-3 sm:py-4 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div className="space-y-1">
           <Skeleton className="h-7 sm:h-9 w-32 sm:w-48" />

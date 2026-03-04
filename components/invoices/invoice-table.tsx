@@ -376,7 +376,7 @@ export function InvoiceTable({
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleBarcodeSubmit} className="flex gap-2 p-4 bg-muted/50 rounded-lg border-2 border-dashed border-primary/20">
+      <form onSubmit={handleBarcodeSubmit} className="flex gap-2 p-2 sm:p-4 bg-muted/50 rounded-lg border-2 border-dashed border-primary/20">
         <div className="flex-1 relative">
           <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -384,22 +384,22 @@ export function InvoiceTable({
             type="text"
             value={barcodeInput}
             onChange={(e) => setBarcodeInput(e.target.value)}
-            placeholder="Scan barcode or enter item code here..."
-            className="pl-10 h-10 text-base"
+            placeholder="Scan barcode or enter item code..."
+            className="pl-10 h-9 sm:h-10 text-sm sm:text-base"
           />
         </div>
-        <Button type="submit" className="gap-2" disabled={!barcodeInput.trim()}>
+        <Button type="submit" className="gap-2 h-9 sm:h-10 px-2 sm:px-4" disabled={!barcodeInput.trim()}>
           <Plus className="w-4 h-4" />
-          Add Item
+          <span className="hidden sm:inline">Add Item</span>
         </Button>
       </form>
 
       <div className="overflow-x-auto -mx-2 sm:-mx-4">
-        <div className="min-w-[50rem] px-2 sm:px-4">
+        <div className="min-w-[28rem] sm:min-w-[50rem] px-2 sm:px-4">
         <Table containerClassName="overflow-visible border-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[15rem]">Item</TableHead>
+              <TableHead className="w-[8rem] sm:w-[15rem]">Item</TableHead>
               {customField1Enabled && (
                 <TableHead className="w-28">{customField1Label}</TableHead>
               )}
@@ -407,13 +407,13 @@ export function InvoiceTable({
                 <TableHead className="w-28">{customField2Label}</TableHead>
               )}
               <TableHead className="w-24">Quantity</TableHead>
-              <TableHead className="w-20">Unit</TableHead>
-              <TableHead className="w-28">Rate</TableHead>
+              <TableHead className="hidden sm:table-cell w-20">Unit</TableHead>
+              <TableHead className="w-20 sm:w-28">Rate</TableHead>
               {billingMode === "gst" && (
-                <TableHead className="w-20">GST %</TableHead>
+                <TableHead className="hidden sm:table-cell w-20">GST %</TableHead>
               )}
-              <TableHead className="w-24">Discount %</TableHead>
-              <TableHead className="w-28">Amount</TableHead>
+              <TableHead className="w-16 sm:w-24">Discount %</TableHead>
+              <TableHead className="w-20 sm:w-28">Amount</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
@@ -475,7 +475,7 @@ export function InvoiceTable({
                     }
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden sm:table-cell">
                   <Input
                     value={invoiceItem.unit}
                     disabled
@@ -497,7 +497,7 @@ export function InvoiceTable({
                   />
                 </TableCell>
                 {billingMode === "gst" && (
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <Input
                       type="number"
                       step="0.01"

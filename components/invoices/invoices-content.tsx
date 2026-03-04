@@ -123,7 +123,7 @@ export function InvoicesContent({ invoices }: InvoicesContentProps) {
   }, [])
 
   return (
-    <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 h-full flex flex-col overflow-hidden">
+    <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 flex flex-col md:h-full md:overflow-hidden">
       <PageHeader
         title="Invoices"
         description="Manage and track all your sales invoices"
@@ -137,7 +137,7 @@ export function InvoicesContent({ invoices }: InvoicesContentProps) {
         }
       />
 
-      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <Card className="md:flex-1 md:min-h-0 flex flex-col md:overflow-hidden">
         <CardHeader className="px-4 shrink-0">
           <div className="flex flex-col gap-3">
             <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
@@ -187,7 +187,7 @@ export function InvoicesContent({ invoices }: InvoicesContentProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden px-4 pb-4 pt-0">
+        <CardContent className="md:flex-1 md:min-h-0 flex flex-col md:overflow-hidden px-4 pb-4 pt-0">
           {filteredInvoices.length === 0 ? (
             <DataEmptyState
               icon={<FileText className="w-12 h-12" />}
@@ -203,7 +203,7 @@ export function InvoicesContent({ invoices }: InvoicesContentProps) {
               }
             />
           ) : (
-            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-col md:flex-1 md:min-h-0 md:overflow-hidden">
               {selectedIds.size > 0 && (
                 <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b shrink-0">
                   <span className="text-sm font-medium">

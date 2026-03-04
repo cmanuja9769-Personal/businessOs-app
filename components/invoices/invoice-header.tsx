@@ -120,12 +120,12 @@ export function InvoiceHeader({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
                 Packing Type <span className="text-destructive">*</span>
               </Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Badge
                   variant={packingType === "loose" ? "default" : "outline"}
                   className="cursor-pointer px-3 py-1.5"
@@ -145,7 +145,7 @@ export function InvoiceHeader({
 
             <div className="space-y-2">
               <Label>Billing Mode</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Badge
                   variant={billingMode === "gst" ? "default" : "outline"}
                   className="cursor-pointer px-3 py-1.5"

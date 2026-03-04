@@ -51,7 +51,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
     })
 
   return (
-    <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 h-full flex flex-col overflow-hidden">
+    <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 flex flex-col md:h-full md:overflow-hidden">
       <PageHeader
         title="Customers"
         description="Manage your customer database and relationships"
@@ -63,7 +63,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
         }
       />
 
-      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <Card className="md:flex-1 md:min-h-0 flex flex-col md:overflow-hidden">
         <CardHeader className="py-3 px-4 shrink-0">
           <CardTitleWithCount
             icon={<Users className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -72,7 +72,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
             count={filteredCustomers.length}
           />
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 overflow-hidden px-4 pb-4 pt-0">
+        <CardContent className="md:flex-1 md:min-h-0 md:overflow-hidden px-4 pb-4 pt-0">
           {filteredCustomers.length === 0 ? (
             <DataEmptyState
               icon={<Users className="w-12 h-12" />}

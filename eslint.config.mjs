@@ -24,6 +24,7 @@ export default tseslint.config(
       "**/supabase/functions/**",
       "**/.git/**",
       "**/public/**",
+      "next-env.d.ts",
     ],
   },
   ...nextConfig,

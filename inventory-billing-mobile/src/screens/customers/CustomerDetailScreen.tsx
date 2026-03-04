@@ -320,11 +320,11 @@ export default function CustomerDetailScreen() {
                   </Text>
                   <View style={[
                     styles.statusBadge,
-                    { backgroundColor: getStatusBg(inv.status) }
+                    { backgroundColor: getStatusBg(inv.status ?? '') }
                   ]}>
                     <Text style={[
                       styles.statusText,
-                      { color: getStatusColor(inv.status) }
+                      { color: getStatusColor(inv.status ?? '') }
                     ]}>
                       {inv.status}
                     </Text>

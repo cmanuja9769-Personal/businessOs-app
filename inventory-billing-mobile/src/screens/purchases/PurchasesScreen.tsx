@@ -102,11 +102,6 @@ export default function PurchasesScreen() {
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
 
-  useFocusRefresh(useCallback(() => {
-    fetchPurchases(searchQuery, 0, true);
-    fetchStats();
-  }, [searchQuery, fetchPurchases, fetchStats]));
-
   const fetchStats = useCallback(async () => {
     if (!organizationId) return;
     try {
@@ -201,6 +196,11 @@ export default function PurchasesScreen() {
       setIsRefreshing(false);
     }
   }, [organizationId]);
+
+  useFocusRefresh(useCallback(() => {
+    fetchPurchases(searchQuery, 0, true);
+    fetchStats();
+  }, [searchQuery, fetchPurchases, fetchStats]));
 
   useEffect(() => {
     currentQueryRef.current = searchQuery;

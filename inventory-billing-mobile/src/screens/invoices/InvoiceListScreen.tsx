@@ -136,10 +136,6 @@ export default function InvoiceListScreen() {
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
 
-  useFocusRefresh(useCallback(() => {
-    fetchInvoices(searchQuery, selectedType, 0, true);
-  }, [searchQuery, selectedType, fetchInvoices]));
-
   const applyFetchResults = (
     fetchedItems: Invoice[],
     count: number | null,
@@ -199,6 +195,10 @@ export default function InvoiceListScreen() {
       setIsRefreshing(false);
     }
   }, [organizationId]);
+
+  useFocusRefresh(useCallback(() => {
+    fetchInvoices(searchQuery, selectedType, 0, true);
+  }, [searchQuery, selectedType, fetchInvoices]));
 
   useEffect(() => {
     currentQueryRef.current = searchQuery;

@@ -28,7 +28,7 @@ interface SyncRecord {
 }
 
 interface QueueItem {
-  id: string;
+  id: number;
   table_name: string;
   record_id: string;
   action: string;
@@ -182,7 +182,7 @@ export const syncOfflineData = async (organizationId: string): Promise<{
     );
 
     const queue = await getSyncQueue();
-    for (const queueItem of queue as QueueItem[]) {
+    for (const queueItem of (queue as unknown as QueueItem[])) {
       try {
         await processQueueItem(queueItem, organizationId);
         await removeSyncQueueItem(queueItem.id);

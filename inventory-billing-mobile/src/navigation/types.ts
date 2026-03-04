@@ -1,5 +1,5 @@
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
+import { NavigatorScreenParams, RouteProp } from '@react-navigation/native';
 
 // Auth Stack
 export type AuthStackParamList = {
@@ -12,17 +12,17 @@ export type AuthStackParamList = {
 // Main Tab Navigator
 export type MainTabParamList = {
   DashboardTab: undefined;
-  InvoicesTab: undefined;
-  CustomersTab: undefined;
-  InventoryTab: undefined;
-  MoreTab: undefined;
+  InvoicesTab: NavigatorScreenParams<InvoiceStackParamList> | undefined;
+  CustomersTab: NavigatorScreenParams<CustomersStackParamList> | undefined;
+  InventoryTab: NavigatorScreenParams<InventoryStackParamList> | undefined;
+  MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
 // Customers Stack (dedicated tab)
 export type CustomersStackParamList = {
   Customers: undefined;
   CustomerDetail: { customerId: string };
-  AddCustomer: { customerId?: string };
+  AddCustomer: { customerId?: string } | undefined;
 };
 
 // Dashboard Stack
@@ -34,15 +34,15 @@ export type DashboardStackParamList = {
 export type InvoiceStackParamList = {
   InvoiceList: undefined;
   InvoiceDetail: { invoiceId: string };
-  CreateInvoice: { invoiceId?: string; customerId?: string };
+  CreateInvoice: { invoiceId?: string; customerId?: string } | undefined;
 };
 
 // Inventory Stack
 export type InventoryStackParamList = {
   ItemList: undefined;
   ItemDetail: { itemId: string };
-  AddItem: { itemId?: string; barcode?: string };
-  StockAdjustment: { itemId?: string };
+  AddItem: { itemId?: string; barcode?: string } | undefined;
+  StockAdjustment: { itemId?: string } | undefined;
 };
 
 // More Stack
@@ -50,18 +50,18 @@ export type MoreStackParamList = {
   More: undefined;
   Customers: undefined;
   CustomerDetail: { customerId: string };
-  AddCustomer: { customerId?: string };
+  AddCustomer: { customerId?: string } | undefined;
   Suppliers: undefined;
   SupplierDetail: { supplierId: string };
-  AddSupplier: { supplierId?: string };
+  AddSupplier: { supplierId?: string } | undefined;
   Purchases: undefined;
   PurchaseDetail: { purchaseId: string };
-  CreatePurchase: { purchaseId?: string };
+  CreatePurchase: { purchaseId?: string } | undefined;
   Ewaybills: undefined;
   EwaybillDetail: { ewaybillId: string };
-  CreateEwaybill: { ewaybillId?: string };
+  CreateEwaybill: { ewaybillId?: string } | undefined;
   Payments: undefined;
-  RecordPayment: { invoiceId?: string; purchaseId?: string };
+  RecordPayment: { invoiceId?: string; purchaseId?: string } | undefined;
   Reports: undefined;
   ReportDetail: { reportKey: string };
   Settings: undefined;
@@ -71,7 +71,7 @@ export type MoreStackParamList = {
   Accounting: undefined;
   Godowns: undefined;
   GodownDetail: { godownId: string };
-  AddGodown: { godownId?: string };
+  AddGodown: { godownId?: string } | undefined;
 };
 
 // Root Stack
@@ -90,3 +90,16 @@ export type MoreStackNavigationProp = StackNavigationProp<MoreStackParamList>;
 export type InvoiceDetailRouteProp = RouteProp<InvoiceStackParamList, 'InvoiceDetail'>;
 export type ItemDetailRouteProp = RouteProp<InventoryStackParamList, 'ItemDetail'>;
 export type CustomerDetailRouteProp = RouteProp<MoreStackParamList, 'CustomerDetail'>;
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace ReactNavigation {
+    interface RootParamList
+      extends MainTabParamList,
+        MoreStackParamList,
+        InvoiceStackParamList,
+        InventoryStackParamList,
+        CustomersStackParamList,
+        DashboardStackParamList {}
+  }
+}

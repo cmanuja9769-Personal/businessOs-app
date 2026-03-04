@@ -44,6 +44,11 @@ const REPORT_CONFIG: Record<string, ReportConfig> = {
   'cash-flow': { title: 'Cash Flow', color: '#0EA5E9', icon: 'swap-horizontal-outline' },
 };
 
+const str = (val: unknown): string => String(val ?? '');
+const num = (val: unknown): number => Number(val) || 0;
+const nested = (val: unknown): Record<string, unknown> | null =>
+  typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : null;
+
 export default function ReportDetailScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
   const route = useRoute<RouteProps>();
@@ -276,12 +281,12 @@ export default function ReportDetailScreen() {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
-            <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.invoice_number}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.customers?.name}</Text>
+            <Text style={[styles.listItemTitle, { color: colors.text }]}>{str(item.invoice_number)}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{str(nested(item.customers)?.name)}</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: colors.text }]}>{formatCurrency(item.total)}</Text>
-            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatDate(item.created_at)}</Text>
+            <Text style={[styles.listItemAmount, { color: colors.text }]}>{formatCurrency(num(item.total))}</Text>
+            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatDate(str(item.created_at))}</Text>
           </View>
         </View>
       );
@@ -291,28 +296,28 @@ export default function ReportDetailScreen() {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
-            <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.purchase_number || 'Purchase'}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.suppliers?.name}</Text>
+            <Text style={[styles.listItemTitle, { color: colors.text }]}>{str(item.purchase_number) || 'Purchase'}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{str(nested(item.suppliers)?.name)}</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: colors.text }]}>{formatCurrency(item.total)}</Text>
-            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatDate(item.created_at)}</Text>
+            <Text style={[styles.listItemAmount, { color: colors.text }]}>{formatCurrency(num(item.total))}</Text>
+            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatDate(str(item.created_at))}</Text>
           </View>
         </View>
       );
     }
 
     if (reportKey === 'stock-summary' || reportKey === 'stock-detail' || reportKey === 'low-stock') {
-      const stockValue = (item.current_stock || 0) * (item.purchase_price || 0);
-      const isLow = (item.current_stock || 0) < 10;
+      const stockValue = num(item.current_stock) * num(item.purchase_price);
+      const isLow = num(item.current_stock) < 10;
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
-            <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.item_code || item.hsn}</Text>
+            <Text style={[styles.listItemTitle, { color: colors.text }]}>{str(item.name)}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{str(item.item_code) || str(item.hsn)}</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: isLow ? '#EF4444' : colors.text }]}>{item.current_stock} {item.unit}</Text>
+            <Text style={[styles.listItemAmount, { color: isLow ? '#EF4444' : colors.text }]}>{str(item.current_stock)} {str(item.unit)}</Text>
             <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>{formatCurrency(stockValue)}</Text>
           </View>
         </View>
@@ -323,12 +328,12 @@ export default function ReportDetailScreen() {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
-            <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.customers?.name}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.invoice_number}</Text>
+            <Text style={[styles.listItemTitle, { color: colors.text }]}>{str(nested(item.customers)?.name)}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{str(item.invoice_number)}</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: '#EF4444' }]}>{formatCurrency(item.balance)}</Text>
-            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>Due: {formatDate(item.due_date)}</Text>
+            <Text style={[styles.listItemAmount, { color: '#EF4444' }]}>{formatCurrency(num(item.balance))}</Text>
+            <Text style={[styles.listItemDate, { color: colors.textSecondary }]}>Due: {formatDate(str(item.due_date))}</Text>
           </View>
         </View>
       );
@@ -338,11 +343,11 @@ export default function ReportDetailScreen() {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
-            <Text style={[styles.listItemTitle, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{item.invoiceCount} invoices</Text>
+            <Text style={[styles.listItemTitle, { color: colors.text }]}>{str(item.name)}</Text>
+            <Text style={[styles.listItemSub, { color: colors.textSecondary }]}>{num(item.invoiceCount)} invoices</Text>
           </View>
           <View style={styles.listItemRight}>
-            <Text style={[styles.listItemAmount, { color: '#10B981' }]}>{formatCurrency(item.revenue)}</Text>
+            <Text style={[styles.listItemAmount, { color: '#10B981' }]}>{formatCurrency(num(item.revenue))}</Text>
           </View>
         </View>
       );
@@ -350,7 +355,7 @@ export default function ReportDetailScreen() {
 
     if (reportKey === 'profit-loss') {
       const isProfit = item.type === 'Net Profit';
-      const isPositive = (item.amount as number) >= 0;
+      const isPositive = num(item.amount) >= 0;
       const profitColor = () => {
         if (!isProfit) return colors.text;
         if (isPositive) return '#10B981';
@@ -358,12 +363,12 @@ export default function ReportDetailScreen() {
       };
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <Text style={[styles.listItemTitle, { color: colors.text, flex: 1 }]}>{item.type as string}</Text>
+          <Text style={[styles.listItemTitle, { color: colors.text, flex: 1 }]}>{str(item.type)}</Text>
           <Text style={[
             styles.listItemAmount, 
             { color: profitColor(), fontWeight: isProfit ? '700' : '600' }
           ]}>
-            {formatCurrency(item.amount as number)}
+            {formatCurrency(num(item.amount))}
           </Text>
         </View>
       );
@@ -396,7 +401,7 @@ export default function ReportDetailScreen() {
       ) : (
         <FlatList
           data={data}
-          keyExtractor={(item, idx) => item.id || idx.toString()}
+          keyExtractor={(item, idx) => String(item.id ?? idx)}
           renderItem={renderItem}
           ListHeaderComponent={Object.keys(summary).length > 0 ? renderSummaryCard : null}
           ListEmptyComponent={

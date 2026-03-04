@@ -150,7 +150,7 @@ export default function ReportsScreen() {
   }, [organizationId]);
 
   const handleReportPress = (reportKey: string) => {
-    navigation.navigate('ReportDetail' as never, { reportKey } as never);
+    navigation.navigate('ReportDetail', { reportKey });
   };
 
   const toggleCategory = (title: string) => {

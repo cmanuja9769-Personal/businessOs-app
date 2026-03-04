@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Button from '@components/ui/Button';
@@ -8,6 +8,7 @@ import Input from '@components/ui/Input';
 import Loading from '@components/ui/Loading';
 import { spacing } from '@theme/spacing';
 import { supabase } from '@lib/supabase';
+import type { MoreStackParamList } from '../../navigation/types';
 
 const makeGodownCode = (n: number) => 'GDN' + String(n).padStart(4, '0');
 
@@ -33,12 +34,12 @@ const upsertGodown = async (
 };
 
 export default function AddGodownScreen() {
-  const route = useRoute();
+  const route = useRoute<RouteProp<MoreStackParamList, 'AddGodown'>>();
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { organizationId } = useAuth();
   
-  const godownId = route.params?.godownId as string | undefined;
+  const godownId = route.params?.godownId;
   const isEditing = !!godownId;
 
   const [name, setName] = useState('');

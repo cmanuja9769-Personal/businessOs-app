@@ -79,7 +79,7 @@ const FAB_ACTIONS = [
 // Floating Action Button Component
 interface FABMenuProps {
   readonly navigation: { navigate: (...args: unknown[]) => void };
-  readonly colors: Record<string, string | string[]>;
+  readonly colors: { card: string; text: string; [key: string]: unknown };
   readonly shadows: Record<string, Record<string, unknown>>;
   readonly isDark?: boolean;
 }
@@ -626,7 +626,7 @@ export default function DashboardScreen() {
               </Text>
               <TouchableOpacity 
                 style={[styles.emptyButton, { backgroundColor: colors.primary }]}
-                onPress={() => navigation.navigate('InvoicesTab', { screen: 'CreateInvoice' })}
+                onPress={() => navigation.navigate('InvoicesTab', { screen: 'CreateInvoice', params: {} })}
               >
                 <Ionicons name="add" size={18} color="#FFFFFF" />
                 <Text style={styles.emptyButtonText}>Create Invoice</Text>

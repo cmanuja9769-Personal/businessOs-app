@@ -189,7 +189,7 @@ const buildBaseInvoiceData = (params: {
   invoiceDate: string;
   totals: ReturnType<typeof calculateInvoiceTotals>;
   notes: string;
-}) => ({
+}): Record<string, unknown> => ({
   organization_id: params.organizationId,
   document_type: params.documentType,
   pricing_mode: params.pricingMode,
@@ -214,7 +214,7 @@ const buildBaseInvoiceData = (params: {
   notes: params.notes || null,
 });
 
-const buildItemsPayload = (invoiceId: string, items: IInvoiceItem[]) =>
+const buildItemsPayload = (invoiceId: string, items: IInvoiceItem[]): Record<string, unknown>[] =>
   items.map((item) => ({
     invoice_id: invoiceId,
     item_id: item.itemId || null,
@@ -283,6 +283,32 @@ function computeHasUnsavedChanges(
 ): boolean {
   if (savedSuccessfully) return false;
   return selectedCustomer !== null || invoiceItems.length > 0 || notes.length > 0;
+}
+
+function getProgressLabelColor(
+  colors: { primary: string; success: string; textTertiary: string },
+  isActive: boolean,
+  isCompleted: boolean
+): string {
+  if (isActive) return colors.primary;
+  if (isCompleted) return colors.success;
+  return colors.textTertiary;
+}
+
+function getNextButtonText(step: number): string {
+  if (step === 0) return 'Continue';
+  if (step === 2) return 'Review';
+  return 'Next';
+}
+
+function getStepValidationError(
+  step: number,
+  hasCustomer: boolean,
+  itemCount: number
+): string | null {
+  if (step === 1 && !hasCustomer) return 'Please select a customer';
+  if (step === 2 && itemCount === 0) return 'Please add at least one item';
+  return null;
 }
 
 export default function CreateInvoiceScreen() {
@@ -673,13 +699,12 @@ export default function CreateInvoiceScreen() {
     }
   };
 
+  const minStep = isEditing ? 1 : 0;
+
   const goToNextStep = () => {
-    if (step === 1 && !selectedCustomer) {
-      Alert.alert('Required', 'Please select a customer');
-      return;
-    }
-    if (step === 2 && invoiceItems.length === 0) {
-      Alert.alert('Required', 'Please add at least one item');
+    const validationError = getStepValidationError(step, !!selectedCustomer, invoiceItems.length);
+    if (validationError) {
+      Alert.alert('Required', validationError);
       return;
     }
     
@@ -688,8 +713,6 @@ export default function CreateInvoiceScreen() {
   };
 
   const goToPrevStep = () => {
-    // In edit mode, don't go below step 1 (document type is locked)
-    const minStep = isEditing ? 1 : 0;
     if (step <= minStep) return;
     animateStep('back');
     setTimeout(() => setStep(step - 1), 200);
@@ -699,18 +722,6 @@ export default function CreateInvoiceScreen() {
     if (packingType !== 'carton') return 1;
     const perCarton = Math.floor(availableItems.find((item) => item.id === itemId)?.per_carton_quantity || 1);
     return Math.max(1, perCarton);
-  };
-
-  const getProgressLabelColor = (isActive: boolean, isCompleted: boolean) => {
-    if (isActive) return colors.primary;
-    if (isCompleted) return colors.success;
-    return colors.textTertiary;
-  };
-
-  const getNextButtonText = () => {
-    if (step === 0) return 'Continue';
-    if (step === 2) return 'Review';
-    return 'Next';
   };
 
   const filteredCustomers = customers.filter(c =>
@@ -1391,6 +1402,61 @@ export default function CreateInvoiceScreen() {
     </ScrollView>
   );
 
+  const renderCurrentStep = () => {
+    switch (step) {
+      case 0: return renderDocumentTypeStep();
+      case 1: return renderCustomerStep();
+      case 2: return renderItemsStep();
+      case 3: return renderReviewStep();
+      default: return null;
+    }
+  };
+
+  const renderFooter = () => {
+    const showBackButton = step > minStep;
+    const isReviewStep = step >= 3;
+    const saveLabel = `${isEditing ? 'Update' : 'Create'} ${docConfig.label}`;
+
+    return (
+      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border, ...shadows.lg }]}>
+        {showBackButton && (
+          <TouchableOpacity
+            style={[styles.backBtn, { borderColor: colors.border }]}
+            onPress={goToPrevStep}
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.text} />
+            <Text style={[styles.backBtnText, { color: colors.text }]}>Back</Text>
+          </TouchableOpacity>
+        )}
+
+        {isReviewStep ? (
+          <TouchableOpacity
+            style={[styles.createBtn, { backgroundColor: docConfig.gradient[0] }]}
+            onPress={handleSaveInvoice}
+            disabled={loading}
+          >
+            {loading ? (
+              <Text style={styles.createBtnText}>Saving...</Text>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.createBtnText}>{saveLabel}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.nextBtn, { backgroundColor: colors.primary }]}
+            onPress={goToNextStep}
+          >
+            <Text style={styles.nextBtnText}>{getNextButtonText(step)}</Text>
+            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar 
@@ -1420,13 +1486,10 @@ export default function CreateInvoiceScreen() {
       {/* Progress Steps */}
       <View style={[styles.progressContainer, { backgroundColor: colors.card, ...shadows.sm }]}>
         {STEPS.map((s, index) => {
-          // In edit mode, skip the Type step (index 0)
           if (isEditing && index === 0) return null;
           
           const isActive = index === step;
           const isCompleted = index < step;
-          // In edit mode, don't allow going back to step 0
-          const minStep = isEditing ? 1 : 0;
           
           return (
             <TouchableOpacity
@@ -1454,7 +1517,7 @@ export default function CreateInvoiceScreen() {
               </View>
               <Text style={[
                 styles.progressLabel,
-                { color: getProgressLabelColor(isActive, isCompleted) }
+                { color: getProgressLabelColor(colors, isActive, isCompleted) }
               ]}>
                 {s.label}
               </Text>
@@ -1477,53 +1540,11 @@ export default function CreateInvoiceScreen() {
             }
           ]}
         >
-          {step === 0 && renderDocumentTypeStep()}
-          {step === 1 && renderCustomerStep()}
-          {step === 2 && renderItemsStep()}
-          {step === 3 && renderReviewStep()}
+          {renderCurrentStep()}
         </Animated.View>
       </KeyboardAvoidingView>
       
-      {/* Footer Navigation */}
-      <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border, ...shadows.lg }]}>
-        {/* In edit mode, don't show back button on step 1 since type is locked */}
-        {step > (isEditing ? 1 : 0) && (
-          <TouchableOpacity 
-            style={[styles.backBtn, { borderColor: colors.border }]}
-            onPress={goToPrevStep}
-          >
-            <Ionicons name="arrow-back" size={20} color={colors.text} />
-            <Text style={[styles.backBtnText, { color: colors.text }]}>Back</Text>
-          </TouchableOpacity>
-        )}
-        
-        {step < 3 ? (
-          <TouchableOpacity 
-            style={[styles.nextBtn, { backgroundColor: colors.primary }]}
-            onPress={goToNextStep}
-          >
-            <Text style={styles.nextBtnText}>{getNextButtonText()}</Text>
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.createBtn, { backgroundColor: docConfig.gradient[0] }]}
-            onPress={handleSaveInvoice}
-            disabled={loading}
-          >
-            {loading ? (
-              <Text style={styles.createBtnText}>Saving...</Text>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={styles.createBtnText}>
-                  {isEditing ? 'Update' : 'Create'} {docConfig.label}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+      {renderFooter()}
     </View>
   );
 }

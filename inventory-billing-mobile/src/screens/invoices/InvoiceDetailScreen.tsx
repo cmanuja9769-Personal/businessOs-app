@@ -15,11 +15,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { InvoiceDetailRouteProp, InvoiceStackNavigationProp } from '@navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { InvoiceDetailRouteProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Loading from '@components/ui/Loading';
@@ -465,6 +465,30 @@ const buildPdfHtml = (
 const getPdfError = (err: unknown): string =>
   err instanceof Error ? err.message : 'Failed to generate PDF';
 
+const generateAndSharePdf = async (
+  invoice: DbInvoice,
+  invoiceItems: InvoiceItem[]
+): Promise<void> => {
+  const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
+  const gstEnabled = invoice.gst_enabled !== false;
+  const html = buildPdfHtml(invoice, items, gstEnabled);
+
+  const { uri } = await Print.printToFileAsync({
+    html,
+    base64: false,
+  });
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Invoice ${invoice.invoice_number || invoice.id.slice(0, 8)}`,
+      UTI: 'com.adobe.pdf',
+    });
+  } else {
+    Alert.alert('PDF Generated', `Saved to: ${uri}`);
+  }
+};
+
 function parseItemsFromString(str: string): InvoiceItem[] {
   try {
     const parsed = JSON.parse(str);
@@ -488,9 +512,216 @@ function normalizeInvoiceItems(raw: unknown): InvoiceItem[] {
   return [];
 }
 
+type StatusStyleColors = {
+  successLight: string; success: string; infoLight: string; info: string;
+  errorLight: string; error: string; surfaceElevated: string;
+  textTertiary: string; warningLight: string; warning: string;
+};
+
+function getStatusStyle(
+  colors: StatusStyleColors,
+  isDark: boolean,
+  status: string | null | undefined
+) {
+  switch (String(status || '').toLowerCase()) {
+    case 'paid':      return { bg: colors.successLight, color: colors.success, label: 'PAID' };
+    case 'partial':   return { bg: colors.infoLight, color: colors.info, label: 'PARTIAL' };
+    case 'overdue':   return { bg: colors.errorLight, color: colors.error, label: 'OVERDUE' };
+    case 'draft':     return { bg: isDark ? colors.surfaceElevated : '#F1F5F9', color: colors.textTertiary, label: 'DRAFT' };
+    case 'cancelled': return { bg: colors.errorLight, color: colors.error, label: 'CANCELLED' };
+    default:          return { bg: colors.warningLight, color: colors.warning, label: 'PENDING' };
+  }
+}
+
+interface CustomerDetailItem {
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly value: string;
+}
+
+function CustomerDetailsSection({
+  invoice,
+  colors,
+  shadows,
+}: {
+  readonly invoice: DbInvoice;
+  readonly colors: { card: string; text: string; textSecondary: string; textTertiary: string; primary: string; primaryLight: string; [key: string]: unknown };
+  readonly shadows: Record<string, Record<string, unknown>>;
+}) {
+  const details: CustomerDetailItem[] = [
+    invoice.customer_email ? { icon: 'mail-outline', value: invoice.customer_email } : null,
+    invoice.customer_phone ? { icon: 'call-outline', value: invoice.customer_phone } : null,
+  ].filter((d): d is CustomerDetailItem => d !== null);
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
+      <View style={styles.cardHeader}>
+        <Ionicons name="person-outline" size={20} color={colors.primary} />
+        <Text style={[styles.cardTitle, { color: colors.text }]}>Customer</Text>
+      </View>
+      <Text style={[styles.customerName, { color: colors.text }]}>
+        {invoice.customer_name || 'Walk-in Customer'}
+      </Text>
+      {details.map((d) => (
+        <View key={d.icon} style={styles.customerDetail}>
+          <Ionicons name={d.icon} size={14} color={colors.textTertiary} />
+          <Text style={[styles.customerDetailText, { color: colors.textSecondary }]}>
+            {d.value}
+          </Text>
+        </View>
+      ))}
+      {invoice.customer_gst ? (
+        <View style={[styles.gstinBadge, { backgroundColor: colors.primaryLight }]}>
+          <Text style={[styles.gstinText, { color: colors.primary }]}>
+            GSTIN: {invoice.customer_gst}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+interface SummaryLineItem {
+  readonly label: string;
+  readonly value: number;
+  readonly color?: string;
+  readonly prefix?: string;
+}
+
+function GstSummaryRows({
+  invoice,
+  colors,
+}: {
+  readonly invoice: DbInvoice;
+  readonly colors: { text: string; textSecondary: string; success: string; [key: string]: unknown };
+}) {
+  const optionalRows = ([
+    (invoice.cgst ?? 0) > 0 ? { label: 'CGST', value: invoice.cgst ?? 0 } : null,
+    (invoice.sgst ?? 0) > 0 ? { label: 'SGST', value: invoice.sgst ?? 0 } : null,
+    (invoice.igst ?? 0) > 0 ? { label: 'IGST', value: invoice.igst ?? 0 } : null,
+    (invoice.discount ?? 0) > 0 ? { label: 'Discount', value: invoice.discount ?? 0, color: colors.success, prefix: '-' } : null,
+  ] as const).filter((r): r is SummaryLineItem => r !== null);
+
+  return (
+    <>
+      {optionalRows.map((row) => (
+        <View key={row.label} style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>{row.label}</Text>
+          <Text style={[styles.summaryValue, { color: row.color ?? colors.text }]}>
+            {row.prefix ?? ''}{formatCurrency(row.value)}
+          </Text>
+        </View>
+      ))}
+    </>
+  );
+}
+
+function computeInvoiceDisplayValues(invoice: DbInvoice, invoiceItems: InvoiceItem[]) {
+  const docType = (invoice.document_type || 'invoice') as DocumentType;
+  const docConfig = DOCUMENT_TYPES[docType] || DOCUMENT_TYPES.invoice;
+  const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
+  const balance = invoice.balance ?? ((invoice.total || 0) - (invoice.paid_amount || 0));
+  const pricingMode = invoice.pricing_mode || 'sale';
+  const billingMode = invoice.billing_mode || (invoice.gst_enabled === false ? 'non-gst' : 'gst');
+  const displayNumber = invoice.invoice_number || `#${invoice.id.slice(0, 8)}`;
+  const formattedDate = formatDate(invoice.invoice_date || new Date().toISOString());
+  const formattedDueDate = formatDate(invoice.due_date || invoice.invoice_date || new Date().toISOString());
+  const subtotalDisplay = invoice.subtotal || items.reduce((sum, item) => sum + (item.amount || (item.quantity || 0) * (item.rate || 0)), 0);
+
+  return { docConfig, items, balance, pricingMode, billingMode, displayNumber, formattedDate, formattedDueDate, subtotalDisplay };
+}
+
+function BillingModeBadges({
+  pricingMode,
+  billingMode,
+  colors,
+}: {
+  readonly pricingMode: string;
+  readonly billingMode: string;
+  readonly colors: { primary: string; primaryLight: string; success: string; successLight: string; warning: string; warningLight: string; [key: string]: unknown };
+}) {
+  const billingColor = billingMode === 'gst' ? colors.success : colors.warning;
+  const billingBg = billingMode === 'gst' ? colors.successLight : colors.warningLight;
+  const billingLabel = billingMode === 'gst' ? 'GST Billing' : 'Non-GST';
+
+  return (
+    <View style={styles.modeContainer}>
+      <View style={[styles.modeBadge, { backgroundColor: colors.primaryLight }]}>
+        <Ionicons name="pricetag-outline" size={14} color={colors.primary} />
+        <Text style={[styles.modeBadgeText, { color: colors.primary }]}>
+          {getPricingModeLabel(pricingMode)}
+        </Text>
+      </View>
+      <View style={[styles.modeBadge, { backgroundColor: billingBg }]}>
+        <Ionicons name="receipt-outline" size={14} color={billingColor} />
+        <Text style={[styles.modeBadgeText, { color: billingColor }]}>
+          {billingLabel}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function InvoiceSummary({
+  invoice,
+  balance,
+  colors,
+  shadows,
+}: {
+  readonly invoice: DbInvoice;
+  readonly balance: number;
+  readonly colors: { text: string; textSecondary: string; primary: string; success: string; successLight: string; warning: string; warningLight: string; card: string; border: string; [key: string]: unknown };
+  readonly shadows: Record<string, Record<string, unknown>>;
+}) {
+  const balanceColor = balance > 0 ? colors.warning : colors.success;
+  const balanceBg = balance > 0 ? colors.warningLight : colors.successLight;
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
+      <View style={styles.cardHeader}>
+        <Ionicons name="calculator-outline" size={20} color={colors.primary} />
+        <Text style={[styles.cardTitle, { color: colors.text }]}>Summary</Text>
+      </View>
+      
+      <View style={styles.summaryRows}>
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Subtotal</Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>
+            {formatCurrency(invoice.subtotal || 0)}
+          </Text>
+        </View>
+        
+        <GstSummaryRows invoice={invoice} colors={colors} />
+        
+        <View style={[styles.summaryRow, styles.totalRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.totalRowLabel, { color: colors.text }]}>Total</Text>
+          <Text style={[styles.totalRowValue, { color: colors.text }]}>
+            {formatCurrency(invoice.total || 0)}
+          </Text>
+        </View>
+        
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Paid</Text>
+          <Text style={[styles.summaryValue, { color: colors.success }]}>
+            {formatCurrency(invoice.paid_amount || 0)}
+          </Text>
+        </View>
+        
+        <View style={[styles.summaryRow, styles.balanceRow, { backgroundColor: balanceBg }]}>
+          <Text style={[styles.balanceLabel, { color: balanceColor }]}>
+            Balance Due
+          </Text>
+          <Text style={[styles.balanceValue, { color: balanceColor }]}>
+            {formatCurrency(balance)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function InvoiceDetailScreen() {
   const route = useRoute<InvoiceDetailRouteProp>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<InvoiceStackNavigationProp>();
   const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
   const { invoiceId } = route.params;
@@ -565,46 +796,14 @@ export default function InvoiceDetailScreen() {
     if (!invoice) return;
 
     try {
-      const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
-      const gstEnabled = invoice.gst_enabled !== false;
-      const html = buildPdfHtml(invoice, items, gstEnabled);
-
-      const { uri } = await Print.printToFileAsync({
-        html,
-        base64: false,
-      });
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `Invoice ${invoice.invoice_number || invoice.id.slice(0, 8)}`,
-          UTI: 'com.adobe.pdf',
-        });
-      } else {
-        Alert.alert('PDF Generated', `Saved to: ${uri}`);
-      }
+      await generateAndSharePdf(invoice, invoiceItems);
     } catch (err: unknown) {
       console.error('PDF generation error:', err);
       Alert.alert('Error', getPdfError(err));
     }
   };
 
-  const getStatusStyle = (status: string | null | undefined) => {
-    switch (String(status || '').toLowerCase()) {
-      case 'paid':
-        return { bg: colors.successLight, color: colors.success, label: 'PAID' };
-      case 'partial':
-        return { bg: colors.infoLight, color: colors.info, label: 'PARTIAL' };
-      case 'overdue':
-        return { bg: colors.errorLight, color: colors.error, label: 'OVERDUE' };
-      case 'draft':
-        return { bg: isDark ? colors.surfaceElevated : '#F1F5F9', color: colors.textTertiary, label: 'DRAFT' };
-      case 'cancelled':
-        return { bg: colors.errorLight, color: colors.error, label: 'CANCELLED' };
-      default:
-        return { bg: colors.warningLight, color: colors.warning, label: 'PENDING' };
-    }
-  };
+
 
   if (loading) return <Loading fullScreen />;
 
@@ -628,14 +827,8 @@ export default function InvoiceDetailScreen() {
     );
   }
 
-  const docType = (invoice.document_type || 'invoice') as DocumentType;
-  const docConfig = DOCUMENT_TYPES[docType] || DOCUMENT_TYPES.invoice;
-  const statusStyle = getStatusStyle(invoice.status);
-  // Use items from invoice_items table first, fallback to JSON items column
-  const items = invoiceItems.length > 0 ? invoiceItems : normalizeInvoiceItems(invoice.items);
-  const balance = invoice.balance ?? ((invoice.total || 0) - (invoice.paid_amount || 0));
-  const pricingMode = invoice.pricing_mode || 'sale';
-  const billingMode = invoice.billing_mode || (invoice.gst_enabled === false ? 'non-gst' : 'gst');
+  const { docConfig, items, balance, pricingMode, billingMode, displayNumber, formattedDate, formattedDueDate, subtotalDisplay } = computeInvoiceDisplayValues(invoice, invoiceItems);
+  const statusStyle = getStatusStyle(colors, isDark, invoice.status);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -687,21 +880,21 @@ export default function InvoiceDetailScreen() {
           </View>
           
           <Text style={styles.invoiceNumber}>
-            {invoice.invoice_number || `#${invoice.id.slice(0, 8)}`}
+            {displayNumber}
           </Text>
           
           <View style={styles.headerDates}>
             <View style={styles.dateItem}>
               <Text style={styles.dateLabel}>Date</Text>
               <Text style={styles.dateValue}>
-                {formatDate(invoice.invoice_date || new Date().toISOString())}
+                {formattedDate}
               </Text>
             </View>
             <View style={styles.dateDivider} />
             <View style={styles.dateItem}>
               <Text style={styles.dateLabel}>Due Date</Text>
               <Text style={styles.dateValue}>
-                {formatDate(invoice.due_date || invoice.invoice_date || new Date().toISOString())}
+                {formattedDueDate}
               </Text>
             </View>
           </View>
@@ -712,21 +905,7 @@ export default function InvoiceDetailScreen() {
           </View>
         </LinearGradient>
 
-        {/* Pricing & Billing Mode */}
-        <View style={styles.modeContainer}>
-          <View style={[styles.modeBadge, { backgroundColor: colors.primaryLight }]}>
-            <Ionicons name="pricetag-outline" size={14} color={colors.primary} />
-            <Text style={[styles.modeBadgeText, { color: colors.primary }]}>
-              {getPricingModeLabel(pricingMode)}
-            </Text>
-          </View>
-          <View style={[styles.modeBadge, { backgroundColor: billingMode === 'gst' ? colors.successLight : colors.warningLight }]}>
-            <Ionicons name="receipt-outline" size={14} color={billingMode === 'gst' ? colors.success : colors.warning} />
-            <Text style={[styles.modeBadgeText, { color: billingMode === 'gst' ? colors.success : colors.warning }]}>
-              {billingMode === 'gst' ? 'GST Billing' : 'Non-GST'}
-            </Text>
-          </View>
-        </View>
+        <BillingModeBadges pricingMode={pricingMode} billingMode={billingMode} colors={colors} />
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
@@ -756,42 +935,7 @@ export default function InvoiceDetailScreen() {
         </View>
 
         {/* Customer Card */}
-        <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="person-outline" size={20} color={colors.primary} />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Customer</Text>
-          </View>
-          
-          <Text style={[styles.customerName, { color: colors.text }]}>
-            {invoice.customer_name || 'Walk-in Customer'}
-          </Text>
-          
-          {invoice.customer_email && (
-            <View style={styles.customerDetail}>
-              <Ionicons name="mail-outline" size={14} color={colors.textTertiary} />
-              <Text style={[styles.customerDetailText, { color: colors.textSecondary }]}>
-                {invoice.customer_email}
-              </Text>
-            </View>
-          )}
-          
-          {invoice.customer_phone && (
-            <View style={styles.customerDetail}>
-              <Ionicons name="call-outline" size={14} color={colors.textTertiary} />
-              <Text style={[styles.customerDetailText, { color: colors.textSecondary }]}>
-                {invoice.customer_phone}
-              </Text>
-            </View>
-          )}
-          
-          {invoice.customer_gst && (
-            <View style={[styles.gstinBadge, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.gstinText, { color: colors.primary }]}>
-                GSTIN: {invoice.customer_gst}
-              </Text>
-            </View>
-          )}
-        </View>
+        <CustomerDetailsSection invoice={invoice} colors={colors} shadows={shadows} />
 
         {/* Items Card - Tap to view all */}
         <TouchableOpacity 
@@ -963,88 +1107,14 @@ export default function InvoiceDetailScreen() {
                   Subtotal ({items.length} items)
                 </Text>
                 <Text style={[styles.modalFooterValue, { color: colors.text }]}>
-                  {formatCurrency(invoice?.subtotal || items.reduce((sum, item) => sum + (item.amount || (item.quantity || 0) * (item.rate || 0)), 0))}
+                  {formatCurrency(subtotalDisplay)}
                 </Text>
               </View>
             </View>
           </View>
         </Modal>
 
-        {/* Summary Card */}
-        <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
-          <View style={styles.cardHeader}>
-            <Ionicons name="calculator-outline" size={20} color={colors.primary} />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Summary</Text>
-          </View>
-          
-          <View style={styles.summaryRows}>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Subtotal</Text>
-              <Text style={[styles.summaryValue, { color: colors.text }]}>
-                {formatCurrency(invoice.subtotal || 0)}
-              </Text>
-            </View>
-            
-            {(invoice.cgst || 0) > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>CGST</Text>
-                <Text style={[styles.summaryValue, { color: colors.text }]}>
-                  {formatCurrency(invoice.cgst || 0)}
-                </Text>
-              </View>
-            )}
-            
-            {(invoice.sgst || 0) > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>SGST</Text>
-                <Text style={[styles.summaryValue, { color: colors.text }]}>
-                  {formatCurrency(invoice.sgst || 0)}
-                </Text>
-              </View>
-            )}
-            
-            {(invoice.igst || 0) > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>IGST</Text>
-                <Text style={[styles.summaryValue, { color: colors.text }]}>
-                  {formatCurrency(invoice.igst || 0)}
-                </Text>
-              </View>
-            )}
-            
-            {(invoice.discount || 0) > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Discount</Text>
-                <Text style={[styles.summaryValue, { color: colors.success }]}>
-                  -{formatCurrency(invoice.discount || 0)}
-                </Text>
-              </View>
-            )}
-            
-            <View style={[styles.summaryRow, styles.totalRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.totalRowLabel, { color: colors.text }]}>Total</Text>
-              <Text style={[styles.totalRowValue, { color: colors.text }]}>
-                {formatCurrency(invoice.total || 0)}
-              </Text>
-            </View>
-            
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Paid</Text>
-              <Text style={[styles.summaryValue, { color: colors.success }]}>
-                {formatCurrency(invoice.paid_amount || 0)}
-              </Text>
-            </View>
-            
-            <View style={[styles.summaryRow, styles.balanceRow, { backgroundColor: balance > 0 ? colors.warningLight : colors.successLight }]}>
-              <Text style={[styles.balanceLabel, { color: balance > 0 ? colors.warning : colors.success }]}>
-                Balance Due
-              </Text>
-              <Text style={[styles.balanceValue, { color: balance > 0 ? colors.warning : colors.success }]}>
-                {formatCurrency(balance)}
-              </Text>
-            </View>
-          </View>
-        </View>
+        <InvoiceSummary invoice={invoice} balance={balance} colors={colors} shadows={shadows} />
 
         {/* Notes */}
         {invoice.notes && (
@@ -1059,7 +1129,6 @@ export default function InvoiceDetailScreen() {
           </View>
         )}
         
-        {/* Terms */}
         {invoice.terms && (
           <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
             <View style={styles.cardHeader}>

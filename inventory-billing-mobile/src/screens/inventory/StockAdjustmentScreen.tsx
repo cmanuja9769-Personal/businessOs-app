@@ -51,6 +51,17 @@ const REASONS: ReasonOption[] = [
 const getInputBackground = (isDark: boolean, colors: { surface: string }, fallback = '#f8fafc'): string =>
   isDark ? colors.surface : fallback;
 
+const getToggleBg = (
+  active: boolean,
+  isDark: boolean,
+  activeDark: string,
+  activeLight: string,
+  inactiveSurface: string
+): string => {
+  if (active) return isDark ? activeDark : activeLight;
+  return isDark ? inactiveSurface : '#F9FAFB';
+};
+
 const computeNewStock = (currentStock: number, type: AdjustmentType, qty: number): number =>
   currentStock + (type === 'increase' ? qty : -qty);
 
@@ -375,6 +386,23 @@ export default function StockAdjustmentScreen() {
       </View>
     );
   }
+
+  const isIncrease = adjustmentType === 'increase';
+  const increaseStyle = {
+    backgroundColor: getToggleBg(isIncrease, isDark, '#064e3b', '#D1FAE5', colors.surface),
+    borderColor: isIncrease ? '#10B981' : colors.border,
+    textColor: isIncrease ? '#10B981' : colors.textSecondary,
+    icon: 'add-circle-outline' as const,
+    label: 'Increase Stock',
+  };
+  const decreaseStyle = {
+    backgroundColor: getToggleBg(!isIncrease, isDark, '#7f1d1d', '#FEE2E2', colors.surface),
+    borderColor: !isIncrease ? '#EF4444' : colors.border,
+    textColor: !isIncrease ? '#EF4444' : colors.textSecondary,
+    icon: 'remove-circle-outline' as const,
+    label: 'Decrease Stock',
+  };
+  const inputBg = isDark ? colors.surface : '#F9FAFB';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

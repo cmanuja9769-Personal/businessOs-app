@@ -6,6 +6,9 @@
     "moduleResolution": "bundler",
     "jsx": "react-native",
     "paths": {
+      "@supabase/postgrest-js": [
+        "./node_modules/@supabase/postgrest-js/dist/cjs/index.d.ts"
+      ],
       "@/*": [
         "./src/*"
       ],

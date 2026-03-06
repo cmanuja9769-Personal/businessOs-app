@@ -4,6 +4,8 @@ import { renderToBuffer, Font } from "@react-pdf/renderer"
 import { join } from "path"
 import type { CompactReportPDFProps } from "@/components/reports/compact-report-pdf"
 
+export const maxDuration = 60
+
 Font.register({
   family: "NotoSans",
   fonts: [
@@ -102,13 +104,11 @@ export async function POST(request: Request) {
     const element = createElement(CompactReportPDF, props as any)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const buffer = await renderToBuffer(element as any)
-    const safeName = (body.filename ?? "report").replace(/[^a-zA-Z0-9_-]/g, "_")
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${safeName}.pdf"`,
+        "Content-Type": "application/octet-stream",
         "Cache-Control": "no-store",
       },
     })

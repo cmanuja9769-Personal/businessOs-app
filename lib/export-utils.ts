@@ -189,7 +189,8 @@ export async function downloadReportPDF(
     throw new Error(errorData?.error ?? `PDF generation failed (${response.status})`)
   }
 
-  const blob = await response.blob()
+  const raw = await response.arrayBuffer()
+  const blob = new Blob([raw], { type: "application/pdf" })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url

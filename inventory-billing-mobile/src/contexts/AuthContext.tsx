@@ -85,6 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userMetadata?: Record<string, unknown>,
     ): Promise<string | null> => {
       try {
+        const result = await resolveOrgIdInner(userId, userMetadata);
+        if (result) return result;
+
+        console.warn('[AUTH] Org resolution returned null, refreshing session and retrying...');
+        await supabase.auth.refreshSession();
         return await resolveOrgIdInner(userId, userMetadata);
       } catch (error: unknown) {
         console.error('Failed to resolve organization id:', error);
@@ -129,65 +134,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fallbackCacheValue: string | null,
     ): Promise<string | null> => {
       try {
-        const filters: Record<string, string | boolean> = { user_id: userId };
-        if (filterActive) filters.is_active = true;
-
-        const { data, error } = await supabase
+        let query = supabase
           .from('app_user_organizations')
           .select('organization_id')
-          .match(filters)
+          .eq('user_id', userId);
+
+        if (filterActive) {
+          query = query.eq('is_active', true);
+        }
+
+        const { data, error } = await query
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
+        if (error) {
+          console.error('[AUTH] Org DB query error:', error.message, error.code);
+          if (fallbackCacheValue) return fallbackCacheValue;
+          return null;
+        }
+
         const row = data as OrgRow | null;
-        if (!error && row?.organization_id) {
+        if (row?.organization_id) {
           console.warn('[AUTH] Organization from DB:', row.organization_id);
           await AsyncStorage.setItem(CACHED_ORG_KEY, row.organization_id);
           await AsyncStorage.setItem(CACHED_ORG_USER_KEY, userId);
           return row.organization_id;
         }
+
+        console.warn('[AUTH] No org row found, user:', userId, 'active:', filterActive);
+        return null;
       } catch (dbErr: unknown) {
-        console.warn('[AUTH] DB query failed:', dbErr);
-        if (fallbackCacheValue) {
-          console.warn('[AUTH] Using stale cache after DB failure');
-          return fallbackCacheValue;
-        }
+        console.error('[AUTH] DB query exception:', dbErr);
+        if (fallbackCacheValue) return fallbackCacheValue;
+        return null;
       }
-      return null;
     };
 
-    // Background refresh of session - update cache if successful
+    const applySession = async (activeSession: Session) => {
+      setSession(activeSession);
+      setUser(activeSession.user);
+      await AsyncStorage.setItem(CACHED_SESSION_KEY, JSON.stringify(activeSession));
+      await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(activeSession.user));
+      const orgId = await resolveOrganizationId(
+        activeSession.user.id,
+        activeSession.user.user_metadata as Record<string, unknown>,
+      );
+      if (isMounted && orgId) {
+        setOrganizationId(orgId);
+      } else if (isMounted) {
+        console.warn('[AUTH] Organization could not be resolved');
+      }
+    };
+
+    const getValidSession = async (): Promise<Session | null> => {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (!error && data?.session) return data.session;
+      console.warn('[AUTH] refreshSession failed, trying getSession...');
+      const { data: fallback } = await supabase.auth.getSession();
+      return fallback.session ?? null;
+    };
+
     const refreshSessionInBackground = async () => {
       try {
         console.warn('[AUTH] Background session refresh starting...');
-        const { data: sessionData, error } = await supabase.auth.getSession();
-
+        const validSession = await getValidSession();
         if (!isMounted) return;
 
-        if (error) {
-          console.warn('[AUTH] Background session refresh error:', error.message);
-          return;
-        }
-
-        if (sessionData.session) {
-          console.warn('[AUTH] Background refresh got valid session');
-          setSession(sessionData.session);
-          setUser(sessionData.session.user);
-
-          await AsyncStorage.setItem(CACHED_SESSION_KEY, JSON.stringify(sessionData.session));
-          await AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify(sessionData.session.user));
-
-          const orgId = await resolveOrganizationId(
-            sessionData.session.user.id,
-            sessionData.session.user.user_metadata as Record<string, unknown>,
-          );
-          if (isMounted && orgId) {
-            setOrganizationId(orgId);
-          }
+        if (validSession) {
+          await applySession(validSession);
         } else {
-          console.warn('[AUTH] No valid session from background refresh');
-          // Only clear state if we didn't have cached data
+          console.warn('[AUTH] No valid session available');
           const hadCachedUser = await AsyncStorage.getItem(CACHED_USER_KEY);
           if (!hadCachedUser) {
             setSession(null);
@@ -195,7 +212,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setOrganizationId(null);
           }
         }
-        
         setLoading(false);
       } catch (e) {
         console.error('[AUTH] Background refresh exception:', e);
@@ -232,6 +248,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (isMounted && orgId) {
                 console.warn('[AUTH] Organization resolved (async):', orgId);
                 setOrganizationId(orgId);
+              } else if (isMounted) {
+                console.warn('[AUTH] Org resolution returned null after auth state change:', event);
               }
             })
             .catch((e: unknown) => console.error('[AUTH] Org resolution failed:', e));

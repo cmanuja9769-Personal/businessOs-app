@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   AlertTriangle, 
   Filter,
   Loader2,
@@ -20,6 +18,9 @@ import {
   ShoppingCart
 } from "lucide-react"
 import Link from "next/link"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface LowStockItem {
   id: string
@@ -120,31 +121,53 @@ export default function LowStockPage() {
 
   const totalShortfall = filteredItems.reduce((sum, i) => sum + i.shortfall, 0)
 
-  const exportToCSV = () => {
-    const headers = ['Item Name', 'SKU', 'Category', 'Current Stock', 'Reorder Level', 'Shortfall', 'Unit', 'Supplier']
-    const rows = filteredItems.map(i => [
-      i.name,
-      i.sku,
-      i.category,
-      i.currentStock.toString(),
-      i.reorderLevel.toString(),
-      i.shortfall.toString(),
-      i.unit,
-      i.supplier || '-'
-    ])
+  const lowStockPdfColumns: ReportColumn[] = [
+    { key: "name", header: "Item Name", width: "30%", bold: true },
+    { key: "supplier", header: "Supplier Name", width: "22%" },
+    { key: "currentStock", header: "Current Stock", width: "16%", align: "right" },
+    { key: "minStock", header: "Min Stock", width: "16%", align: "right" },
+    { key: "deficit", header: "Deficit", width: "16%", align: "right" },
+  ]
 
-    const csvContent = [
-      'Low Stock Report',
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const data = filteredItems.map((i) => ({
+      name: i.name,
+      supplier: i.supplier || "-",
+      currentStock: i.currentStock,
+      minStock: i.reorderLevel,
+      deficit: i.shortfall,
+    }))
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Low Stock Alert",
+        subtitle: `${filteredItems.length} items below reorder level | Total shortfall: ${totalShortfall} units`,
+        dateRange: `As of ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`,
+        columns: lowStockPdfColumns,
+        data,
+      }),
+      `low-stock-${new Date().toISOString().split("T")[0]}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `low-stock-report-${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "name", header: "Item Name" },
+      { key: "sku", header: "SKU" },
+      { key: "category", header: "Category" },
+      { key: "currentStock", header: "Current Stock" },
+      { key: "reorderLevel", header: "Reorder Level" },
+      { key: "shortfall", header: "Shortfall" },
+      { key: "unit", header: "Unit" },
+      { key: "supplier", header: "Supplier" },
+    ] as const
+    exportCSVUtil(
+      filteredItems as unknown as Record<string, unknown>[],
+      `low-stock-${new Date().toISOString().split("T")[0]}.csv`,
+      csvColumns,
+      { titleRows: ["Low Stock Report"] },
+    )
   }
 
   return (
@@ -166,14 +189,11 @@ export default function LowStockPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredItems.length === 0}
+          />
         </div>
       </div>
 

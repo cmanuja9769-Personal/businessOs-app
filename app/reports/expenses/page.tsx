@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   CreditCard, 
   Filter,
   IndianRupee,
@@ -21,6 +19,12 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+
+const ISO_DATE = "yyyy-MM-dd"
+const DISPLAY_DATE = "dd MMM yyyy"
 
 interface Expense {
   id: string
@@ -50,8 +54,8 @@ const EXPENSE_CATEGORIES = [
 export default function ExpenseReportPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), ISO_DATE))
+  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), ISO_DATE))
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
 
   useEffect(() => {
@@ -97,28 +101,58 @@ export default function ExpenseReportPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Expense No', 'Date', 'Category', 'Description', 'Amount', 'Payment Method', 'Vendor']
-    const rows = filteredExpenses.map(exp => [
-      exp.expenseNo,
-      format(new Date(exp.date), 'dd/MM/yyyy'),
-      exp.category,
-      exp.description,
-      exp.amount.toFixed(2),
-      exp.paymentMethod,
-      exp.vendor || ''
-    ])
+  const pdfColumns: ReportColumn[] = [
+    { key: "expenseNo", header: "Expense No", width: "12%", bold: true },
+    { key: "date", header: "Date", width: "12%" },
+    { key: "category", header: "Category", width: "16%" },
+    { key: "description", header: "Description", width: "24%" },
+    { key: "amount", header: "Amount", width: "14%", align: "right" },
+    { key: "paymentMethod", header: "Payment", width: "12%" },
+    { key: "vendor", header: "Vendor", width: "10%" },
+  ]
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const dateRange = `${format(new Date(dateFrom), DISPLAY_DATE)} - ${format(new Date(dateTo), DISPLAY_DATE)}`
+    const data = filteredExpenses.map((exp) => ({
+      expenseNo: exp.expenseNo,
+      date: format(new Date(exp.date), "dd/MM/yyyy"),
+      category: exp.category,
+      description: exp.description,
+      amount: exp.amount,
+      paymentMethod: exp.paymentMethod,
+      vendor: exp.vendor || "-",
+    }))
+    const pdfTotals = {
+      expenseNo: "Total",
+      amount: totalExpenses,
+      description: `${filteredExpenses.length} expenses`,
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Expense Report",
+        subtitle: `${filteredExpenses.length} expenses | Total: ${formatCurrency(totalExpenses)}`,
+        dateRange,
+        columns: pdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `expense-report-${format(new Date(), ISO_DATE)}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `expense-report-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "expenseNo", header: "Expense No" },
+      { key: "date", header: "Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.date as string), "dd/MM/yyyy") },
+      { key: "category", header: "Category" },
+      { key: "description", header: "Description" },
+      { key: "amount", header: "Amount", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "paymentMethod", header: "Payment Method" },
+      { key: "vendor", header: "Vendor", format: (v: unknown) => String(v || "") },
+    ] as const
+    exportToCSV(filteredExpenses as unknown as Record<string, unknown>[], `expense-report-${dateFrom}-to-${dateTo}.csv`, csvColumns)
   }
 
   return (
@@ -144,14 +178,11 @@ export default function ExpenseReportPage() {
             <Plus className="h-4 w-4 mr-2" />
             Add Expense
           </Button>
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredExpenses.length === 0}
+          />
         </div>
       </div>
 
@@ -281,7 +312,7 @@ export default function ExpenseReportPage() {
                     filteredExpenses.map((exp) => (
                       <TableRow key={exp.id}>
                         <TableCell className="font-mono">{exp.expenseNo}</TableCell>
-                        <TableCell>{format(new Date(exp.date), 'dd MMM yyyy')}</TableCell>
+                        <TableCell>{format(new Date(exp.date), DISPLAY_DATE)}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{exp.category}</Badge>
                         </TableCell>

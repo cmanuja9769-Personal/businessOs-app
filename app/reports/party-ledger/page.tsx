@@ -25,6 +25,9 @@ import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/component
 import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { downloadReportPDF } from "@/lib/export-utils"
+import { ExportOverlay } from "@/components/ui/export-overlay"
+import { yieldToMain } from "@/lib/export-utils"
 
 const ISO_DATE = "yyyy-MM-dd"
 const DISPLAY_DATE = "dd MMM yyyy"
@@ -41,9 +44,8 @@ interface Party {
 }
 
 interface LedgerEntry {
-  id: string
   date: string
-  type: "invoice" | "payment" | "credit_note" | "debit_note" | "opening"
+  type: string
   documentNo: string
   description: string
   debit: number
@@ -51,144 +53,24 @@ interface LedgerEntry {
   balance: number
 }
 
-function createOpeningEntry(openingBalance: number, dateFrom: string): LedgerEntry | null {
+function buildOpeningEntry(openingBalance: number, dateFrom: string): LedgerEntry | null {
   if (openingBalance === 0) return null
   return {
-    id: "opening",
     date: dateFrom,
-    type: "opening",
+    type: "Opening",
     documentNo: "-",
     description: "Opening Balance B/F",
     debit: openingBalance > 0 ? openingBalance : 0,
     credit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
-    balance: 0,
+    balance: openingBalance,
   }
 }
 
-function isInDateRange(dateStr: string, from: string, to: string): boolean {
-  const d = dateStr.slice(0, 10)
-  return d >= from && d <= to
-}
-
-async function fetchCustomerLedgerEntries(
-  partyId: string,
-  dateFrom: string,
-  dateTo: string,
-): Promise<LedgerEntry[]> {
-  const [invoicesRes, paymentsRes] = await Promise.all([
-    fetch("/api/invoices"),
-    fetch("/api/payments"),
-  ])
-  const invoices = invoicesRes.ok ? await invoicesRes.json() : []
-  const payments = paymentsRes.ok ? await paymentsRes.json() : []
-
-  const entries: LedgerEntry[] = []
-
-  invoices
-    .filter((inv: { customerId: string; invoiceDate: string; status?: string }) =>
-      inv.customerId === partyId &&
-      isInDateRange(inv.invoiceDate, dateFrom, dateTo) &&
-      inv.status !== "cancelled"
-    )
-    .forEach((inv: { id: string; invoiceDate: string; invoiceNo: string; total: number }) => {
-      entries.push({
-        id: `inv-${inv.id}`,
-        date: inv.invoiceDate,
-        type: "invoice",
-        documentNo: inv.invoiceNo,
-        description: "Sales Invoice",
-        debit: inv.total,
-        credit: 0,
-        balance: 0,
-      })
-    })
-
-  payments
-    .filter((pay: { invoiceId?: string; paymentDate?: string; date?: string }) => {
-      const inv = invoices.find((i: { id: string }) => i.id === pay.invoiceId)
-      return inv?.customerId === partyId && isInDateRange(pay.paymentDate || pay.date || '', dateFrom, dateTo)
-    })
-    .forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
-      entries.push({
-        id: `pay-${pay.id}`,
-        date: pay.paymentDate || pay.date || '',
-        type: "payment",
-        documentNo: pay.referenceNo || "Payment",
-        description: `Payment Received - ${pay.paymentMethod || "Cash"}`,
-        debit: 0,
-        credit: pay.amount,
-        balance: 0,
-      })
-    })
-
-  return entries
-}
-
-async function fetchSupplierLedgerEntries(
-  partyId: string,
-  dateFrom: string,
-  dateTo: string,
-): Promise<LedgerEntry[]> {
-  const [purchasesRes, paymentsRes] = await Promise.all([
-    fetch("/api/purchases"),
-    fetch("/api/payments"),
-  ])
-  const purchases = purchasesRes.ok ? await purchasesRes.json() : []
-  const payments = paymentsRes.ok ? await paymentsRes.json() : []
-
-  const entries: LedgerEntry[] = []
-
-  purchases
-    .filter((pur: { supplierId: string; date: string }) =>
-      pur.supplierId === partyId && isInDateRange(pur.date, dateFrom, dateTo)
-    )
-    .forEach((pur: { id: string; date: string; purchaseNo: string; total: number }) => {
-      entries.push({
-        id: `pur-${pur.id}`,
-        date: pur.date,
-        type: "invoice",
-        documentNo: pur.purchaseNo,
-        description: "Purchase Invoice",
-        debit: 0,
-        credit: pur.total,
-        balance: 0,
-      })
-    })
-
-  payments
-    .filter((pay: { purchaseId?: string; paymentDate?: string; date?: string }) => {
-      const pur = purchases.find((p: { id: string }) => p.id === pay.purchaseId)
-      return pur?.supplierId === partyId && isInDateRange(pay.paymentDate || pay.date || '', dateFrom, dateTo)
-    })
-    .forEach((pay: { id: string; paymentDate?: string; date?: string; referenceNo?: string; amount: number; paymentMethod?: string }) => {
-      entries.push({
-        id: `pay-${pay.id}`,
-        date: pay.paymentDate || pay.date || '',
-        type: "payment",
-        documentNo: pay.referenceNo || "Payment",
-        description: `Payment Made - ${pay.paymentMethod || "Cash"}`,
-        debit: pay.amount,
-        credit: 0,
-        balance: 0,
-      })
-    })
-
-  return entries
-}
-
-function sortLedgerEntries(entries: LedgerEntry[]): void {
-  entries.sort((a, b) => {
-    if (a.type === "opening") return -1
-    if (b.type === "opening") return 1
-    return new Date(a.date).getTime() - new Date(b.date).getTime()
-  })
-}
-
-function computeRunningBalances(entries: LedgerEntry[]): void {
-  let balance = 0
-  for (const entry of entries) {
-    balance += entry.debit - entry.credit
-    entry.balance = balance
+function applyRunningBalance(entries: LedgerEntry[], startBalance: number, apiData: LedgerEntry[]): void {
+  let runningBalance = startBalance
+  for (const row of apiData) {
+    runningBalance += row.debit - row.credit
+    entries.push({ ...row, balance: runningBalance })
   }
 }
 
@@ -234,23 +116,33 @@ export default function PartyLedgerPage() {
   }, [])
 
   const fetchLedger = useCallback(async () => {
+    const party = parties.find((p) => p.id === selectedParty)
+    if (!party) return
+
     setLoading(true)
     setFetchError(null)
     try {
-      const party = parties.find((p) => p.id === selectedParty)
-      if (!party) return
+      const params = new URLSearchParams({
+        partyId: selectedParty,
+        partyType: party.type,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+      })
 
+      const res = await fetch(`/api/reports/party-ledger?${params}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Server returned ${res.status}`)
+      }
+
+      const { data } = await res.json()
       const entries: LedgerEntry[] = []
-      const openingEntry = createOpeningEntry(party.opening_balance || 0, filters.dateFrom)
+      const openingBalance = party.opening_balance || 0
+
+      const openingEntry = buildOpeningEntry(openingBalance, filters.dateFrom)
       if (openingEntry) entries.push(openingEntry)
 
-      const partyEntries = party.type === "customer"
-        ? await fetchCustomerLedgerEntries(selectedParty, filters.dateFrom, filters.dateTo)
-        : await fetchSupplierLedgerEntries(selectedParty, filters.dateFrom, filters.dateTo)
-
-      entries.push(...partyEntries)
-      sortLedgerEntries(entries)
-      computeRunningBalances(entries)
+      applyRunningBalance(entries, openingBalance, data)
 
       setLedgerEntries(entries)
     } catch (error) {
@@ -316,9 +208,9 @@ export default function PartyLedgerPage() {
         balance: closingBalance,
       }
 
-      const { pdf } = await import("@react-pdf/renderer")
       const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
-      const blob = await pdf(
+      await yieldToMain()
+      await downloadReportPDF(
         <CompactReportPDF
           title={`Party Ledger: ${selectedPartyData.name}`}
           subtitle={`${selectedPartyData.type === "customer" ? "Customer" : "Supplier"} | ${selectedPartyData.gstin || "No GSTIN"} | Closing: ${formatCurrency(closingBalance)} ${closingBalance >= 0 ? "Dr" : "Cr"}`}
@@ -331,17 +223,9 @@ export default function PartyLedgerPage() {
             if (bal < 0) return "red"
             return null
           }}
-        />
-      ).toBlob()
-
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `party-ledger-${selectedPartyData.name.replace(/[^a-zA-Z0-9]/g, "-")}-${format(new Date(), ISO_DATE)}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+        />,
+        `party-ledger-${selectedPartyData.name.replace(/[^a-zA-Z0-9]/g, "-")}-${format(new Date(), ISO_DATE)}.pdf`,
+      )
     } catch (error) {
       console.error("PDF generation failed:", error)
     } finally {
@@ -400,9 +284,10 @@ export default function PartyLedgerPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <ExportOverlay visible={pdfGenerating} />
           <Button onClick={handleDownloadPDF} variant="outline" size="sm" disabled={!selectedParty || pdfGenerating}>
             {pdfGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileDown className="h-4 w-4 mr-1" />}
-            PDF
+            {pdfGenerating ? "Generating..." : "PDF"}
           </Button>
           <Button onClick={exportToCSV} variant="outline" size="sm" disabled={!selectedParty}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />
@@ -578,10 +463,10 @@ export default function PartyLedgerPage() {
                         </TableRow>
                       ) : (
                         <>
-                          {ledgerEntries.map((entry) => (
+                          {ledgerEntries.map((entry, idx) => (
                             <TableRow
-                              key={entry.id}
-                              className={entry.type === "opening" ? "bg-blue-50/50 dark:bg-blue-950/20 font-medium" : ""}
+                              key={`${entry.date}-${entry.documentNo}-${idx}`}
+                              className={entry.type === "Opening" ? "bg-blue-50/50 dark:bg-blue-950/20 font-medium" : ""}
                             >
                               <TableCell>{format(new Date(entry.date), DISPLAY_DATE)}</TableCell>
                               <TableCell className="font-mono">{entry.documentNo}</TableCell>

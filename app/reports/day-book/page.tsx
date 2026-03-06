@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   Calendar, 
   Filter,
   Loader2,
@@ -23,6 +21,11 @@ import {
 import Link from "next/link"
 import { format, startOfDay, endOfDay } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse, ApiPaymentResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+
+const LONG_DATE = "dd MMMM yyyy"
 
 interface DayBookEntry {
   id: string
@@ -164,30 +167,67 @@ export default function DayBookPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Time', 'Type', 'Document No', 'Party', 'Description', 'Debit', 'Credit']
-    const rows = filteredEntries.map(e => [
-      e.time,
-      getTypeInfo(e.type).label,
-      e.documentNo,
-      e.partyName,
-      e.description,
-      e.debit.toFixed(2),
-      e.credit.toFixed(2)
-    ])
+  const pdfColumns: ReportColumn[] = [
+    { key: "time", header: "Time", width: "8%" },
+    { key: "type", header: "Type", width: "10%" },
+    { key: "documentNo", header: "Document No", width: "14%", bold: true },
+    { key: "partyName", header: "Party", width: "20%" },
+    { key: "description", header: "Description", width: "24%" },
+    { key: "debit", header: "Debit", width: "12%", align: "right" },
+    { key: "credit", header: "Credit", width: "12%", align: "right" },
+  ]
 
-    const csvContent = [
-      `Day Book - ${format(new Date(selectedDate), 'dd MMMM yyyy')}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const dateLabel = format(new Date(selectedDate), LONG_DATE)
+    const data = filteredEntries.map((e) => ({
+      time: e.time,
+      type: getTypeInfo(e.type).label,
+      documentNo: e.documentNo,
+      partyName: e.partyName,
+      description: e.description,
+      debit: e.debit > 0 ? e.debit : "",
+      credit: e.credit > 0 ? e.credit : "",
+    }))
+    const pdfTotals = {
+      time: "",
+      type: "",
+      documentNo: "Total",
+      partyName: "",
+      description: `${filteredEntries.length} transactions`,
+      debit: totals.debit,
+      credit: totals.credit,
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Day Book",
+        subtitle: `${filteredEntries.length} transactions | Net: ${formatCurrency(totals.debit - totals.credit)}`,
+        dateRange: dateLabel,
+        columns: pdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `day-book-${selectedDate}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `day-book-${selectedDate}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "time", header: "Time" },
+      { key: "type", header: "Type", format: (_: unknown, row: Record<string, unknown>) => getTypeInfo(row.type as string).label },
+      { key: "documentNo", header: "Document No" },
+      { key: "partyName", header: "Party" },
+      { key: "description", header: "Description" },
+      { key: "debit", header: "Debit", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "credit", header: "Credit", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+    ] as const
+    exportToCSV(
+      filteredEntries as unknown as Record<string, unknown>[],
+      `day-book-${selectedDate}.csv`,
+      csvColumns,
+      { titleRows: [`Day Book - ${format(new Date(selectedDate), LONG_DATE)}`] },
+    )
   }
 
   return (
@@ -195,7 +235,7 @@ export default function DayBookPage() {
       {/* Print Header */}
       <div className="hidden print:block report-header">
         <h1>Day Book</h1>
-        <div className="date-range">{format(new Date(selectedDate), 'dd MMMM yyyy')}</div>
+        <div className="date-range">{format(new Date(selectedDate), LONG_DATE)}</div>
       </div>
 
       {/* Print Summary */}
@@ -280,16 +320,11 @@ export default function DayBookPage() {
             <p className="text-sm text-muted-foreground">All transactions for a single day</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <ReportActionBar
+          onExportPDF={handleExportPDF}
+          onExportCSV={handleExportCSV}
+          disabled={filteredEntries.length === 0}
+        />
       </div>
 
       {/* Filters */}

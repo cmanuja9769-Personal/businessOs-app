@@ -150,6 +150,10 @@ export default function ReportsScreen() {
   }, [organizationId]);
 
   const handleReportPress = (reportKey: string) => {
+    if (reportKey === 'party-ledger') {
+      navigation.navigate('PartyLedger');
+      return;
+    }
     navigation.navigate('ReportDetail', { reportKey });
   };
 

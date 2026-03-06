@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   ShoppingCart, 
   Filter,
   Search,
@@ -21,9 +19,13 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 const ISO_DATE = "yyyy-MM-dd"
 const DISPLAY_DATE = "dd MMM yyyy"
+const SHORT_DATE = "dd/MM/yyyy"
 
 interface Purchase {
   id: string
@@ -110,33 +112,67 @@ export default function PurchaseReportPage() {
     return "bg-red-500/10 text-red-700"
   }
 
-  const exportToCSV = () => {
-    const headers = ['PO Number', 'Supplier', 'GSTIN', 'Date', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Paid', 'Balance', 'Status']
-    const rows = filteredPurchases.map(pur => [
-      pur.purchaseNo,
-      pur.supplierName,
-      pur.supplierGstin || '',
-      format(new Date(pur.date), 'dd/MM/yyyy'),
-      (pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0)).toFixed(2),
-      (pur.cgst || 0).toFixed(2),
-      (pur.sgst || 0).toFixed(2),
-      (pur.igst || 0).toFixed(2),
-      pur.total.toFixed(2),
-      pur.paidAmount.toFixed(2),
-      pur.balance.toFixed(2),
-      pur.status,
-    ])
+  const pdfColumns: ReportColumn[] = [
+    { key: "purchaseNo", header: "PO Number", width: "12%", bold: true },
+    { key: "date", header: "Date", width: "10%" },
+    { key: "supplierName", header: "Supplier", width: "20%" },
+    { key: "gstin", header: "GSTIN", width: "14%" },
+    { key: "taxable", header: "Taxable", width: "12%", align: "right" },
+    { key: "gst", header: "GST", width: "10%", align: "right" },
+    { key: "total", header: "Total", width: "12%", align: "right" },
+    { key: "status", header: "Status", width: "10%", align: "center" },
+  ]
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const dateRange = `${format(new Date(dateFrom), DISPLAY_DATE)} - ${format(new Date(dateTo), DISPLAY_DATE)}`
+    const data = filteredPurchases.map((pur) => ({
+      purchaseNo: pur.purchaseNo,
+      date: format(new Date(pur.date), SHORT_DATE),
+      supplierName: pur.supplierName,
+      gstin: pur.supplierGstin || "-",
+      taxable: pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0),
+      gst: (pur.cgst || 0) + (pur.sgst || 0) + (pur.igst || 0),
+      total: pur.total,
+      status: pur.status.toUpperCase(),
+    }))
+    const pdfTotals = {
+      purchaseNo: "Total",
+      taxable: totals.taxable,
+      gst: totals.cgst + totals.sgst + totals.igst,
+      total: totals.total,
+      status: `${filteredPurchases.length} orders`,
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Purchase Report",
+        subtitle: `${filteredPurchases.length} purchase orders`,
+        dateRange,
+        columns: pdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `purchase-report-${format(new Date(), "yyyy-MM-dd")}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `purchase-report-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "purchaseNo", header: "PO Number" },
+      { key: "supplierName", header: "Supplier" },
+      { key: "supplierGstin", header: "GSTIN", format: (v: unknown) => String(v || "") },
+      { key: "date", header: "Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.date as string), SHORT_DATE) },
+      { key: "taxable", header: "Taxable", format: (_: unknown, row: Record<string, unknown>) => (((row.subtotal as number) || (row.total as number) - ((row.cgst as number) || 0) - ((row.sgst as number) || 0) - ((row.igst as number) || 0))).toFixed(2) },
+      { key: "cgst", header: "CGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "sgst", header: "SGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "igst", header: "IGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "total", header: "Total", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "paidAmount", header: "Paid", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "balance", header: "Balance", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "status", header: "Status" },
+    ] as const
+    exportToCSV(filteredPurchases as unknown as Record<string, unknown>[], `purchase-report-${dateFrom}-to-${dateTo}.csv`, csvColumns)
   }
 
   const setQuickDate = (period: string) => {
@@ -205,7 +241,7 @@ export default function PurchaseReportPage() {
               <td>{index + 1}</td>
               <td>{pur.purchaseNo}</td>
               <td>{pur.supplierName}</td>
-              <td>{format(new Date(pur.date), 'dd/MM/yyyy')}</td>
+              <td>{format(new Date(pur.date), SHORT_DATE)}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(pur.subtotal || pur.total - (pur.cgst || 0) - (pur.sgst || 0) - (pur.igst || 0))}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency((pur.cgst || 0) + (pur.sgst || 0) + (pur.igst || 0))}</td>
               <td style={{ textAlign: 'right' }}>{formatCurrency(pur.total)}</td>
@@ -249,16 +285,11 @@ export default function PurchaseReportPage() {
             <p className="text-sm text-muted-foreground">Vendor bills and purchase orders</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <ReportActionBar
+          onExportPDF={handleExportPDF}
+          onExportCSV={handleExportCSV}
+          disabled={filteredPurchases.length === 0}
+        />
       </div>
 
       {/* Filters */}

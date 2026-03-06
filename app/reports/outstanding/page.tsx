@@ -9,8 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   AlertTriangle, 
   IndianRupee,
   Loader2,
@@ -22,8 +20,12 @@ import {
 import Link from "next/link"
 import { format, differenceInDays } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 const SHORT_DATE = "dd/MM/yyyy"
+const DISPLAY_DATE = "dd MMM yyyy"
 
 interface OutstandingEntry {
   id: string
@@ -159,34 +161,72 @@ export default function OutstandingReportPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Type', 'Party Name', 'Document No', 'Date', 'Due Date', 'Amount', 'Paid', 'Balance', 'Days Overdue', 'Phone']
+  const outstandingPdfColumns: ReportColumn[] = [
+    { key: "type", header: "Type", width: "8%", bold: true },
+    { key: "partyName", header: "Party", width: "18%" },
+    { key: "documentNo", header: "Doc No", width: "12%" },
+    { key: "date", header: "Date", width: "10%" },
+    { key: "dueDate", header: "Due Date", width: "10%" },
+    { key: "amount", header: "Amount", width: "12%", align: "right" },
+    { key: "paid", header: "Paid", width: "10%", align: "right" },
+    { key: "balance", header: "Balance", width: "12%", align: "right" },
+    { key: "overdue", header: "Overdue", width: "8%" },
+  ]
+
+  const handleExportPDF = async () => {
     const allEntries = [...filterByAging(receivables), ...filterByAging(payables)]
-    const rows = allEntries.map(e => [
-      e.partyType === 'customer' ? 'Receivable' : 'Payable',
-      e.partyName,
-      e.documentNo,
-      format(new Date(e.documentDate), SHORT_DATE),
-      format(new Date(e.dueDate), SHORT_DATE),
-      e.totalAmount.toFixed(2),
-      e.paidAmount.toFixed(2),
-      e.balance.toFixed(2),
-      e.daysOverdue.toString(),
-      e.phone || ''
-    ])
+    const pdfData = allEntries.map((e) => ({
+      type: e.partyType === "customer" ? "Receivable" : "Payable",
+      partyName: e.partyName,
+      documentNo: e.documentNo,
+      date: format(new Date(e.documentDate), SHORT_DATE),
+      dueDate: format(new Date(e.dueDate), SHORT_DATE),
+      amount: e.totalAmount,
+      paid: e.paidAmount,
+      balance: e.balance,
+      overdue: `${e.daysOverdue}d`,
+    }))
+    const pdfTotals = {
+      type: "Total",
+      amount: allEntries.reduce((s, e) => s + e.totalAmount, 0),
+      paid: allEntries.reduce((s, e) => s + e.paidAmount, 0),
+      balance: allEntries.reduce((s, e) => s + e.balance, 0),
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Outstanding Report",
+        subtitle: `Receivables: ${formatCurrency(receivablesSummary.total)} | Payables: ${formatCurrency(payablesSummary.total)}`,
+        dateRange: `As of ${format(new Date(), DISPLAY_DATE)}`,
+        columns: outstandingPdfColumns,
+        data: pdfData,
+        totals: pdfTotals,
+      }),
+      `outstanding-${format(new Date(), "yyyy-MM-dd")}.pdf`,
+    )
+  }
 
-    const csvContent = [
-      `Outstanding Report - As of ${format(new Date(), 'dd MMM yyyy')}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `outstanding-report-${format(new Date(), 'yyyy-MM-dd')}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const allEntries = [...filterByAging(receivables), ...filterByAging(payables)]
+    const csvColumns = [
+      { key: "partyType", header: "Type", format: (v: unknown) => (v === "customer" ? "Receivable" : "Payable") },
+      { key: "partyName", header: "Party Name" },
+      { key: "documentNo", header: "Document No" },
+      { key: "documentDate", header: "Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.documentDate as string), SHORT_DATE) },
+      { key: "dueDate", header: "Due Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.dueDate as string), SHORT_DATE) },
+      { key: "totalAmount", header: "Amount", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "paidAmount", header: "Paid", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "balance", header: "Balance", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "daysOverdue", header: "Days Overdue" },
+      { key: "phone", header: "Phone" },
+    ] as const
+    exportCSVUtil(
+      allEntries as unknown as Record<string, unknown>[],
+      `outstanding-${format(new Date(), "yyyy-MM-dd")}.csv`,
+      csvColumns,
+      { titleRows: [`Outstanding Report - As of ${format(new Date(), DISPLAY_DATE)}`] },
+    )
   }
 
   return (
@@ -194,7 +234,7 @@ export default function OutstandingReportPage() {
       {/* Print Header - Only visible when printing */}
       <div className="hidden print:block report-header">
         <h1>Outstanding Report</h1>
-        <div className="date-range">As of {format(new Date(), 'dd MMM yyyy')}</div>
+        <div className="date-range">As of {format(new Date(), DISPLAY_DATE)}</div>
       </div>
 
       {/* Print Summary */}
@@ -325,14 +365,11 @@ export default function OutstandingReportPage() {
               <SelectItem value="90+">90+ Days</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={receivables.length === 0 && payables.length === 0}
+          />
         </div>
       </div>
 

@@ -8,8 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   TrendingUp, 
   Filter,
   Loader2,
@@ -21,8 +19,12 @@ import {
 import Link from "next/link"
 import { format, endOfMonth, startOfYear } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 const DISPLAY_DATE = "dd MMM yyyy"
+const ISO_DATE = "yyyy-MM-dd"
 const BOLD_HEADING = "text-2xl font-bold"
 const BORDER_TOTAL = '1px solid #333'
 const TEXT_DANGER = 'text-red-600'
@@ -166,8 +168,8 @@ function getNetProfitStyles(netProfit: number) {
 export default function ProfitLossPage() {
   const [data, setData] = useState<ProfitLossData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [dateFrom, setDateFrom] = useState(format(startOfYear(new Date()), 'yyyy-MM-dd'))
-  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [dateFrom, setDateFrom] = useState(format(startOfYear(new Date()), ISO_DATE))
+  const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), ISO_DATE))
 
   useEffect(() => {
     async function fetchData() {
@@ -197,6 +199,84 @@ export default function ProfitLossPage() {
   const netMargin = data ? computeMargin(data.netProfit, data.revenue.total) : 0
 
   const netProfitStyles = data ? getNetProfitStyles(data.netProfit) : null
+
+  const handleExportPDF = async () => {
+    if (!data) return
+    const dateRange = `${format(new Date(dateFrom), DISPLAY_DATE)} - ${format(new Date(dateTo), DISPLAY_DATE)}`
+    const pdfColumns: ReportColumn[] = [
+      { key: "particular", header: "Particulars", width: "65%", bold: true },
+      { key: "amount", header: "Amount (₹)", width: "35%", align: "right" },
+    ]
+    const rows: Record<string, unknown>[] = [
+      { particular: "REVENUE", amount: "" },
+      { particular: "  Sales Revenue", amount: data.revenue.sales },
+      { particular: "  Other Income", amount: data.revenue.otherIncome },
+      { particular: "Total Revenue", amount: data.revenue.total },
+      { particular: "", amount: "" },
+      { particular: "COST OF GOODS SOLD", amount: "" },
+      { particular: "  Opening Stock", amount: data.costOfGoodsSold.openingStock },
+      { particular: "  Add: Purchases", amount: data.costOfGoodsSold.purchases },
+      { particular: "  Less: Closing Stock", amount: -data.costOfGoodsSold.closingStock },
+      { particular: "Total COGS", amount: data.costOfGoodsSold.total },
+      { particular: "", amount: "" },
+      { particular: "GROSS PROFIT", amount: data.grossProfit },
+      { particular: "", amount: "" },
+      { particular: "OPERATING EXPENSES", amount: "" },
+      ...data.expenses.map((exp) => ({ particular: `  ${exp.category}`, amount: exp.amount })),
+      { particular: "Total Operating Expenses", amount: data.totalExpenses },
+      { particular: "", amount: "" },
+      { particular: "OPERATING PROFIT (EBIT)", amount: data.operatingProfit },
+      { particular: "  Less: Tax Provision (30%)", amount: -data.taxesProvision },
+      { particular: "", amount: "" },
+    ]
+    const pdfTotals = { particular: "NET PROFIT", amount: data.netProfit }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Profit & Loss Statement",
+        subtitle: `Net Margin: ${netMargin.toFixed(1)}%`,
+        dateRange,
+        columns: pdfColumns,
+        data: rows,
+        totals: pdfTotals,
+      }),
+      `profit-loss-${format(new Date(), ISO_DATE)}.pdf`,
+    )
+  }
+
+  const handleExportCSV = () => {
+    if (!data) return
+    const rows: Record<string, unknown>[] = [
+      { particular: "REVENUE", amount: "" },
+      { particular: "Sales Revenue", amount: data.revenue.sales },
+      { particular: "Other Income", amount: data.revenue.otherIncome },
+      { particular: "Total Revenue", amount: data.revenue.total },
+      { particular: "", amount: "" },
+      { particular: "COST OF GOODS SOLD", amount: "" },
+      { particular: "Opening Stock", amount: data.costOfGoodsSold.openingStock },
+      { particular: "Purchases", amount: data.costOfGoodsSold.purchases },
+      { particular: "Closing Stock", amount: data.costOfGoodsSold.closingStock },
+      { particular: "Total COGS", amount: data.costOfGoodsSold.total },
+      { particular: "", amount: "" },
+      { particular: "GROSS PROFIT", amount: data.grossProfit },
+      ...data.expenses.map((exp) => ({ particular: exp.category, amount: exp.amount })),
+      { particular: "Total Expenses", amount: data.totalExpenses },
+      { particular: "OPERATING PROFIT", amount: data.operatingProfit },
+      { particular: "Tax Provision", amount: data.taxesProvision },
+      { particular: "NET PROFIT", amount: data.netProfit },
+    ]
+    const csvColumns = [
+      { key: "particular", header: "Particulars" },
+      { key: "amount", header: "Amount", format: (v: unknown) => v !== "" && v !== undefined ? Number(v).toFixed(2) : "" },
+    ] as const
+    exportCSVUtil(
+      rows,
+      `profit-loss-${dateFrom}-to-${dateTo}.csv`,
+      csvColumns,
+      { titleRows: [`Profit & Loss Statement`, `Period: ${dateFrom} to ${dateTo}`] },
+    )
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-6 report-container">
@@ -316,16 +396,11 @@ export default function ProfitLossPage() {
             <p className="text-sm text-muted-foreground">Income statement for the period</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
+        <ReportActionBar
+          onExportPDF={handleExportPDF}
+          onExportCSV={handleExportCSV}
+          disabled={!data}
+        />
       </div>
 
       {/* Filters */}

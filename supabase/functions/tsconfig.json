@@ -5,15 +5,14 @@
     "lib": ["ESNext", "DOM"],
     "jsx": "react-jsx",
     "jsxImportSource": "react",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "types": ["npm:@supabase/functions-js"]
+    "noEmit": true
   },
   "include": ["./**/*.ts", "./**/*.tsx"],
   "exclude": ["node_modules"]

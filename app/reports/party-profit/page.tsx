@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   IndianRupee, 
   Filter,
   Loader2,
@@ -25,6 +23,9 @@ import { format, startOfYear, endOfMonth } from "date-fns"
 import type { ApiInvoiceResponse, ApiInvoiceItemResponse } from "@/types/api-responses"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface PartyProfit {
   partyId: string
@@ -156,30 +157,61 @@ export default function PartyProfitPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Customer', 'Total Sales', 'Total Cost', 'Gross Profit', 'Margin %', 'Transactions']
-    const rows = sortedProfits.map(p => [
-      p.partyName,
-      p.totalSales.toFixed(2),
-      p.totalCost.toFixed(2),
-      p.grossProfit.toFixed(2),
-      p.profitMargin.toFixed(1) + '%',
-      p.transactionCount.toString()
-    ])
+  const partyProfitPdfColumns: ReportColumn[] = [
+    { key: "partyName", header: "Customer", width: "28%", bold: true },
+    { key: "txnCount", header: "Txns", width: "10%", align: "right" },
+    { key: "sales", header: "Sales", width: "16%", align: "right" },
+    { key: "cost", header: "Cost", width: "16%", align: "right" },
+    { key: "profit", header: "Profit", width: "16%", align: "right" },
+    { key: "margin", header: "Margin", width: "14%", align: "right" },
+  ]
 
-    const csvContent = [
-      `Party-wise Profit Report`,
-      `Period: ${dateFrom} to ${dateTo}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const data = sortedProfits.map((p) => ({
+      partyName: p.partyName,
+      txnCount: p.transactionCount,
+      sales: p.totalSales,
+      cost: p.totalCost,
+      profit: p.grossProfit,
+      margin: `${p.profitMargin.toFixed(1)}%`,
+    }))
+    const pdfTotals = {
+      partyName: "Total",
+      txnCount: sortedProfits.reduce((s, p) => s + p.transactionCount, 0),
+      sales: sortedProfits.reduce((s, p) => s + p.totalSales, 0),
+      cost: sortedProfits.reduce((s, p) => s + p.totalCost, 0),
+      profit: sortedProfits.reduce((s, p) => s + p.grossProfit, 0),
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Party-wise Profit Report",
+        subtitle: `${sortedProfits.length} customers | Total Profit: ${formatCurrency(pdfTotals.profit as number)}`,
+        dateRange: `${format(new Date(dateFrom), "dd MMM yyyy")} - ${format(new Date(dateTo), "dd MMM yyyy")}`,
+        columns: partyProfitPdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `party-profit-${dateFrom}-to-${dateTo}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `party-profit-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "partyName", header: "Customer" },
+      { key: "totalSales", header: "Total Sales", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "totalCost", header: "Total Cost", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "grossProfit", header: "Gross Profit", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "profitMargin", header: "Margin %", format: (v: unknown) => `${((v as number) || 0).toFixed(1)}%` },
+      { key: "transactionCount", header: "Transactions" },
+    ] as const
+    exportCSVUtil(
+      sortedProfits as unknown as Record<string, unknown>[],
+      `party-profit-${dateFrom}-to-${dateTo}.csv`,
+      csvColumns,
+      { titleRows: ["Party-wise Profit Report", `Period: ${dateFrom} to ${dateTo}`] },
+    )
   }
 
   return (
@@ -202,14 +234,11 @@ export default function PartyProfitPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={sortedProfits.length === 0}
+          />
         </div>
       </div>
 

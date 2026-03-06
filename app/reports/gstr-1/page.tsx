@@ -9,8 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   FileText, 
   Filter,
   Loader2,
@@ -20,6 +18,11 @@ import {
 import Link from "next/link"
 import { format, endOfMonth, subMonths } from "date-fns"
 import type { ApiInvoiceResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+
+const SHORT_DATE = "dd/MM/yyyy"
 
 interface GSTR1Entry {
   id: string
@@ -139,40 +142,78 @@ export default function GSTR1Page() {
     return options
   }
 
-  const exportToCSV = () => {
-    const headers = [
-      'Invoice No', 'Invoice Date', 'Customer Name', 'GSTIN', 
-      'Place of Supply', 'Type', 'Taxable Value', 'CGST', 'SGST', 
-      'IGST', 'Cess', 'Total Tax', 'Invoice Value'
-    ]
-    const rows = filteredEntries.map(e => [
-      e.invoiceNo,
-      format(new Date(e.invoiceDate), 'dd/MM/yyyy'),
-      e.customerName,
-      e.customerGstin,
-      e.placeOfSupply,
-      e.invoiceType,
-      e.taxableValue.toFixed(2),
-      e.cgst.toFixed(2),
-      e.sgst.toFixed(2),
-      e.igst.toFixed(2),
-      e.cess.toFixed(2),
-      e.totalTax.toFixed(2),
-      e.invoiceValue.toFixed(2)
-    ])
+  const gstr1PdfColumns: ReportColumn[] = [
+    { key: "invoiceNo", header: "Inv No", width: "10%", bold: true },
+    { key: "date", header: "Date", width: "9%" },
+    { key: "customerName", header: "Customer", width: "14%" },
+    { key: "gstin", header: "GSTIN", width: "13%" },
+    { key: "type", header: "Type", width: "7%" },
+    { key: "taxable", header: "Taxable", width: "11%", align: "right" },
+    { key: "cgst", header: "CGST", width: "9%", align: "right" },
+    { key: "sgst", header: "SGST", width: "9%", align: "right" },
+    { key: "igst", header: "IGST", width: "9%", align: "right" },
+    { key: "total", header: "Invoice Val", width: "9%", align: "right" },
+  ]
 
-    const csvContent = [
-      `GSTR-1 Report - ${format(new Date(month + '-01'), 'MMMM yyyy')}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const monthLabel = format(new Date(month + "-01"), "MMMM yyyy")
+    const data = filteredEntries.map((e) => ({
+      invoiceNo: e.invoiceNo,
+      date: format(new Date(e.invoiceDate), SHORT_DATE),
+      customerName: e.customerName,
+      gstin: e.customerGstin,
+      type: e.invoiceType,
+      taxable: e.taxableValue,
+      cgst: e.cgst,
+      sgst: e.sgst,
+      igst: e.igst,
+      total: e.invoiceValue,
+    }))
+    const pdfTotals = {
+      invoiceNo: "Total",
+      taxable: summary.totalTaxable,
+      cgst: summary.totalCgst,
+      sgst: summary.totalSgst,
+      igst: summary.totalIgst,
+      total: summary.totalValue,
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "GSTR-1 Report",
+        subtitle: `B2B: ${summary.b2bCount} | B2C: ${summary.b2cCount} | Total Tax: ${formatCurrency(summary.totalTax)}`,
+        dateRange: monthLabel,
+        columns: gstr1PdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `gstr1-${month}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `gstr1-${month}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "invoiceNo", header: "Invoice No" },
+      { key: "invoiceDate", header: "Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.invoiceDate as string), SHORT_DATE) },
+      { key: "customerName", header: "Customer" },
+      { key: "customerGstin", header: "GSTIN" },
+      { key: "placeOfSupply", header: "Place of Supply" },
+      { key: "invoiceType", header: "Type" },
+      { key: "taxableValue", header: "Taxable", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "cgst", header: "CGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "sgst", header: "SGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "igst", header: "IGST", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "cess", header: "Cess", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "totalTax", header: "Total Tax", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "invoiceValue", header: "Invoice Value", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+    ] as const
+    exportCSVUtil(
+      filteredEntries as unknown as Record<string, unknown>[],
+      `gstr1-${month}.csv`,
+      csvColumns,
+      { titleRows: [`GSTR-1 Report - ${format(new Date(month + "-01"), "MMMM yyyy")}`] },
+    )
   }
 
   return (
@@ -226,7 +267,7 @@ export default function GSTR1Page() {
             <tr key={entry.id}>
               <td>{index + 1}</td>
               <td>{entry.invoiceNo}</td>
-              <td>{format(new Date(entry.invoiceDate), 'dd/MM/yyyy')}</td>
+              <td>{format(new Date(entry.invoiceDate), SHORT_DATE)}</td>
               <td>{entry.customerName}</td>
               <td style={{ fontFamily: 'monospace', fontSize: '8pt' }}>{entry.customerGstin}</td>
               <td>{entry.invoiceType}</td>
@@ -272,14 +313,11 @@ export default function GSTR1Page() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredEntries.length === 0}
+          />
           <Button variant="default" size="sm">
             <Upload className="h-4 w-4 mr-2" />
             Export for Filing

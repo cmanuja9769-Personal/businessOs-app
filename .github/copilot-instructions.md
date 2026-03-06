@@ -108,7 +108,22 @@ Apply the following rules to all code generations, refactors, and reviews to mai
 - **Dynamic Imports**: Use `next/dynamic` for heavy components with loading states.
 - **Memoization**: Use `useMemo` and `useCallback` only when there's a measurable performance benefit.
 
-## 12. Testing Checklist
+## 12. ESLint Compliance (Mandatory)
+
+Every code change must pass the linter with **zero errors and zero warnings**. Run `npx eslint` at the end of every prompt to verify.
+
+- **No Unused Imports/Variables**: Remove any import or variable that is not referenced. ESLint rule: `@typescript-eslint/no-unused-vars`.
+- **No Duplicate String Literals**: Extract string literals that appear 3+ times into named constants at the top of the file. ESLint rule: `sonarjs/no-duplicate-string`. Example:
+  ```typescript
+  const ISO_DATE = "yyyy-MM-dd";
+  const DISPLAY_DATE = "dd MMM yyyy";
+  ```
+- **No Identical Functions**: If two or more functions share the same body, consolidate into a single reusable function.
+- **No Collapsible If Statements**: Merge nested `if` blocks that can be combined with `&&`.
+- **Cognitive Complexity ≤ 15**: Refactor functions that exceed this threshold. Use early returns and extract helpers.
+- **Prefer `const` assertions**: Use `as const` for literal arrays and objects where applicable.
+
+## 13. Testing Checklist
 
 Before completing any task, verify:
 

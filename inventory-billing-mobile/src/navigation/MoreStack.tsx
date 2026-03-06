@@ -19,6 +19,7 @@ import PaymentsScreen from '@screens/payments/PaymentsScreen';
 import RecordPaymentScreen from '@screens/payments/RecordPaymentScreen';
 import ReportsScreen from '@screens/reports/ReportsScreen';
 import ReportDetailScreen from '@screens/reports/ReportDetailScreen';
+import PartyLedgerScreen from '@screens/reports/PartyLedgerScreen';
 import OrganizationScreen from '@screens/organization/OrganizationScreen';
 import UsersScreen from '@screens/users/UsersScreen';
 import AccountingScreen from '@screens/accounting/AccountingScreen';
@@ -134,6 +135,11 @@ export default function MoreStack() {
         name="ReportDetail" 
         component={ReportDetailScreen}
         options={{ title: 'Report', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="PartyLedger" 
+        component={PartyLedgerScreen}
+        options={{ title: 'Party Ledger', headerShown: false }}
       />
       <Stack.Screen 
         name="Organization" 

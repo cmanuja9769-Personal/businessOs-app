@@ -23,6 +23,9 @@ import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/component
 import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { downloadReportPDF } from "@/lib/export-utils"
+import { ExportOverlay } from "@/components/ui/export-overlay"
+import { yieldToMain } from "@/lib/export-utils"
 
 const SHORT_DATE = "dd/MM/yyyy"
 const DISPLAY_DATE = "dd MMM yyyy"
@@ -238,9 +241,9 @@ export default function SalesReportPage() {
             status: `${activeInvoices.length} invoices`,
           }
 
-      const { pdf } = await import("@react-pdf/renderer")
       const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
-      const blob = await pdf(
+      await yieldToMain()
+      await downloadReportPDF(
         <CompactReportPDF
           title={isItemWise ? "Sales Register - Item Wise" : "Sales & GST Register"}
           subtitle={`${activeInvoices.length} invoices | ${cancelledInvoices.length > 0 ? `${cancelledInvoices.length} cancelled excluded` : ""}`}
@@ -252,17 +255,9 @@ export default function SalesReportPage() {
             if (String(row.status).toLowerCase() === "cancelled") return "red"
             return null
           }}
-        />
-      ).toBlob()
-
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `sales-register-${format(new Date(), "yyyy-MM-dd")}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+        />,
+        `sales-register-${format(new Date(), "yyyy-MM-dd")}.pdf`,
+      )
     } catch (error) {
       console.error("PDF generation failed:", error)
     } finally {
@@ -352,9 +347,10 @@ export default function SalesReportPage() {
               Item-wise
             </Button>
           </div>
+          <ExportOverlay visible={pdfGenerating} />
           <Button onClick={handleDownloadPDF} variant="outline" size="sm" disabled={pdfGenerating || activeInvoices.length === 0}>
             {pdfGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileDown className="h-4 w-4 mr-1" />}
-            PDF
+            {pdfGenerating ? "Generating..." : "PDF"}
           </Button>
           <Button onClick={exportToCSV} variant="outline" size="sm" disabled={activeInvoices.length === 0}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />

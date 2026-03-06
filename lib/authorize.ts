@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server"
 import { DEFAULT_PERMISSIONS, hasPermission, type UserRole, type Permissions } from "@/lib/permissions"
 import { isDemoMode, getDemoAuthContext } from "@/app/demo/helpers"
 
@@ -44,13 +44,18 @@ export async function authorize(
     throw new Error("Unauthorized: no active organization")
   }
 
-  const { data: roleData } = await supabase
+  const serviceClient = createServiceRoleClient()
+  const { data: allRoles } = await serviceClient
     .from("user_roles")
-    .select("role")
+    .select("role, organization_id")
     .eq("user_id", user.id)
-    .maybeSingle()
 
-  const role = (roleData?.role as UserRole) || "viewer"
+  const orgMatch = allRoles?.find(
+    (r) => r.organization_id === orgData.organization_id
+  )
+  const anyMatch = orgMatch ?? allRoles?.[0]
+
+  const role = (anyMatch?.role as UserRole) || "viewer"
   const permissions = DEFAULT_PERMISSIONS[role]
 
   if (resource && action && !hasPermission(permissions, resource, action)) {

@@ -24,6 +24,8 @@ import { ReportFilter, getDefaultFilters, type ReportFilters } from "@/component
 import { type ReportColumn, type ReportGroup } from "@/components/reports/compact-report-pdf"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { ExportOverlay } from "@/components/ui/export-overlay"
+import { downloadReportPDF } from "@/lib/export-utils"
 
 const ISO_DATE = "yyyy-MM-dd"
 
@@ -208,12 +210,13 @@ export default function StockReportComponent() {
   ], [warehouses, availableCategories])
 
   const pdfColumns: ReportColumn[] = useMemo(() => [
-    { key: "name", header: "Item Name", width: "30%", bold: true },
-    { key: "category", header: "Category", width: "14%" },
-    { key: "quantity", header: "Qty", width: "18%", align: "right" },
-    { key: "stock_value", header: "Value", width: "16%", align: "right" },
-    { key: "purchase_price", header: "Rate", width: "12%", align: "right" },
-    { key: "status", header: "Status", width: "10%", align: "center" },
+    { key: "item_code", header: "Item Code", width: "12%", bold: true },
+    { key: "name", header: "Item Name", width: "22%" },
+    { key: "category", header: "Category", width: "12%" },
+    { key: "quantity", header: "Current Stock", width: "14%", align: "right" },
+    { key: "min_stock", header: "Reorder Lvl", width: "10%", align: "right" },
+    { key: "purchase_price", header: "Avg. Rate", width: "14%", align: "right" },
+    { key: "stock_value", header: "Total Value", width: "16%", align: "right" },
   ], [])
 
   const pdfGroups: ReportGroup[] = useMemo(() => {
@@ -228,40 +231,42 @@ export default function StockReportComponent() {
     return Array.from(categoryMap.entries()).map(([label, items]) => ({
       label: `${label} (${items.length} items)`,
       rows: items.map((item) => ({
+        item_code: item.item_code || "-",
         name: item.name,
         category: item.category || "-",
         quantity: formatQuantity(item),
-        stock_value: item.stock_value,
+        min_stock: item.min_stock,
         purchase_price: item.purchase_price,
-        status: item.stock_status_flag.toUpperCase(),
+        stock_value: item.stock_value,
         calculated_stock: item.calculated_stock,
       })),
       subtotals: {
+        item_code: "",
         name: `${label} Total`,
         category: "",
         quantity: `${items.reduce((s, i) => s + i.calculated_stock, 0)} CTN`,
-        stock_value: items.reduce((s, i) => s + i.stock_value, 0),
+        min_stock: "",
         purchase_price: "",
-        status: "",
+        stock_value: items.reduce((s, i) => s + i.stock_value, 0),
       },
     }))
   }, [stockData])
 
   const pdfTotals = useMemo(() => ({
+    item_code: "",
     name: "Grand Total",
     category: "",
     quantity: `${stockData.reduce((s, i) => s + i.calculated_stock, 0)} CTN`,
-    stock_value: summary.totalStockValue,
+    min_stock: "",
     purchase_price: "",
-    status: `${summary.totalItems} items`,
+    stock_value: summary.totalStockValue,
   }), [stockData, summary])
 
   const handleDownloadPDF = async () => {
     setPdfGenerating(true)
     try {
-      const { pdf } = await import("@react-pdf/renderer")
       const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
-      const blob = await pdf(
+      await downloadReportPDF(
         <CompactReportPDF
           title="Stock Summary Report"
           subtitle={`As of ${format(new Date(filters.dateFrom), "dd MMM yyyy")} | ${summary.totalItems} items`}
@@ -270,21 +275,13 @@ export default function StockReportComponent() {
           groups={pdfGroups}
           totals={pdfTotals}
           highlightRow={(row) => {
-            const status = String(row.status).toLowerCase()
-            if (status === "low") return "red"
             if ((row.calculated_stock as number) < 0) return "red"
+            if (Number(row.min_stock) > 0 && (row.calculated_stock as number) <= Number(row.min_stock)) return "red"
             return null
           }}
-        />
-      ).toBlob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `stock-report-${format(new Date(), ISO_DATE)}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+        />,
+        `stock-report-${format(new Date(), ISO_DATE)}.pdf`,
+      )
     } catch (error) {
       console.error("PDF generation failed:", error)
     } finally {
@@ -320,6 +317,7 @@ export default function StockReportComponent() {
 
   return (
     <ClientErrorBoundary fallbackTitle="Stock report encountered an error">
+    <ExportOverlay visible={pdfGenerating} />
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">

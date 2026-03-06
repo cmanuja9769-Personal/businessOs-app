@@ -64,6 +64,7 @@ export type MoreStackParamList = {
   RecordPayment: { invoiceId?: string; purchaseId?: string } | undefined;
   Reports: undefined;
   ReportDetail: { reportKey: string };
+  PartyLedger: undefined;
   Settings: undefined;
   Profile: undefined;
   Organization: undefined;

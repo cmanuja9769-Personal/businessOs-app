@@ -33,7 +33,7 @@ export interface ReportGroup {
   subtotals?: Record<string, unknown>
 }
 
-interface CompactReportPDFProps {
+export interface CompactReportPDFProps {
   readonly title: string
   readonly subtitle?: string
   readonly dateRange?: string
@@ -43,6 +43,7 @@ interface CompactReportPDFProps {
   readonly totals?: Record<string, unknown>
   readonly businessName?: string
   readonly highlightRow?: (row: Record<string, unknown>) => "red" | "green" | null
+  readonly orientation?: "portrait" | "landscape"
 }
 
 const styles = StyleSheet.create({
@@ -87,9 +88,11 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   tableHeaderCell: {
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: "bold",
     color: "#ffffff",
+    overflow: "hidden",
+    paddingRight: 2,
   },
   tableRow: {
     flexDirection: "row",
@@ -103,8 +106,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   tableCell: {
-    fontSize: 8,
+    fontSize: 6.5,
     color: "#374151",
+    overflow: "hidden",
+    paddingRight: 2,
+  },
+  cellWrapper: {
+    overflow: "hidden",
   },
   groupHeader: {
     flexDirection: "row",
@@ -130,9 +138,11 @@ const styles = StyleSheet.create({
     borderTopColor: "#93c5fd",
   },
   subtotalCell: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#1e40af",
+    overflow: "hidden",
+    paddingRight: 2,
   },
   totalRow: {
     flexDirection: "row",
@@ -142,9 +152,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   totalCell: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "bold",
     color: "#ffffff",
+    overflow: "hidden",
+    paddingRight: 2,
   },
   footer: {
     position: "absolute",
@@ -177,11 +189,8 @@ const styles = StyleSheet.create({
   },
 })
 
-function getCellStyle(col: ReportColumn) {
-  const base: { width: string; textAlign?: "left" | "center" | "right" } = { width: col.width }
-  if (col.align === "right") base.textAlign = "right"
-  if (col.align === "center") base.textAlign = "center"
-  return base
+function getWrapperStyle(col: ReportColumn) {
+  return { width: col.width, overflow: "hidden" as const }
 }
 
 function formatCell(col: ReportColumn, row: Record<string, unknown>): string {
@@ -189,7 +198,14 @@ function formatCell(col: ReportColumn, row: Record<string, unknown>): string {
   if (col.format) return col.format(value, row)
   if (value === null || value === undefined) return "-"
   if (typeof value === "number") {
-    if (col.key.includes("amount") || col.key.includes("value") || col.key.includes("price") || col.key.includes("total") || col.key.includes("balance") || col.key.includes("cost") || col.key.includes("debit") || col.key.includes("credit")) {
+    if (
+      col.key.includes("amount") || col.key.includes("value") || col.key.includes("price") ||
+      col.key.includes("total") || col.key.includes("balance") || col.key.includes("cost") ||
+      col.key.includes("debit") || col.key.includes("credit") || col.key.includes("revenue") ||
+      col.key.includes("profit") || col.key.includes("sales") || col.key.includes("taxable") ||
+      col.key.includes("cgst") || col.key.includes("sgst") || col.key.includes("igst") ||
+      col.key.includes("cess") || col.key.includes("paid")
+    ) {
       return `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
     return value.toLocaleString("en-IN")
@@ -201,9 +217,11 @@ function TableHeaderRow({ columns }: { columns: readonly ReportColumn[] }) {
   return (
     <View style={styles.tableHeader} fixed>
       {columns.map((col) => (
-        <Text key={col.key} style={[styles.tableHeaderCell, getCellStyle(col)]}>
-          {col.header}
-        </Text>
+        <View key={col.key} style={getWrapperStyle(col)}>
+          <Text style={[styles.tableHeaderCell, { textAlign: col.align || "left" }]}>
+            {col.header}
+          </Text>
+        </View>
       ))}
     </View>
   )
@@ -229,18 +247,19 @@ function DataRow({
       wrap={false}
     >
       {columns.map((col) => (
-        <Text
-          key={col.key}
-          style={[
-            styles.tableCell,
-            getCellStyle(col),
-            col.bold ? { fontWeight: "bold" } : {},
-            highlight === "red" ? styles.redText : {},
-            highlight === "green" ? styles.greenText : {},
-          ]}
-        >
-          {formatCell(col, row)}
-        </Text>
+        <View key={col.key} style={getWrapperStyle(col)}>
+          <Text
+            style={[
+              styles.tableCell,
+              { textAlign: col.align || "left" },
+              col.bold ? { fontWeight: "bold" } : {},
+              highlight === "red" ? styles.redText : {},
+              highlight === "green" ? styles.greenText : {},
+            ]}
+          >
+            {formatCell(col, row)}
+          </Text>
+        </View>
       ))}
     </View>
   )
@@ -261,9 +280,11 @@ function TotalRow({
   return (
     <View style={rowStyle} wrap={false}>
       {columns.map((col) => (
-        <Text key={col.key} style={[cellStyle, getCellStyle(col)]}>
-          {totals[col.key] !== undefined ? formatCell(col, totals) : ""}
-        </Text>
+        <View key={col.key} style={getWrapperStyle(col)}>
+          <Text style={[cellStyle, { textAlign: col.align || "left" }]}>
+            {totals[col.key] !== undefined ? formatCell(col, totals) : ""}
+          </Text>
+        </View>
       ))}
     </View>
   )
@@ -279,12 +300,14 @@ export function CompactReportPDF({
   totals,
   businessName,
   highlightRow,
+  orientation,
 }: CompactReportPDFProps) {
   const printDate = format(new Date(), "dd/MM/yyyy HH:mm")
+  const pageOrientation = orientation || (columns.length > 6 ? "landscape" : "portrait")
 
   return (
     <Document>
-      <Page size="A4" orientation="portrait" style={styles.page}>
+      <Page size="A4" orientation={pageOrientation} style={styles.page}>
         <View style={styles.header} fixed>
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}

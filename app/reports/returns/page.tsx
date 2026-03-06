@@ -11,8 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   RotateCcw, 
   Filter,
   IndianRupee,
@@ -23,6 +21,16 @@ import {
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import type { ApiInvoiceResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
+
+const SHORT_DATE = "dd/MM/yyyy"
+const DISPLAY_DATE = "dd MMM yyyy"
+const CREDIT_NOTE = "credit_note"
+const DEBIT_NOTE = "debit_note"
+const CREDIT_NOTE_LABEL = "Credit Note"
+const DEBIT_NOTE_LABEL = "Debit Note"
 
 interface ReturnEntry {
   id: string
@@ -53,7 +61,7 @@ export default function ReturnsReportPage() {
         const invoices = await response.json()
         
         const returnEntries: ReturnEntry[] = invoices
-          .filter((inv: ApiInvoiceResponse) => inv.documentType === 'credit_note' || inv.documentType === 'debit_note')
+          .filter((inv: ApiInvoiceResponse) => inv.documentType === CREDIT_NOTE || inv.documentType === DEBIT_NOTE)
           .map((inv: ApiInvoiceResponse) => ({
             id: inv.id,
             returnNo: inv.invoiceNo,
@@ -89,8 +97,8 @@ export default function ReturnsReportPage() {
     return dateMatch && typeMatch
   })
 
-  const creditNotes = filteredReturns.filter(r => r.type === 'credit_note')
-  const debitNotes = filteredReturns.filter(r => r.type === 'debit_note')
+  const creditNotes = filteredReturns.filter(r => r.type === CREDIT_NOTE)
+  const debitNotes = filteredReturns.filter(r => r.type === DEBIT_NOTE)
 
   const totalCreditNotes = creditNotes.reduce((sum, r) => sum + r.amount, 0)
   const totalDebitNotes = debitNotes.reduce((sum, r) => sum + r.amount, 0)
@@ -103,31 +111,64 @@ export default function ReturnsReportPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Return No', 'Date', 'Type', 'Original Invoice', 'Party Name', 'Amount', 'Reason', 'Status']
-    const rows = filteredReturns.map(r => [
-      r.returnNo,
-      format(new Date(r.date), 'dd/MM/yyyy'),
-      r.type === 'credit_note' ? 'Credit Note' : 'Debit Note',
-      r.originalInvoiceNo,
-      r.partyName,
-      r.amount.toFixed(2),
-      r.reason,
-      r.status
-    ])
+  const returnsPdfColumns: ReportColumn[] = [
+    { key: "returnNo", header: "Return No", width: "12%", bold: true },
+    { key: "date", header: "Date", width: "10%" },
+    { key: "type", header: "Type", width: "12%" },
+    { key: "originalInv", header: "Orig. Invoice", width: "14%" },
+    { key: "partyName", header: "Party", width: "18%" },
+    { key: "amount", header: "Amount", width: "14%", align: "right" },
+    { key: "reason", header: "Reason", width: "12%" },
+    { key: "status", header: "Status", width: "8%" },
+  ]
 
-    const csvContent = [
-      `Returns Report - ${dateFrom} to ${dateTo}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const data = filteredReturns.map((r) => ({
+      returnNo: r.returnNo,
+      date: format(new Date(r.date), SHORT_DATE),
+      type: r.type === CREDIT_NOTE ? CREDIT_NOTE_LABEL : DEBIT_NOTE_LABEL,
+      originalInv: r.originalInvoiceNo,
+      partyName: r.partyName,
+      amount: r.amount,
+      reason: r.reason,
+      status: r.status,
+    }))
+    const pdfTotals = {
+      returnNo: "Total",
+      amount: filteredReturns.reduce((s, r) => s + r.amount, 0),
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Returns Report",
+        subtitle: `Credit Notes: ${filteredReturns.filter(r => r.type === CREDIT_NOTE).length} | Debit Notes: ${filteredReturns.filter(r => r.type === DEBIT_NOTE).length}`,
+        dateRange: `${format(new Date(dateFrom), DISPLAY_DATE)} - ${format(new Date(dateTo), DISPLAY_DATE)}`,
+        columns: returnsPdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `returns-${dateFrom}-to-${dateTo}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `returns-report-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "returnNo", header: "Return No" },
+      { key: "date", header: "Date", format: (_: unknown, row: Record<string, unknown>) => format(new Date(row.date as string), SHORT_DATE) },
+      { key: "type", header: "Type", format: (v: unknown) => (v === CREDIT_NOTE ? CREDIT_NOTE_LABEL : DEBIT_NOTE_LABEL) },
+      { key: "originalInvoiceNo", header: "Original Invoice" },
+      { key: "partyName", header: "Party" },
+      { key: "amount", header: "Amount", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "reason", header: "Reason" },
+      { key: "status", header: "Status" },
+    ] as const
+    exportCSVUtil(
+      filteredReturns as unknown as Record<string, unknown>[],
+      `returns-${dateFrom}-to-${dateTo}.csv`,
+      csvColumns,
+      { titleRows: [`Returns Report - ${dateFrom} to ${dateTo}`] },
+    )
   }
 
   return (
@@ -149,14 +190,11 @@ export default function ReturnsReportPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredReturns.length === 0}
+          />
         </div>
       </div>
 
@@ -194,8 +232,8 @@ export default function ReturnsReportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="credit_note">Credit Notes (Sales Return)</SelectItem>
-                  <SelectItem value="debit_note">Debit Notes (Purchase Return)</SelectItem>
+                    <SelectItem value={CREDIT_NOTE}>Credit Notes (Sales Return)</SelectItem>
+                    <SelectItem value={DEBIT_NOTE}>Debit Notes (Purchase Return)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -331,10 +369,10 @@ function ReturnTable({
                       <TableCell className="font-mono">{ret.returnNo}</TableCell>
                       <TableCell className="font-mono text-muted-foreground">{ret.originalInvoiceNo}</TableCell>
                       <TableCell>{ret.partyName}</TableCell>
-                      <TableCell>{format(new Date(ret.date), 'dd MMM yyyy')}</TableCell>
+                      <TableCell>{format(new Date(ret.date), DISPLAY_DATE)}</TableCell>
                       <TableCell>
-                        <Badge variant={ret.type === 'credit_note' ? 'destructive' : 'default'}>
-                          {ret.type === 'credit_note' ? 'Credit Note' : 'Debit Note'}
+                        <Badge variant={ret.type === CREDIT_NOTE ? 'destructive' : 'default'}>
+                          {ret.type === CREDIT_NOTE ? CREDIT_NOTE_LABEL : DEBIT_NOTE_LABEL}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(ret.amount)}</TableCell>

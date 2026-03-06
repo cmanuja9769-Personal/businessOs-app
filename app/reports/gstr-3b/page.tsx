@@ -8,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   Filter,
   Loader2,
   IndianRupee,
@@ -19,6 +17,9 @@ import {
 import Link from "next/link"
 import { format, endOfMonth, subMonths } from "date-fns"
 import type { ApiInvoiceResponse, ApiPurchaseResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface GSTR3BData {
   outwardSupplies: {
@@ -191,25 +192,63 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
     return options
   }
 
-  const exportToCSV = () => {
+  const gstr3bPdfColumns: ReportColumn[] = [
+    { key: "section", header: "Section", width: "10%", bold: true },
+    { key: "description", header: "Description", width: "28%" },
+    { key: "cgst", header: "CGST", width: "12%", align: "right" },
+    { key: "sgst", header: "SGST", width: "12%", align: "right" },
+    { key: "igst", header: "IGST", width: "12%", align: "right" },
+    { key: "cess", header: "Cess", width: "12%", align: "right" },
+    { key: "total", header: "Total", width: "14%", align: "right" },
+  ]
+
+  const handleExportPDF = async () => {
     if (!data) return
-    const monthLabel = format(new Date(month + '-01'), 'MMMM yyyy')
+    const monthLabel = format(new Date(month + "-01"), "MMMM yyyy")
+    const pdfData = [
+      { section: "3.1", description: "B2B Taxable Value", cgst: "-", sgst: "-", igst: "-", cess: "-", total: data.outwardSupplies.b2bTaxable },
+      { section: "3.1", description: "B2C Taxable Value", cgst: "-", sgst: "-", igst: "-", cess: "-", total: data.outwardSupplies.b2cTaxable },
+      { section: "3.1", description: "Total Outward Tax", cgst: data.outwardSupplies.cgst, sgst: data.outwardSupplies.sgst, igst: data.outwardSupplies.igst, cess: data.outwardSupplies.cess, total: data.outwardSupplies.totalTax },
+      { section: "", description: "", cgst: "", sgst: "", igst: "", cess: "", total: "" },
+      { section: "4", description: "Inter-State ITC", cgst: "-", sgst: "-", igst: "-", cess: "-", total: data.inwardSupplies.interStateItc },
+      { section: "4", description: "Intra-State ITC", cgst: "-", sgst: "-", igst: "-", cess: "-", total: data.inwardSupplies.intraStateItc },
+      { section: "4", description: "Total ITC", cgst: data.inwardSupplies.cgstItc, sgst: data.inwardSupplies.sgstItc, igst: data.inwardSupplies.igstItc, cess: data.inwardSupplies.cessItc, total: data.inwardSupplies.totalItc },
+      { section: "", description: "", cgst: "", sgst: "", igst: "", cess: "", total: "" },
+      { section: "6.1", description: "Tax Payable", cgst: data.taxPayable.cgst, sgst: data.taxPayable.sgst, igst: data.taxPayable.igst, cess: data.taxPayable.cess, total: data.taxPayable.total },
+    ]
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "GSTR-3B Summary",
+        subtitle: `Net Tax Payable: ${formatCurrency(data.taxPayable.total)}`,
+        dateRange: monthLabel,
+        columns: gstr3bPdfColumns,
+        data: pdfData,
+      }),
+      `gstr3b-${month}.pdf`,
+    )
+  }
+
+  const handleExportCSV = () => {
+    if (!data) return
+    const monthLabel = format(new Date(month + "-01"), "MMMM yyyy")
     const lines = [
       `GSTR-3B Summary - ${monthLabel}`,
-      '',
-      'Section,Description,CGST,SGST,IGST,Cess,Total',
+      "",
+      "Section,Description,CGST,SGST,IGST,Cess,Total",
       `3.1,B2B Taxable Value,,,,,${data.outwardSupplies.b2bTaxable.toFixed(2)}`,
       `3.1,B2C Taxable Value,,,,,${data.outwardSupplies.b2cTaxable.toFixed(2)}`,
       `3.1,Total Outward Tax,${data.outwardSupplies.cgst.toFixed(2)},${data.outwardSupplies.sgst.toFixed(2)},${data.outwardSupplies.igst.toFixed(2)},${data.outwardSupplies.cess.toFixed(2)},${data.outwardSupplies.totalTax.toFixed(2)}`,
-      '',
+      "",
       `4,Inter-State ITC,,,,,${data.inwardSupplies.interStateItc.toFixed(2)}`,
       `4,Intra-State ITC,,,,,${data.inwardSupplies.intraStateItc.toFixed(2)}`,
       `4,Total ITC,${data.inwardSupplies.cgstItc.toFixed(2)},${data.inwardSupplies.sgstItc.toFixed(2)},${data.inwardSupplies.igstItc.toFixed(2)},${data.inwardSupplies.cessItc.toFixed(2)},${data.inwardSupplies.totalItc.toFixed(2)}`,
-      '',
-      `6.1,Tax Payable,${data.taxPayable.cgst.toFixed(2)},${data.taxPayable.sgst.toFixed(2)},${data.taxPayable.igst.toFixed(2)},${data.taxPayable.cess.toFixed(2)},${data.taxPayable.total.toFixed(2)}`
+      "",
+      `6.1,Tax Payable,${data.taxPayable.cgst.toFixed(2)},${data.taxPayable.sgst.toFixed(2)},${data.taxPayable.igst.toFixed(2)},${data.taxPayable.cess.toFixed(2)},${data.taxPayable.total.toFixed(2)}`,
     ]
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
     link.download = `gstr3b-${month}.csv`
     link.click()
@@ -234,14 +273,11 @@ const monthInvoices = invoices.filter((inv: ApiInvoiceResponse) => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={!data}
+          />
         </div>
       </div>
 

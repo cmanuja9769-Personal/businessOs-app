@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   IndianRupee, 
   Filter,
   Loader2,
@@ -22,6 +20,9 @@ import {
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import type { ApiInvoiceResponse, ApiInvoiceItemResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface ItemProfit {
   id: string
@@ -164,32 +165,67 @@ export default function ItemProfitPage() {
     }).format(value)
   }
 
-  const exportToCSV = () => {
-    const headers = ['Item Name', 'SKU', 'Category', 'Units Sold', 'Revenue', 'Cost', 'Profit', 'Margin %']
-    const rows = filteredProfits.map(p => [
-      p.name,
-      p.sku,
-      p.category,
-      p.unitsSold.toString(),
-      p.totalRevenue.toFixed(2),
-      p.totalCost.toFixed(2),
-      p.grossProfit.toFixed(2),
-      p.profitMargin.toFixed(1) + '%'
-    ])
+  const itemProfitPdfColumns: ReportColumn[] = [
+    { key: "name", header: "Item", width: "20%", bold: true },
+    { key: "sku", header: "SKU", width: "10%" },
+    { key: "category", header: "Category", width: "12%" },
+    { key: "unitsSold", header: "Qty Sold", width: "8%", align: "right" },
+    { key: "revenue", header: "Revenue", width: "14%", align: "right" },
+    { key: "cost", header: "Cost", width: "14%", align: "right" },
+    { key: "profit", header: "Profit", width: "14%", align: "right" },
+    { key: "margin", header: "Margin", width: "8%", align: "right" },
+  ]
 
-    const csvContent = [
-      `Item-wise Profit Report`,
-      `Period: ${dateFrom} to ${dateTo}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const data = filteredProfits.map((p) => ({
+      name: p.name,
+      sku: p.sku,
+      category: p.category,
+      unitsSold: p.unitsSold,
+      revenue: p.totalRevenue,
+      cost: p.totalCost,
+      profit: p.grossProfit,
+      margin: `${p.profitMargin.toFixed(1)}%`,
+    }))
+    const pdfTotals = {
+      name: "Total",
+      unitsSold: filteredProfits.reduce((s, p) => s + p.unitsSold, 0),
+      revenue: filteredProfits.reduce((s, p) => s + p.totalRevenue, 0),
+      cost: filteredProfits.reduce((s, p) => s + p.totalCost, 0),
+      profit: filteredProfits.reduce((s, p) => s + p.grossProfit, 0),
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Item-wise Profit & Loss",
+        subtitle: `${filteredProfits.length} items | Total Profit: ${formatCurrency(pdfTotals.profit as number)}`,
+        dateRange: `${format(new Date(dateFrom), "dd MMM yyyy")} - ${format(new Date(dateTo), "dd MMM yyyy")}`,
+        columns: itemProfitPdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `item-profit-${dateFrom}-to-${dateTo}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `item-profit-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "name", header: "Item Name" },
+      { key: "sku", header: "SKU" },
+      { key: "category", header: "Category" },
+      { key: "unitsSold", header: "Units Sold" },
+      { key: "totalRevenue", header: "Revenue", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "totalCost", header: "Cost", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "grossProfit", header: "Profit", format: (v: unknown) => ((v as number) || 0).toFixed(2) },
+      { key: "profitMargin", header: "Margin %", format: (v: unknown) => `${((v as number) || 0).toFixed(1)}%` },
+    ] as const
+    exportCSVUtil(
+      filteredProfits as unknown as Record<string, unknown>[],
+      `item-profit-${dateFrom}-to-${dateTo}.csv`,
+      csvColumns,
+      { titleRows: ["Item-wise Profit Report", `Period: ${dateFrom} to ${dateTo}`] },
+    )
   }
 
   return (
@@ -211,14 +247,11 @@ export default function ItemProfitPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredProfits.length === 0}
+          />
         </div>
       </div>
 

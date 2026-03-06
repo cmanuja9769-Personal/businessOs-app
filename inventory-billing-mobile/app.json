@@ -17,8 +17,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to use Face ID for secure login."
-      }
+        "NSFaceIDUsageDescription": "Allow $(PRODUCT_NAME) to use Face ID for secure login.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "inventoryMobile-ios"
     },
     "android": {
       "adaptiveIcon": {

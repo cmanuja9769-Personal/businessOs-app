@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Platform,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
+import { exportToMobileCSV, exportToMobilePDF } from '@lib/mobile-export';
 
 type RouteProps = RouteProp<MoreStackParamList, 'ReportDetail'>;
 
@@ -25,21 +27,26 @@ interface ReportConfig {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
+const STOCK_SUMMARY = 'stock-summary';
+const STOCK_DETAIL = 'stock-detail';
+const PARTY_PROFIT = 'party-profit';
+const PROFIT_LOSS = 'profit-loss';
+
 const REPORT_CONFIG: Record<string, ReportConfig> = {
   sales: { title: 'Sales Report', color: '#10B981', icon: 'receipt-outline' },
-  'party-profit': { title: 'Party Profit', color: '#10B981', icon: 'people-outline' },
+  [PARTY_PROFIT]: { title: 'Party Profit', color: '#10B981', icon: 'people-outline' },
   'item-profit': { title: 'Item Profit', color: '#10B981', icon: 'cube-outline' },
   purchases: { title: 'Purchases Report', color: '#6366F1', icon: 'cart-outline' },
   expenses: { title: 'Expenses Report', color: '#6366F1', icon: 'wallet-outline' },
-  'stock-summary': { title: 'Stock Summary', color: '#F59E0B', icon: 'layers-outline' },
-  'stock-detail': { title: 'Stock Detail', color: '#F59E0B', icon: 'list-outline' },
+  [STOCK_SUMMARY]: { title: 'Stock Summary', color: '#F59E0B', icon: 'layers-outline' },
+  [STOCK_DETAIL]: { title: 'Stock Detail', color: '#F59E0B', icon: 'list-outline' },
   'low-stock': { title: 'Low Stock Alert', color: '#F59E0B', icon: 'alert-circle-outline' },
   outstanding: { title: 'Outstanding Report', color: '#EF4444', icon: 'time-outline' },
   'party-ledger': { title: 'Party Ledger', color: '#EF4444', icon: 'book-outline' },
   'gstr-1': { title: 'GSTR-1 Report', color: '#8B5CF6', icon: 'arrow-up-circle-outline' },
   'gstr-2': { title: 'GSTR-2 Report', color: '#8B5CF6', icon: 'arrow-down-circle-outline' },
   'gstr-3b': { title: 'GSTR-3B Summary', color: '#8B5CF6', icon: 'documents-outline' },
-  'profit-loss': { title: 'Profit & Loss', color: '#0EA5E9', icon: 'trending-up-outline' },
+  [PROFIT_LOSS]: { title: 'Profit & Loss', color: '#0EA5E9', icon: 'trending-up-outline' },
   'day-book': { title: 'Day Book', color: '#0EA5E9', icon: 'calendar-outline' },
   'cash-flow': { title: 'Cash Flow', color: '#0EA5E9', icon: 'swap-horizontal-outline' },
 };
@@ -61,6 +68,125 @@ export default function ReportDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [summary, setSummary] = useState<Record<string, number>>({});
+  const [exporting, setExporting] = useState(false);
+
+  const getExportColumns = useCallback((): { key: string; header: string; format?: (v: unknown) => string }[] => {
+    switch (reportKey) {
+      case 'sales':
+        return [
+          { key: 'invoice_number', header: 'Invoice No' },
+          { key: '_customer', header: 'Customer', format: (v) => String(v ?? '') },
+          { key: 'total', header: 'Total', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: 'balance', header: 'Balance', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: 'created_at', header: 'Date', format: (v) => v ? formatDate(String(v)) : '' },
+        ];
+      case 'purchases':
+        return [
+          { key: 'purchase_number', header: 'Purchase No' },
+          { key: '_supplier', header: 'Supplier', format: (v) => String(v ?? '') },
+          { key: 'total', header: 'Total', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: 'balance', header: 'Balance', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: 'created_at', header: 'Date', format: (v) => v ? formatDate(String(v)) : '' },
+        ];
+      case STOCK_SUMMARY:
+      case STOCK_DETAIL:
+        return [
+          { key: 'name', header: 'Item Name' },
+          { key: 'item_code', header: 'Item Code' },
+          { key: 'current_stock', header: 'Current Stock', format: (v) => String(v ?? 0) },
+          { key: 'unit', header: 'Unit' },
+          { key: 'purchase_price', header: 'Purchase Price', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: '_value', header: 'Stock Value', format: (v) => Number(v ?? 0).toFixed(2) },
+        ];
+      case 'low-stock':
+        return [
+          { key: 'name', header: 'Item Name' },
+          { key: 'current_stock', header: 'Stock', format: (v) => String(v ?? 0) },
+          { key: 'unit', header: 'Unit' },
+        ];
+      case 'outstanding':
+        return [
+          { key: '_customer', header: 'Customer', format: (v) => String(v ?? '') },
+          { key: 'invoice_number', header: 'Invoice No' },
+          { key: 'balance', header: 'Outstanding', format: (v) => Number(v ?? 0).toFixed(2) },
+          { key: 'due_date', header: 'Due Date', format: (v) => v ? formatDate(String(v)) : '' },
+        ];
+      case PARTY_PROFIT:
+        return [
+          { key: 'name', header: 'Customer' },
+          { key: 'invoiceCount', header: 'Invoices', format: (v) => String(v ?? 0) },
+          { key: 'revenue', header: 'Revenue', format: (v) => Number(v ?? 0).toFixed(2) },
+        ];
+      case PROFIT_LOSS:
+        return [
+          { key: 'type', header: 'Type' },
+          { key: 'amount', header: 'Amount', format: (v) => Number(v ?? 0).toFixed(2) },
+        ];
+      default:
+        return [
+          { key: 'name', header: 'Name' },
+          { key: 'total', header: 'Total', format: (v) => Number(v ?? 0).toFixed(2) },
+        ];
+    }
+  }, [reportKey]);
+
+  const prepareExportData = useCallback((): Record<string, unknown>[] => {
+    return data.map((item) => {
+      const row = { ...item };
+      const customers = item.customers as Record<string, unknown> | null;
+      const suppliers = item.suppliers as Record<string, unknown> | null;
+      if (customers) row._customer = customers.name;
+      if (suppliers) row._supplier = suppliers.name;
+      if (item.current_stock !== undefined && item.purchase_price !== undefined) {
+        row._value = Number(item.current_stock ?? 0) * Number(item.purchase_price ?? 0);
+      }
+      return row;
+    });
+  }, [data]);
+
+  const handleExportCSV = useCallback(async () => {
+    if (data.length === 0) return;
+    setExporting(true);
+    try {
+      const columns = getExportColumns();
+      const exportData = prepareExportData();
+      await exportToMobileCSV(
+        `${reportKey}-report`,
+        columns,
+        exportData,
+        config.title,
+      );
+    } catch (error) {
+      Alert.alert('Export Failed', error instanceof Error ? error.message : 'Could not export');
+    } finally {
+      setExporting(false);
+    }
+  }, [data, reportKey, config.title, getExportColumns, prepareExportData]);
+
+  const handleExportPDF = useCallback(async () => {
+    if (data.length === 0) return;
+    setExporting(true);
+    try {
+      const columns = getExportColumns();
+      const exportData = prepareExportData().map((row) => {
+        const formatted: Record<string, unknown> = {};
+        for (const col of columns) {
+          formatted[col.key] = col.format ? col.format(row[col.key]) : row[col.key];
+        }
+        return formatted;
+      });
+      await exportToMobilePDF(
+        `${reportKey}-report`,
+        config.title,
+        columns,
+        exportData,
+      );
+    } catch (error) {
+      Alert.alert('Export Failed', error instanceof Error ? error.message : 'Could not export');
+    } finally {
+      setExporting(false);
+    }
+  }, [data, reportKey, config.title, getExportColumns, prepareExportData]);
 
   useEffect(() => {
     const loadSalesReport = async () => {
@@ -223,8 +349,8 @@ export default function ReportDetailScreen() {
           case 'purchases':
             await loadPurchasesReport();
             break;
-          case 'stock-summary':
-          case 'stock-detail':
+          case STOCK_SUMMARY:
+          case STOCK_DETAIL:
             await loadStockReport();
             break;
           case 'low-stock':
@@ -233,7 +359,7 @@ export default function ReportDetailScreen() {
           case 'outstanding':
             await loadOutstandingReport();
             break;
-          case 'party-profit':
+          case PARTY_PROFIT:
             await loadPartyProfitReport();
             break;
           case 'gstr-1':
@@ -241,7 +367,7 @@ export default function ReportDetailScreen() {
           case 'gstr-3b':
             await loadGSTReport();
             break;
-          case 'profit-loss':
+          case PROFIT_LOSS:
             await loadProfitLossReport();
             break;
           default:
@@ -307,7 +433,7 @@ export default function ReportDetailScreen() {
       );
     }
 
-    if (reportKey === 'stock-summary' || reportKey === 'stock-detail' || reportKey === 'low-stock') {
+    if (reportKey === STOCK_SUMMARY || reportKey === STOCK_DETAIL || reportKey === 'low-stock') {
       const stockValue = num(item.current_stock) * num(item.purchase_price);
       const isLow = num(item.current_stock) < 10;
       return (
@@ -339,7 +465,7 @@ export default function ReportDetailScreen() {
       );
     }
 
-    if (reportKey === 'party-profit') {
+    if (reportKey === PARTY_PROFIT) {
       return (
         <View style={[styles.listItem, { backgroundColor: colors.card, ...shadows.sm }]}>
           <View style={styles.listItemMain}>
@@ -353,7 +479,7 @@ export default function ReportDetailScreen() {
       );
     }
 
-    if (reportKey === 'profit-loss') {
+    if (reportKey === PROFIT_LOSS) {
       const isProfit = item.type === 'Net Profit';
       const isPositive = num(item.amount) >= 0;
       const profitColor = () => {
@@ -391,7 +517,18 @@ export default function ReportDetailScreen() {
           <Ionicons name={config.icon} size={22} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.headerTitle}>{config.title}</Text>
         </View>
-        <View style={styles.headerRight} />
+        <View style={styles.headerActions}>
+          {!loading && data.length > 0 && (
+            <>
+              <TouchableOpacity onPress={handleExportPDF} disabled={exporting} style={styles.headerActionBtn}>
+                <Ionicons name="document-text-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleExportCSV} disabled={exporting} style={styles.headerActionBtn}>
+                <Ionicons name="download-outline" size={18} color="#fff" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </LinearGradient>
 
       {loading ? (
@@ -424,7 +561,8 @@ const styles = StyleSheet.create({
   backButton: { width: 40 },
   headerContent: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
-  headerRight: { width: 40 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', width: 60, justifyContent: 'flex-end' },
+  headerActionBtn: { padding: 6, marginLeft: 4 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   listContent: { padding: 16 },
   summaryCard: { borderRadius: 12, padding: 16, marginBottom: 16, flexDirection: 'row', flexWrap: 'wrap' },

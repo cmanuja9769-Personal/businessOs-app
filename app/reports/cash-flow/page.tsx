@@ -8,8 +8,6 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   Wallet, 
   Filter,
   Loader2,
@@ -21,6 +19,9 @@ import {
 import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import type { ApiPaymentResponse } from "@/types/api-responses"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 const COLOR_POSITIVE = "text-green-600"
 const COLOR_NEGATIVE = "text-red-600"
@@ -190,6 +191,77 @@ export default function CashFlowPage() {
   const netChange = data ? 
     data.operatingActivities.total + data.investingActivities.total + data.financingActivities.total : 0
 
+  const cashFlowPdfColumns: ReportColumn[] = [
+    { key: "description", header: "Description", width: "55%", bold: true },
+    { key: "type", header: "Type", width: "15%" },
+    { key: "amount", header: "Amount", width: "30%", align: "right" },
+  ]
+
+  const handleExportPDF = async () => {
+    if (!data) return
+    const pdfData: Record<string, unknown>[] = [
+      { description: "Opening Balance", type: "", amount: data.openingBalance },
+      { description: "", type: "", amount: "" },
+      { description: "--- Operating Activities ---", type: "", amount: "" },
+      ...data.operatingActivities.items.filter(i => i.amount !== 0).map(i => ({ description: i.description, type: i.type === "inflow" ? "Inflow" : "Outflow", amount: i.type === "inflow" ? i.amount : -i.amount })),
+      { description: "Net Operating", type: "", amount: data.operatingActivities.total },
+      { description: "", type: "", amount: "" },
+      { description: "--- Investing Activities ---", type: "", amount: "" },
+      ...data.investingActivities.items.filter(i => i.amount !== 0).map(i => ({ description: i.description, type: i.type === "inflow" ? "Inflow" : "Outflow", amount: i.type === "inflow" ? i.amount : -i.amount })),
+      { description: "Net Investing", type: "", amount: data.investingActivities.total },
+      { description: "", type: "", amount: "" },
+      { description: "--- Financing Activities ---", type: "", amount: "" },
+      ...data.financingActivities.items.filter(i => i.amount !== 0).map(i => ({ description: i.description, type: i.type === "inflow" ? "Inflow" : "Outflow", amount: i.type === "inflow" ? i.amount : -i.amount })),
+      { description: "Net Financing", type: "", amount: data.financingActivities.total },
+      { description: "", type: "", amount: "" },
+      { description: "Net Change in Cash", type: "", amount: netChange },
+      { description: "Closing Balance", type: "", amount: data.closingBalance },
+    ]
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Cash Flow Statement",
+        subtitle: `Net Change: ${formatCurrency(netChange)} | Closing: ${formatCurrency(data.closingBalance)}`,
+        dateRange: `${format(new Date(dateFrom), "dd MMM yyyy")} - ${format(new Date(dateTo), "dd MMM yyyy")}`,
+        columns: cashFlowPdfColumns,
+        data: pdfData,
+      }),
+      `cash-flow-${dateFrom}-to-${dateTo}.pdf`,
+    )
+  }
+
+  const handleExportCSV = () => {
+    if (!data) return
+    const lines = [
+      "Cash Flow Statement",
+      `Period: ${dateFrom} to ${dateTo}`,
+      "",
+      "Description,Type,Amount",
+      `Opening Balance,,${data.openingBalance.toFixed(2)}`,
+      "",
+      "--- Operating Activities ---,,",
+      ...data.operatingActivities.items.filter(i => i.amount !== 0).map(i => `"${i.description}",${i.type},${i.type === "inflow" ? "" : "-"}${i.amount.toFixed(2)}`),
+      `Net Operating,,${data.operatingActivities.total.toFixed(2)}`,
+      "",
+      "--- Investing Activities ---,,",
+      ...data.investingActivities.items.filter(i => i.amount !== 0).map(i => `"${i.description}",${i.type},${i.type === "inflow" ? "" : "-"}${i.amount.toFixed(2)}`),
+      `Net Investing,,${data.investingActivities.total.toFixed(2)}`,
+      "",
+      "--- Financing Activities ---,,",
+      ...data.financingActivities.items.filter(i => i.amount !== 0).map(i => `"${i.description}",${i.type},${i.type === "inflow" ? "" : "-"}${i.amount.toFixed(2)}`),
+      `Net Financing,,${data.financingActivities.total.toFixed(2)}`,
+      "",
+      `Net Change in Cash,,${netChange.toFixed(2)}`,
+      `Closing Balance,,${data.closingBalance.toFixed(2)}`,
+    ]
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = `cash-flow-${dateFrom}-to-${dateTo}.csv`
+    link.click()
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
@@ -209,14 +281,11 @@ export default function CashFlowPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={!data}
+          />
         </div>
       </div>
 

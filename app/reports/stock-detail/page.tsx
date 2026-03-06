@@ -10,8 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { 
   ArrowLeft, 
-  Download, 
-  Printer, 
   Package, 
   Filter,
   Loader2,
@@ -24,6 +22,9 @@ import Link from "next/link"
 import { format, startOfMonth, endOfMonth } from "date-fns"
 import { DataEmptyState } from "@/components/ui/data-empty-state"
 import { ClientErrorBoundary } from "@/components/ui/client-error-boundary"
+import { ReportActionBar } from "@/components/reports/report-action-bar"
+import { exportToCSV as exportCSVUtil, downloadReportPDF } from "@/lib/export-utils"
+import { type ReportColumn } from "@/components/reports/compact-report-pdf"
 
 interface StockMovement {
   id: string
@@ -149,31 +150,64 @@ export default function StockDetailPage() {
     closing: acc.closing + m.closingQty
   }), { opening: 0, inward: 0, outward: 0, closing: 0 })
 
-  const exportToCSV = () => {
-    const headers = ['Item Name', 'SKU', 'Unit', 'Opening', 'Inward', 'Outward', 'Closing']
-    const rows = filteredMovements.map(m => [
-      m.itemName,
-      m.sku,
-      m.unit,
-      m.openingQty.toString(),
-      m.inwardQty.toString(),
-      m.outwardQty.toString(),
-      m.closingQty.toString()
-    ])
+  const stockDetailPdfColumns: ReportColumn[] = [
+    { key: "itemName", header: "Item Name", width: "28%", bold: true },
+    { key: "sku", header: "SKU / Item Code", width: "16%" },
+    { key: "unit", header: "Unit", width: "8%" },
+    { key: "opening", header: "Opening Qty", width: "12%", align: "right" },
+    { key: "inward", header: "Inward (+)", width: "12%", align: "right" },
+    { key: "outward", header: "Outward (-)", width: "12%", align: "right" },
+    { key: "closing", header: "Closing Qty", width: "12%", align: "right" },
+  ]
 
-    const csvContent = [
-      `Stock Detail Report`,
-      `Period: ${dateFrom} to ${dateTo}`,
-      '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+  const handleExportPDF = async () => {
+    const data = filteredMovements.map((m) => ({
+      itemName: m.itemName,
+      sku: m.sku,
+      unit: m.unit,
+      opening: m.openingQty,
+      inward: m.inwardQty,
+      outward: m.outwardQty,
+      closing: m.closingQty,
+    }))
+    const pdfTotals = {
+      itemName: "Total",
+      opening: totals.opening,
+      inward: totals.inward,
+      outward: totals.outward,
+      closing: totals.closing,
+    }
+    const { CompactReportPDF } = await import("@/components/reports/compact-report-pdf")
+    const React = await import("react")
+    await downloadReportPDF(
+      React.createElement(CompactReportPDF, {
+        title: "Stock Detail Report",
+        subtitle: `${filteredMovements.length} items | Opening: ${totals.opening} | Closing: ${totals.closing}`,
+        dateRange: `${format(new Date(dateFrom), "dd MMM yyyy")} - ${format(new Date(dateTo), "dd MMM yyyy")}`,
+        columns: stockDetailPdfColumns,
+        data,
+        totals: pdfTotals,
+      }),
+      `stock-detail-${dateFrom}-to-${dateTo}.pdf`,
+    )
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `stock-detail-${dateFrom}-to-${dateTo}.csv`
-    link.click()
+  const handleExportCSV = () => {
+    const csvColumns = [
+      { key: "itemName", header: "Item Name" },
+      { key: "sku", header: "SKU" },
+      { key: "unit", header: "Unit" },
+      { key: "openingQty", header: "Opening" },
+      { key: "inwardQty", header: "Inward" },
+      { key: "outwardQty", header: "Outward" },
+      { key: "closingQty", header: "Closing" },
+    ] as const
+    exportCSVUtil(
+      filteredMovements as unknown as Record<string, unknown>[],
+      `stock-detail-${dateFrom}-to-${dateTo}.csv`,
+      csvColumns,
+      { titleRows: ["Stock Detail Report", `Period: ${dateFrom} to ${dateTo}`] },
+    )
   }
 
   return (
@@ -196,14 +230,11 @@ export default function StockDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={() => window.print()} variant="outline" size="sm">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <ReportActionBar
+            onExportPDF={handleExportPDF}
+            onExportCSV={handleExportCSV}
+            disabled={filteredMovements.length === 0}
+          />
         </div>
       </div>
 
@@ -346,17 +377,17 @@ export default function StockDetailPage() {
             }
             return (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[56rem]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead className="text-right">Opening</TableHead>
-                    <TableHead className="text-right text-green-600">Inward (+)</TableHead>
-                    <TableHead className="text-right text-red-600">Outward (-)</TableHead>
-                    <TableHead className="text-right">Closing</TableHead>
-                    <TableHead>Movement</TableHead>
+                    <TableHead className="w-[22%]">Item Name</TableHead>
+                    <TableHead className="w-[14%]">SKU</TableHead>
+                    <TableHead className="w-[6%]">Unit</TableHead>
+                    <TableHead className="w-[11%] text-right">Opening</TableHead>
+                    <TableHead className="w-[11%] text-right text-green-600">Inward (+)</TableHead>
+                    <TableHead className="w-[11%] text-right text-red-600">Outward (-)</TableHead>
+                    <TableHead className="w-[11%] text-right">Closing</TableHead>
+                    <TableHead className="w-[14%]">Movement</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -372,8 +403,8 @@ export default function StockDetailPage() {
                         const netChange = m.inwardQty - m.outwardQty
                         return (
                           <TableRow key={m.id}>
-                            <TableCell className="font-medium">{m.itemName}</TableCell>
-                            <TableCell className="font-mono text-xs">{m.sku}</TableCell>
+                            <TableCell className="font-medium truncate max-w-[12rem]">{m.itemName}</TableCell>
+                            <TableCell className="font-mono text-xs truncate max-w-[8rem]">{m.sku}</TableCell>
                             <TableCell>{m.unit}</TableCell>
                             <TableCell className="text-right">{m.openingQty}</TableCell>
                             <TableCell className="text-right text-green-600">+{m.inwardQty}</TableCell>

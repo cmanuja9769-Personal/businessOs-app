@@ -1,83 +1,12 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth"
 import { NextResponse } from "next/server"
-import { SupabaseClient } from "@supabase/supabase-js"
 
 function hasInvitePermission(role: string): boolean {
   return role === "owner" || role === "admin"
 }
 
-async function addExistingUserToOrg(
-  supabase: SupabaseClient,
-  userId: string,
-  organizationId: string,
-  role: string,
-) {
-  const { data: existingMembership } = await supabase
-    .from("app_user_organizations")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("organization_id", organizationId)
-    .single()
-
-  if (existingMembership) {
-    return NextResponse.json({ error: "User is already a member of this organization" }, { status: 400 })
-  }
-
-  const { error: addError } = await supabase.from("app_user_organizations").insert({
-    user_id: userId,
-    organization_id: organizationId,
-    role: role,
-    is_active: true,
-  })
-
-  if (addError) {
-    console.error("Error adding user to organization:", addError)
-    return NextResponse.json({ error: "Failed to add user to organization" }, { status: 500 })
-  }
-
-  return NextResponse.json({
-    success: true,
-    message: "User added to organization",
-  })
-}
-
 const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
-
-async function createInvitation(
-  supabase: SupabaseClient,
-  organizationId: string,
-  email: string,
-  role: string,
-  invitedBy: string,
-) {
-  const inviteToken = crypto.randomUUID()
-
-  const { error: inviteError } = await supabase.from("organization_invitations").insert({
-    organization_id: organizationId,
-    email: email.toLowerCase(),
-    role: role,
-    invited_by: invitedBy,
-    token: inviteToken,
-    expires_at: new Date(Date.now() + INVITE_EXPIRY_MS).toISOString(),
-  })
-
-  if (inviteError) {
-    console.error("Error creating invitation:", inviteError)
-    return NextResponse.json(
-      {
-        error: "Invitation feature requires database setup. User will need to sign up and request access.",
-      },
-      { status: 500 },
-    )
-  }
-
-  return NextResponse.json({
-    success: true,
-    message: "Invitation created. User will receive an email.",
-    inviteToken,
-  })
-}
 
 export async function POST(request: Request) {
   try {
@@ -106,14 +35,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You don't have permission to invite users" }, { status: 403 })
     }
 
-    const { data: invitedUser } = await supabase.auth.admin.listUsers()
-    const existingUser = invitedUser?.users?.find((u) => u.email === email)
+    const serviceClient = createServiceRoleClient()
 
-    if (existingUser) {
-      return addExistingUserToOrg(supabase, existingUser.id, organizationId, role)
+    const { data: existingMembership } = await serviceClient
+      .from("app_user_organizations")
+      .select("user_id")
+      .eq("organization_id", organizationId)
+      .eq("user_id", (
+        await (async () => {
+          const { data: users } = await serviceClient.auth.admin.listUsers()
+          return users?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())?.id
+        })()
+      ) ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle()
+
+    if (existingMembership) {
+      return NextResponse.json({ error: "User is already a member of this organization" }, { status: 400 })
     }
 
-    return createInvitation(supabase, organizationId, email, role, user.id)
+    const { data: existingInvite } = await serviceClient
+      .from("organization_invitations")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("email", email.toLowerCase())
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle()
+
+    if (existingInvite) {
+      return NextResponse.json({ error: "An active invitation already exists for this email" }, { status: 400 })
+    }
+
+    const inviteToken = crypto.randomUUID()
+
+    const { error: inviteError } = await serviceClient
+      .from("organization_invitations")
+      .insert({
+        organization_id: organizationId,
+        email: email.toLowerCase(),
+        role: role,
+        invited_by: user.id,
+        token: inviteToken,
+        expires_at: new Date(Date.now() + INVITE_EXPIRY_MS).toISOString(),
+      })
+
+    if (inviteError) {
+      console.error("Error creating invitation:", inviteError)
+      return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Invitation created. User will need to accept the invitation to join.",
+      inviteToken,
+    })
   } catch (error) {
     console.error("Error in invite endpoint:", error)
     return NextResponse.json(

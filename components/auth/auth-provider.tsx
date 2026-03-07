@@ -18,11 +18,21 @@ export interface Organization {
   phone?: string
 }
 
+export interface PendingInvitation {
+  id: string
+  organization_id: string
+  role: string
+  token: string
+  expires_at: string
+  org_name: string | null
+}
+
 interface AuthContextType {
   user: User | null
   userRole: UserRole | null
   organization: Organization | null
   organizations: Organization[]
+  pendingInvitations: PendingInvitation[]
   loading: boolean
   setOrganization: (org: Organization | null) => void
   signOut: () => Promise<void>
@@ -47,7 +57,8 @@ function parseApiResponse(json: Record<string, unknown>) {
   const user = (json.user ?? null) as User | null
   const userRole = (json.userRole ?? null) as UserRole | null
   const organizations: Organization[] = Array.isArray(json.organizations) ? json.organizations : []
-  return { user, userRole, organizations }
+  const pendingInvitations: PendingInvitation[] = Array.isArray(json.pendingInvitations) ? json.pendingInvitations : []
+  return { user, userRole, organizations, pendingInvitations }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -55,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [organization, setOrganizationState] = useState<Organization | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [loading, setLoading] = useState(true)
 
   const setOrganization = (org: Organization | null) => {
@@ -82,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(parsed.user)
         setUserRole(parsed.userRole)
         setOrganizations(parsed.organizations)
+        setPendingInvitations(parsed.pendingInvitations)
 
         const activeOrg = resolveActiveOrganization(parsed.organizations)
         if (activeOrg) {
@@ -95,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserRole(null)
         setOrganization(null)
         setOrganizations([])
+        setPendingInvitations([])
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -127,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserRole(null)
     setOrganization(null)
     setOrganizations([])
+    setPendingInvitations([])
   }
 
   return (
@@ -136,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole,
         organization,
         organizations,
+        pendingInvitations,
         loading,
         setOrganization: setOrganization,
         signOut,

@@ -43,15 +43,11 @@ async function tryCreateDefaultRole(
   userId: string,
 ): Promise<{ role: string; permissions: Record<string, unknown> | null } | null> {
   try {
-    const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
-    const isFirstUser = !existingRoles || existingRoles.length === 0
-    const defaultRole = isFirstUser ? "admin" : "user"
-
     const { data: newRole, error: insertError } = await supabase
       .from("user_roles")
       .insert({
         user_id: userId,
-        role: defaultRole,
+        role: "viewer",
         permissions: {},
       })
       .select("role, permissions")

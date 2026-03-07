@@ -195,6 +195,16 @@ export async function createOrganization(userId: string, input: CreateOrganizati
     return { success: false, error: memberError.message }
   }
 
+  await supabase.from("user_roles").upsert(
+    {
+      user_id: userId,
+      role: "admin",
+      organization_id: org.id,
+      permissions: {},
+    },
+    { onConflict: "user_id,organization_id", ignoreDuplicates: true },
+  )
+
   const { error: businessError } = await supabase.from("business_details").upsert(
     {
       id: org.id,

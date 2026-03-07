@@ -45,17 +45,14 @@ export async function authorize(
   }
 
   const serviceClient = createServiceRoleClient()
-  const { data: allRoles } = await serviceClient
+  const { data: orgRole } = await serviceClient
     .from("user_roles")
-    .select("role, organization_id")
+    .select("role")
     .eq("user_id", user.id)
+    .eq("organization_id", orgData.organization_id)
+    .maybeSingle()
 
-  const orgMatch = allRoles?.find(
-    (r) => r.organization_id === orgData.organization_id
-  )
-  const anyMatch = orgMatch ?? allRoles?.[0]
-
-  const role = (anyMatch?.role as UserRole) || "viewer"
+  const role = (orgRole?.role as UserRole) || "viewer"
   const permissions = DEFAULT_PERMISSIONS[role]
 
   if (resource && action && !hasPermission(permissions, resource, action)) {

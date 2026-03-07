@@ -27,10 +27,7 @@ export async function POST(_request: Request) {
     }
 
     // Check if this is the first user (make them admin)
-    const { data: allRoles } = await supabase.from("user_roles").select("id").limit(1)
-
-    const isFirstUser = !allRoles || allRoles.length === 0
-    const defaultRole = isFirstUser ? "admin" : "user"
+    const defaultRole = "viewer"
 
     // Create the role
     const { data: newRole, error: roleError } = await supabase

@@ -9,10 +9,20 @@ const CACHED_ORG_USER_KEY = 'cached_organization_user_id';
 const CACHED_SESSION_KEY = 'cached_session_data';
 const CACHED_USER_KEY = 'cached_user_data';
 
+interface PendingInvitation {
+  id: string;
+  organization_id: string;
+  role: string;
+  org_name: string | null;
+  expires_at: string;
+}
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   organizationId: string | null;
+  needsOnboarding: boolean;
+  pendingInvitations: PendingInvitation[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, userData: Record<string, unknown>) => Promise<{ error: AuthError | null }>;
@@ -35,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -182,8 +194,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       if (isMounted && orgId) {
         setOrganizationId(orgId);
+        setNeedsOnboarding(false);
+        setPendingInvitations([]);
       } else if (isMounted) {
-        console.warn('[AUTH] Organization could not be resolved');
+        console.warn('[AUTH] Organization could not be resolved, checking invitations...');
+        setOrganizationId(null);
+        const email = activeSession.user.email;
+        if (email) {
+          try {
+            const { data: invites } = await supabase
+              .from('organization_invitations')
+              .select('id, organization_id, role, expires_at, app_organizations(name)')
+              .eq('email', email)
+              .is('accepted_at', null)
+              .gt('expires_at', new Date().toISOString());
+
+            const mapped: PendingInvitation[] = (invites ?? []).map((inv: Record<string, unknown>) => ({
+              id: inv.id as string,
+              organization_id: inv.organization_id as string,
+              role: inv.role as string,
+              expires_at: inv.expires_at as string,
+              org_name: (inv.app_organizations as { name: string } | null)?.name ?? null,
+            }));
+            setPendingInvitations(mapped);
+            setNeedsOnboarding(mapped.length === 0);
+          } catch {
+            setPendingInvitations([]);
+            setNeedsOnboarding(true);
+          }
+        } else {
+          setNeedsOnboarding(true);
+        }
       }
     };
 
@@ -320,7 +361,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
-      // Clear all cached data
       await AsyncStorage.multiRemove([
         CACHED_ORG_KEY, 
         CACHED_ORG_USER_KEY, 
@@ -331,6 +371,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrganizationId(null);
       setSession(null);
       setUser(null);
+      setNeedsOnboarding(false);
+      setPendingInvitations([]);
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -354,6 +396,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         user,
         organizationId,
+        needsOnboarding,
+        pendingInvitations,
         loading,
         signIn,
         signUp,

@@ -18,13 +18,9 @@ function validatePasswords(password: string, confirmPassword: string): string | 
 }
 
 async function assignDefaultRole(supabase: SupabaseClient, userId: string) {
-  const { data: existingRoles } = await supabase.from("user_roles").select("id").limit(1)
-  const isFirstUser = !existingRoles || existingRoles.length === 0
-  const defaultRole = isFirstUser ? "admin" : "user"
-
   const { error: roleError } = await supabase.from("user_roles").insert({
     user_id: userId,
-    role: defaultRole,
+    role: "viewer",
     permissions: {},
   })
 

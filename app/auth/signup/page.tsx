@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { SignupForm } from "@/components/auth/signup-form"
 import Link from "next/link"
+import { Package } from "lucide-react"
 
 export const metadata = {
   title: "Sign Up - BusinessOS",
@@ -22,7 +23,7 @@ export default async function SignupPage() {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">📊</span>
+              <Package className="w-5 h-5 text-primary-foreground" />
             </div>
             <span className="text-2xl font-bold text-foreground">BusinessOS</span>
           </div>

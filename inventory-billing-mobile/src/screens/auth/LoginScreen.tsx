@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { AuthStackNavigationProp } from '@navigation/types';
 import { useAuth } from '@contexts/AuthContext';
 import { useTheme } from '@contexts/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import { spacing, fontSize } from '@theme/spacing';
@@ -69,6 +70,9 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
+          <View style={styles.logoBox}>
+            <Ionicons name="cube" size={28} color="#ffffff" />
+          </View>
           <Text style={[styles.title, { color: colors.text }]}>
             Welcome Back
           </Text>
@@ -151,6 +155,15 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: spacing.xxl,
+  },
+  logoBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#4F46E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   title: {
     fontSize: fontSize.xxxl,

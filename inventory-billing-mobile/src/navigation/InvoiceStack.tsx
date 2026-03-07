@@ -32,7 +32,7 @@ export default function InvoiceStack() {
         component={InvoiceListScreen}
         options={{ 
           title: 'Invoices',
-          headerShown: false,
+          headerLeft: () => null,
         }}
       />
       <Stack.Screen 

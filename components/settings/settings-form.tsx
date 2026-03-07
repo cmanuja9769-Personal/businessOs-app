@@ -690,7 +690,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
               </div>
 
               <div className="mt-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="showAmountInWords">Show Amount in Words</Label>
                     <p className="text-sm text-muted-foreground">Display total in words on invoices (e.g., &quot;Five Thousand Rupees Only&quot;)</p>
@@ -703,7 +703,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                   <input type="hidden" name="showAmountInWords" value={formData.showAmountInWords.toString()} />
                 </div>
 
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="roundOffTotal">Round Off Invoice Total</Label>
                     <p className="text-sm text-muted-foreground">Automatically round the final total to the nearest rupee</p>
@@ -798,7 +798,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
               </div>
 
               <div className="mt-6 space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="taxEnabled">Enable Tax/GST</Label>
                     <p className="text-sm text-muted-foreground">Enable tax calculations for invoices</p>
@@ -812,7 +812,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                   <input type="hidden" name="taxEnabled" value={formData.taxEnabled.toString()} />
                 </div>
 
-                <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-0.5">
                     <Label htmlFor="multiCurrencyEnabled" className="flex items-center gap-2">
                       <Globe className="h-4 w-4" />
@@ -852,7 +852,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
               <CardTitle>Inventory & Alerts</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                 <div className="space-y-0.5">
                   <Label htmlFor="lowStockAlert">Low Stock Alerts</Label>
                   <p className="text-sm text-muted-foreground">Get notified when stock falls below the threshold</p>
@@ -898,7 +898,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <div className="flex items-start justify-between rounded-lg border p-4">
+                <div className="flex items-start justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-4">
                       <Switch
@@ -921,7 +921,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                   <input type="hidden" name="customField1Enabled" value={formData.customField1Enabled.toString()} />
                 </div>
 
-                <div className="flex items-start justify-between rounded-lg border p-4">
+                <div className="flex items-start justify-between rounded-2xl glass-subtle p-4">
                   <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-4">
                       <Switch
@@ -956,7 +956,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
               <CardDescription>Configure email alerts for important business events</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                 <div className="space-y-0.5">
                   <Label htmlFor="emailNotificationsEnabled">Enable Email Notifications</Label>
                   <p className="text-sm text-muted-foreground">Master toggle for all email alerts</p>
@@ -986,7 +986,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
 
                   <Separator />
 
-                  <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                     <div className="space-y-0.5">
                       <Label htmlFor="emailOnInvoiceCreated">Invoice Created</Label>
                       <p className="text-sm text-muted-foreground">Send confirmation when a new invoice is generated</p>
@@ -999,7 +999,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                     <input type="hidden" name="emailOnInvoiceCreated" value={formData.emailOnInvoiceCreated.toString()} />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                     <div className="space-y-0.5">
                       <Label htmlFor="emailOnPaymentReceived">Payment Received</Label>
                       <p className="text-sm text-muted-foreground">Notify when a payment is recorded against an invoice</p>
@@ -1012,7 +1012,7 @@ export function SettingsForm({ settings, organization, activeTab = "business" }:
                     <input type="hidden" name="emailOnPaymentReceived" value={formData.emailOnPaymentReceived.toString()} />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="flex items-center justify-between rounded-2xl glass-subtle p-4">
                     <div className="space-y-0.5">
                       <Label htmlFor="emailOnLowStock">Low Stock Warning</Label>
                       <p className="text-sm text-muted-foreground">Alert when any item falls below the low stock threshold</p>

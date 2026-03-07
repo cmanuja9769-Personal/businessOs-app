@@ -477,7 +477,7 @@ function MultiGodownEntryList({
         const hasError = ws && entryQty > ws.quantity
 
         return (
-          <div key={index} className="space-y-2 p-3 border rounded bg-background">
+          <div key={index} className="space-y-2 p-3 rounded-lg glass-subtle">
             <div className="flex items-center gap-2">
               <Select 
                 value={entry.warehouseId} 

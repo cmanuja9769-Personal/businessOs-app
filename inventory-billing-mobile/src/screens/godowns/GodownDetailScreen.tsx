@@ -17,6 +17,7 @@ import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
+import { fetchWarehouseById } from '@lib/warehouse-service';
 
 type RouteProps = RouteProp<MoreStackParamList, 'GodownDetail'>;
 
@@ -67,19 +68,14 @@ export default function GodownDetailScreen() {
     setLoading(true);
 
     try {
-      const { data: godownData, error: godownError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('id', godownId)
-        .is('deleted_at', null)
-        .single();
-
-      if (godownError) throw godownError;
+      const godownData = await fetchWarehouseById<Godown>(organizationId, godownId, '*');
+      if (!godownData) throw new Error('Godown not found');
       setGodown(godownData);
 
       const { data: stockData, error: stockError } = await supabase
         .from('item_warehouse_stock')
         .select('*, items(name, item_code, unit, purchase_price)')
+        .eq('organization_id', organizationId)
         .eq('warehouse_id', godownId);
 
       if (stockError) throw stockError;
@@ -143,6 +139,7 @@ export default function GodownDetailScreen() {
               const { error } = await supabase
                 .from('warehouses')
                 .update({ is_default: true })
+                .eq('organization_id', organizationId)
                 .eq('id', godownId);
 
               if (error) throw error;
@@ -178,7 +175,11 @@ export default function GodownDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('warehouses').update({ deleted_at: new Date().toISOString() }).eq('id', godownId);
+              const { error } = await supabase
+                .from('warehouses')
+                .update({ is_active: false })
+                .eq('organization_id', organizationId)
+                .eq('id', godownId);
               if (error) throw error;
               navigation.goBack();
             } catch {

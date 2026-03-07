@@ -5,8 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform,
-  Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,10 +12,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import Card from '@components/ui/Card';
 import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ReportCategory {
   title: string;
@@ -103,7 +100,7 @@ interface QuickStats {
 
 export default function ReportsScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
-  const { colors, shadows } = useTheme();
+  const { colors, isDark } = useTheme();
   const { organizationId } = useAuth();
 
   const [stats, setStats] = useState<QuickStats>({
@@ -163,51 +160,45 @@ export default function ReportsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient colors={['#4F46E5', '#6366F1']} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Reports</Text>
-        <View style={styles.headerRight} />
-      </LinearGradient>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.quickStats}>
-          <View style={[styles.statCard, { backgroundColor: '#10B981' }]}>
-            <Ionicons name="arrow-up-circle-outline" size={24} color="#fff" />
-            <Text style={styles.statLabel}>Sales</Text>
-            <Text style={styles.statValue}>{formatCurrency(stats.totalSales)}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="arrow-up-circle-outline" size={20} color="#10B981" />
+            <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.totalSales)}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Sales</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#6366F1' }]}>
-            <Ionicons name="arrow-down-circle-outline" size={24} color="#fff" />
-            <Text style={styles.statLabel}>Purchases</Text>
-            <Text style={styles.statValue}>{formatCurrency(stats.totalPurchases)}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="arrow-down-circle-outline" size={20} color="#6366F1" />
+            <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.totalPurchases)}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Purchases</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#F59E0B' }]}>
-            <Ionicons name="time-outline" size={24} color="#fff" />
-            <Text style={styles.statLabel}>Receivables</Text>
-            <Text style={styles.statValue}>{formatCurrency(stats.receivables)}</Text>
+        </View>
+        <View style={styles.quickStats}>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="time-outline" size={20} color="#F59E0B" />
+            <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.receivables)}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Receivables</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: '#EF4444' }]}>
-            <Ionicons name="wallet-outline" size={24} color="#fff" />
-            <Text style={styles.statLabel}>Payables</Text>
-            <Text style={styles.statValue}>{formatCurrency(stats.payables)}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+            <Ionicons name="wallet-outline" size={20} color="#EF4444" />
+            <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.payables)}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Payables</Text>
           </View>
         </View>
 
         {REPORT_CATEGORIES.map(category => (
-          <View key={category.title} style={[styles.categoryCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <Card key={category.title} style={styles.categoryCard}>
             <TouchableOpacity
               style={styles.categoryHeader}
               onPress={() => toggleCategory(category.title)}
             >
               <LinearGradient colors={category.gradient} style={styles.categoryIcon}>
-                <Ionicons name={category.icon} size={20} color="#fff" />
+                <Ionicons name={category.icon} size={18} color="#fff" />
               </LinearGradient>
               <Text style={[styles.categoryTitle, { color: colors.text }]}>{category.title}</Text>
               <Ionicons
                 name={expandedCategory === category.title ? 'chevron-up' : 'chevron-down'}
-                size={20}
+                size={18}
                 color={colors.textSecondary}
               />
             </TouchableOpacity>
@@ -217,21 +208,25 @@ export default function ReportsScreen() {
                 {category.reports.map(report => (
                   <TouchableOpacity
                     key={report.key}
-                    style={[styles.reportItem, { borderColor: colors.border }]}
+                    style={[styles.reportItem, { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}
                     onPress={() => handleReportPress(report.key)}
                   >
-                    <Ionicons name={report.icon} size={22} color={colors.primary} />
+                    <View style={[styles.reportIconPill, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(79,70,229,0.08)' }]}>
+                      <Ionicons name={report.icon} size={18} color={colors.primary} />
+                    </View>
                     <View style={styles.reportInfo}>
                       <Text style={[styles.reportTitle, { color: colors.text }]}>{report.title}</Text>
                       <Text style={[styles.reportDesc, { color: colors.textSecondary }]}>{report.description}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                    <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
                   </TouchableOpacity>
                 ))}
               </View>
             )}
-          </View>
+          </Card>
         ))}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -239,22 +234,19 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
-  backButton: { width: 40 },
-  headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#fff', textAlign: 'center' },
-  headerRight: { width: 40 },
   content: { flex: 1, padding: 16 },
-  quickStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  statCard: { width: (SCREEN_WIDTH - 44) / 2, padding: 16, borderRadius: 12 },
-  statLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 8 },
-  statValue: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 4 },
-  categoryCard: { borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
+  quickStats: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  statCard: { flex: 1, padding: 12, borderRadius: 12, alignItems: 'center', gap: 4, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2 },
+  statValue: { fontSize: 14, fontWeight: '700' },
+  statLabel: { fontSize: 11 },
+  categoryCard: { marginBottom: 12 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', padding: 16 },
-  categoryIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  categoryIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   categoryTitle: { flex: 1, fontSize: 16, fontWeight: '600', marginLeft: 12 },
   reportsContainer: { paddingHorizontal: 16, paddingBottom: 8 },
-  reportItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },
-  reportInfo: { flex: 1, marginLeft: 12 },
+  reportItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, gap: 12 },
+  reportIconPill: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  reportInfo: { flex: 1 },
   reportTitle: { fontSize: 15, fontWeight: '500' },
   reportDesc: { fontSize: 12, marginTop: 2 },
 });

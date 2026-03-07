@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Settings {
   enableNotifications: boolean;
-  enableBiometric: boolean;
   language: string;
   currency: string;
 }
@@ -19,7 +18,6 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       settings: {
         enableNotifications: true,
-        enableBiometric: false,
         language: 'en',
         currency: 'INR',
       },

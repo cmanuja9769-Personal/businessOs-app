@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { GlassCard } from "@/components/ui/glass-card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import {
@@ -280,7 +281,7 @@ export default function ReportsDashboard() {
                   <Link
                     key={report.href}
                     href={report.href}
-                    className="group flex flex-col p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all"
+                    className="group flex flex-col p-4 rounded-2xl glass-subtle neo-shadow-sm hover:scale-[1.02] hover:neo-shadow transition-all"
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className={`p-1.5 rounded-md ${group.color}`}>
@@ -311,7 +312,7 @@ export default function ReportsDashboard() {
       </div>
 
       {/* Quick Access Footer */}
-      <Card className="bg-muted/50">
+      <Card className="glass-subtle">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
@@ -355,19 +356,17 @@ function QuickStatCard({
   icon: React.ComponentType<{ className?: string }>
 }) {
   return (
-    <Card>
-      <CardContent className="pt-4 pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
-            <p className="text-[0.625rem] text-muted-foreground">{description}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
+    <GlassCard glow className="relative overflow-hidden group">
+      <div className="flex items-start justify-between gap-2 relative">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+          <div className="text-xl sm:text-2xl font-bold">{value}</div>
+          <p className="text-[0.6875rem] text-muted-foreground/80">{description}</p>
         </div>
-      </CardContent>
-    </Card>
+        <div className="p-2 rounded-2xl neo-inset bg-primary/10 flex-shrink-0">
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
+      </div>
+    </GlassCard>
   )
 }

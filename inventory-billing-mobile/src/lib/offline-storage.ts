@@ -50,6 +50,7 @@ type OfflineInvoiceInput = {
   notes?: string
   terms?: string
   items?: unknown[]
+  synced?: number
 }
 
 type OfflineItemInput = {
@@ -68,6 +69,7 @@ type OfflineItemInput = {
   max_stock?: number
   description?: string
   image_url?: string
+  synced?: number
 }
 
 type OfflineCustomerInput = {
@@ -80,6 +82,7 @@ type OfflineCustomerInput = {
   city?: string
   state?: string
   pincode?: string
+  synced?: number
 }
 
 type SyncQueueInput = Record<string, unknown>
@@ -258,7 +261,7 @@ export const saveOfflineInvoice = (invoice: OfflineInvoiceInput): Promise<void> 
         invoice.notes || null,
         invoice.terms || null,
         JSON.stringify(invoice.items || []),
-        0,
+        invoice.synced ?? 0,
         nowIso(),
         nowIso(),
       ]
@@ -304,7 +307,7 @@ export const saveOfflineItem = (item: OfflineItemInput): Promise<void> => {
         item.max_stock ?? 0,
         item.description || null,
         item.image_url || null,
-        0,
+        item.synced ?? 0,
         nowIso(),
         nowIso(),
       ]
@@ -332,7 +335,7 @@ export const saveOfflineCustomer = (customer: OfflineCustomerInput): Promise<voi
         customer.city || null,
         customer.state || null,
         customer.pincode || null,
-        0,
+        customer.synced ?? 0,
         nowIso(),
         nowIso(),
       ]

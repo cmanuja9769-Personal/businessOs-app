@@ -61,7 +61,11 @@ function buildItemSearchFilter(query: string): string | null {
   return `name.ilike.${searchTerm},item_code.ilike.${searchTerm},barcode_no.ilike.${searchTerm},category.ilike.${searchTerm}`;
 }
 
-export function useItemSearch(organizationId: string | null): UseItemSearchReturn {
+export function useItemSearch(
+  organizationId: string | null,
+  orderBy: string = 'name',
+  ascending: boolean = true,
+): UseItemSearchReturn {
   const [items, setItems] = useState<Item[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [status, setStatus] = useState<SearchStatus>('idle');
@@ -150,7 +154,7 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
           .select('*')
           .eq('organization_id', organizationId)
           .is('deleted_at', null)
-          .order('name', { ascending: true })
+          .order(orderBy, { ascending })
           .range(from, to);
 
         const orFilter = buildItemSearchFilter(query);
@@ -180,7 +184,7 @@ export function useItemSearch(organizationId: string | null): UseItemSearchRetur
         setIsRefreshing(false);
       }
     },
-    [organizationId, updateFetchLoadingState, applyFetchResults, handleFetchError]
+    [organizationId, orderBy, ascending, updateFetchLoadingState, applyFetchResults, handleFetchError]
   );
 
   useEffect(() => {

@@ -184,25 +184,25 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
             <div className="grid gap-4 md:grid-cols-2">
               {/* E-Way Bill Number */}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">E-Way Bill Number</p>
-                <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-                  <code className="text-sm font-mono text-gray-600">
+                <p className="text-sm font-medium text-muted-foreground">E-Way Bill Number</p>
+                <div className="flex items-center justify-between p-2 glass-subtle rounded-lg">
+                  <code className="text-sm font-mono text-foreground">
                     {EWayBillUtils.formatEWayBillNo(invoice.ewaybillNo)}
                   </code>
                   <Button variant="ghost" size="sm" onClick={handleCopyEWB}>
                     <Copy className="w-3 h-3" />
                   </Button>
                 </div>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-muted-foreground">
                   Generated: {invoice.ewaybillDate && new Date(invoice.ewaybillDate).toLocaleString()}
                 </p>
               </div>
 
               {/* Validity */}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">Validity</p>
-                <div className="p-2 bg-white rounded border border-gray-200">
-                  <p className="text-sm font-semibold text-gray-800">
+                <p className="text-sm font-medium text-muted-foreground">Validity</p>
+                <div className="p-2 glass-subtle rounded-lg">
+                  <p className="text-sm font-semibold text-foreground">
                     {details?.validUpto && new Date(details.validUpto).toLocaleString()}
                   </p>
                   <p className={`text-xs mt-1 ${validityTextClass}`}>
@@ -210,19 +210,19 @@ export function EWayBillStatusCard({ invoice, onUpdate }: EWayBillStatusCardProp
                   </p>
                 </div>
                 {details?.distance && (
-                  <p className="text-xs text-gray-600">Distance: {details.distance} km</p>
+                <p className="text-xs text-muted-foreground">Distance: {details.distance} km</p>
                 )}
               </div>
             </div>
 
             {/* Vehicle Information */}
             {details?.vehicleNo && (
-              <div className="p-3 bg-white rounded border border-gray-200 space-y-2">
-                <p className="text-sm font-medium text-gray-700">Vehicle Information</p>
+              <div className="p-3 glass-subtle rounded-lg space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Vehicle Information</p>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{details.vehicleNo}</p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-sm font-semibold text-foreground">{details.vehicleNo}</p>
+                    <p className="text-xs text-muted-foreground">
                       Transport Mode: {details.transportMode ? EWayBillUtils.getTransportModeLabel(details.transportMode) : "Road"}
                     </p>
                   </div>

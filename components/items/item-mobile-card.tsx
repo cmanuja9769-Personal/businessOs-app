@@ -21,7 +21,7 @@ export const ItemMobileCard = memo(function ItemMobileCard({ item, godowns }: It
   const stockStatus = getStockStatus(item)
 
   return (
-    <div className="p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
+    <div className="p-3 rounded-2xl glass-subtle neo-shadow-sm transition-colors">
       {/* Item name + stock badge */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">

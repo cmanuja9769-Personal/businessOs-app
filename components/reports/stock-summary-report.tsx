@@ -477,7 +477,7 @@ export default function StockReportComponent() {
                               </h4>
                               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
                                 {item.locations.map((loc, idx) => (
-                                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg glass-subtle">
                                     <div>
                                       <p className="font-medium text-sm">{loc.warehouseName}</p>
                                       {loc.location && <p className="text-xs text-muted-foreground">Location: {loc.location}</p>}

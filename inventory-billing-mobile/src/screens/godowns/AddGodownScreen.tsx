@@ -116,6 +116,7 @@ export default function AddGodownScreen() {
         name: name.trim(),
         code: code.trim(),
         is_default: isDefault,
+        is_active: true,
         organization_id: organizationId,
       };
       const message = await upsertGodown(isEditing, godownId, godownData);

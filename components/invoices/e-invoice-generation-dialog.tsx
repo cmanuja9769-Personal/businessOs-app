@@ -207,7 +207,7 @@ export function EInvoiceGenerationDialog({ invoice, open, onOpenChange }: EInvoi
               {generatedIRN && (
                 <Card className="p-4 bg-green-50 border-green-200 space-y-2">
                   <p className="text-sm font-medium text-green-900">Invoice Reference Number (IRN)</p>
-                  <div className="flex items-center justify-between p-2 bg-white rounded border border-green-300">
+                  <div className="flex items-center justify-between p-2 glass-subtle rounded-lg">
                     <code className="text-xs font-mono text-green-800 break-all">{generatedIRN}</code>
                     <button
                       onClick={() => {

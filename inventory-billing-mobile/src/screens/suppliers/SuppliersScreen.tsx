@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
-  StatusBar,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -17,13 +14,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
-import Loading from '@components/ui/Loading';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
+import Card from '@components/ui/Card';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
 import ListFooterLoader from '@components/ui/ListFooterLoader';
+import SortSelector, { SortOption } from '@components/ui/SortSelector';
 import { usePaginatedSearch } from '@hooks/usePaginatedSearch';
-import { supabase } from '@lib/supabase';
+import { lightTap } from '@lib/haptics';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
 
 interface Supplier {
   id: string;
@@ -35,14 +36,30 @@ interface Supplier {
   gstin?: string | null;
 }
 
-function pluralize(count: number): string {
-  return count !== 1 ? 's' : '';
+const AVATAR_GRADIENTS: [string, string][] = [
+  ['#4F46E5', '#7C3AED'],
+  ['#059669', '#10B981'],
+  ['#D97706', '#F59E0B'],
+  ['#0369A1', '#0EA5E9'],
+  ['#7C3AED', '#A78BFA'],
+];
+
+const SUPPLIER_SORT_OPTIONS: SortOption[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'updated_at', label: 'Recent' },
+  { key: 'created_at', label: 'Added' },
+];
+
+function getInitials(name: string): string {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 export default function SuppliersScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
-  const { colors, shadows, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const { organizationId } = useAuth();
+  const [sortKey, setSortKey] = useState('name');
+  const [sortAsc, setSortAsc] = useState(true);
 
   const {
     items: suppliers,
@@ -61,9 +78,11 @@ export default function SuppliersScreen() {
     table: 'suppliers',
     organizationId,
     searchColumns: ['name', 'email', 'phone', 'gst_number'],
-    orderBy: 'name',
-    ascending: true,
+    orderBy: sortKey,
+    ascending: sortAsc,
   });
+
+  useFocusRefresh(refresh);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && status !== 'loading') {
@@ -71,81 +90,24 @@ export default function SuppliersScreen() {
     }
   }, [hasMore, isLoadingMore, status, loadMore]);
 
-  const confirmDeleteRef = useRef<(supplier: Supplier) => void>(() => {});
-
-  const confirmDelete = useCallback((supplier: Supplier) => {
-    if (!organizationId) return;
-    Alert.alert(
-      'Delete Supplier',
-      `Are you sure you want to delete "${supplier.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error: delError } = await supabase
-                .from('suppliers')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('organization_id', organizationId)
-                .eq('id', supplier.id);
-              if (delError) throw delError;
-              refresh();
-            } catch (e: unknown) {
-              const message = e instanceof Error ? e.message : 'Failed to delete supplier';
-              Alert.alert('Error', message);
-            }
-          },
-        },
-      ]
-    );
-  }, [organizationId, refresh]);
-
-  confirmDeleteRef.current = confirmDelete;
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   const renderItem = useCallback(({ item, index }: { item: Supplier; index: number }) => {
-    const gradientColors: [string, string][] = [
-      ['#4F46E5', '#6366F1'],
-      ['#059669', '#10B981'],
-      ['#D97706', '#F59E0B'],
-      ['#0369A1', '#0EA5E9'],
-      ['#7C3AED', '#8B5CF6'],
-    ];
-    const colorIndex = index % gradientColors.length;
+    const gradient = AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length];
 
     return (
-      <TouchableOpacity
-        onPress={() => navigation.navigate('SupplierDetail', { supplierId: item.id })}
-        onLongPress={() =>
-          Alert.alert('Supplier', item.name, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'View', onPress: () => navigation.navigate('SupplierDetail', { supplierId: item.id }) },
-            { text: 'Edit', onPress: () => navigation.navigate('AddSupplier', { supplierId: item.id }) },
-            { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteRef.current(item) },
-          ])
-        }
-        activeOpacity={0.7}
-        style={[styles.supplierCard, { backgroundColor: colors.card, ...shadows.sm }]}
-      >
-        <View style={styles.supplierRow}>
-          <LinearGradient
-            colors={gradientColors[colorIndex]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatarGradient}
-          >
-            <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
-          </LinearGradient>
+      <AnimatedListItem index={index}>
+        <Card
+          onPress={() => navigation.navigate('SupplierDetail', { supplierId: item.id })}
+          style={styles.supplierCard}
+        >
+          <View style={styles.supplierRow}>
+            <LinearGradient
+              colors={gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.avatar}
+            >
+              <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+            </LinearGradient>
 
           <View style={styles.supplierInfo}>
             <Text style={[styles.supplierName, { color: colors.text }]} numberOfLines={2}>
@@ -154,7 +116,7 @@ export default function SuppliersScreen() {
 
             {item.email && (
               <View style={styles.detailRow}>
-                <Ionicons name="mail-outline" size={14} color={colors.textTertiary} />
+                <Ionicons name="mail-outline" size={13} color={colors.textTertiary} />
                 <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
                   {item.email}
                 </Text>
@@ -163,7 +125,7 @@ export default function SuppliersScreen() {
 
             {item.phone && (
               <View style={styles.detailRow}>
-                <Ionicons name="call-outline" size={14} color={colors.textTertiary} />
+                <Ionicons name="call-outline" size={13} color={colors.textTertiary} />
                 <Text style={[styles.detailText, { color: colors.textSecondary }]}>
                   {item.phone}
                 </Text>
@@ -171,21 +133,20 @@ export default function SuppliersScreen() {
             )}
 
             {(item.gst_number || item.gstin) && (
-              <View style={[styles.gstBadge, { backgroundColor: colors.primaryLight }]}>
+              <View style={[styles.gstBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(79,70,229,0.08)' }]}>
                 <Text style={[styles.gstText, { color: colors.primary }]}>
-                  GSTIN: {item.gst_number || item.gstin}
+                  GST: {item.gst_number || item.gstin}
                 </Text>
               </View>
             )}
           </View>
 
-          <View style={styles.chevronContainer}>
-            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
           </View>
-        </View>
-      </TouchableOpacity>
+        </Card>
+      </AnimatedListItem>
     );
-  }, [colors, shadows, navigation]);
+  }, [colors, isDark, navigation]);
 
   const renderListFooter = useCallback(() => (
     <ListFooterLoader
@@ -223,25 +184,26 @@ export default function SuppliersScreen() {
   }, [status, error, searchQuery, refresh, navigation]);
 
   if (status === 'loading' && suppliers.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading suppliers..." />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+          <SkeletonList count={6} />
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-      />
-
       {isOffline && <OfflineBanner onRetry={refresh} />}
 
-      <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
+      <View style={styles.searchContainer}>
         <Input
           placeholder="Search suppliers..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           leftIcon="search"
-          containerStyle={styles.searchInputContainer}
+          containerStyle={styles.searchInput}
           returnKeyType="search"
           autoCapitalize="none"
           autoCorrect={false}
@@ -251,32 +213,46 @@ export default function SuppliersScreen() {
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         )}
-
-        {totalCount > 0 && (
-          <Text style={[styles.resultsText, { color: colors.textSecondary }]}>
-            {searchQuery
-              ? `${suppliers.length} result${pluralize(suppliers.length)}`
-              : `${totalCount} supplier${pluralize(totalCount)}`}
-          </Text>
-        )}
       </View>
+
+      <View style={styles.overviewContainer}>
+        <Card style={styles.overviewCard}>
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.text }]}>{totalCount}</Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>Total</Text>
+          </View>
+          <View style={[styles.overviewDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.primary }]}>
+              {suppliers.filter((s) => s.gst_number || s.gstin).length}
+            </Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>With GST</Text>
+          </View>
+          <View style={[styles.overviewDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.text }]}>
+              {suppliers.filter((s) => s.phone).length}
+            </Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>With Phone</Text>
+          </View>
+        </Card>
+      </View>
+
+      <SortSelector
+        options={SUPPLIER_SORT_OPTIONS}
+        activeKey={sortKey}
+        ascending={sortAsc}
+        onSort={(key, asc) => { setSortKey(key); setSortAsc(asc); }}
+      />
 
       <FlatList
         data={suppliers}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          suppliers.length === 0 && styles.listContentEmpty,
-        ]}
+        contentContainerStyle={[styles.listContent, suppliers.length === 0 && styles.listContentEmpty]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
@@ -287,126 +263,42 @@ export default function SuppliersScreen() {
         windowSize={10}
         initialNumToRender={15}
         keyboardShouldPersistTaps="handled"
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
       />
 
       <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('AddSupplier', {})}
-        activeOpacity={0.9}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => { lightTap(); navigation.navigate('AddSupplier', {}); }}
+        activeOpacity={0.8}
       >
-        <LinearGradient
-          colors={['#4F46E5', '#6366F1']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.fabGradient}
-        >
-          <Ionicons name="add" size={28} color="#ffffff" />
-        </LinearGradient>
+        <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 12 : 8,
-    paddingBottom: 12,
-    position: 'relative',
-  },
-  searchInputContainer: {
-    marginBottom: 0,
-  },
-  searchIndicator: {
-    position: 'absolute',
-    right: 32,
-    top: Platform.OS === 'android' ? 24 : 20,
-  },
-  resultsText: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 8,
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  listContentEmpty: {
-    flexGrow: 1,
-  },
-  supplierCard: {
-    borderRadius: 16,
-    padding: 16,
-  },
-  supplierRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarGradient: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-  },
-  avatarText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  supplierInfo: {
-    flex: 1,
-  },
-  supplierName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-    letterSpacing: -0.2,
-    lineHeight: 22,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  detailText: {
-    fontSize: 13,
-    marginLeft: 6,
-  },
-  gstBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 6,
-  },
-  gstText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  chevronContainer: {
-    marginLeft: 8,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
-  },
+  container: { flex: 1 },
+  searchContainer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, position: 'relative' },
+  searchInput: { marginBottom: 0 },
+  searchIndicator: { position: 'absolute', right: 32, top: 24 },
+  overviewContainer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 2 },
+  overviewCard: { padding: 14, flexDirection: 'row', alignItems: 'center' },
+  overviewStat: { flex: 1, alignItems: 'center' },
+  overviewValue: { fontSize: 18, fontWeight: '700', marginBottom: 2 },
+  overviewLabel: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
+  overviewDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginHorizontal: 6 },
+  listContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 100 },
+  listContentEmpty: { flexGrow: 1 },
+  supplierCard: { padding: 14 },
+  supplierRow: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  supplierInfo: { flex: 1 },
+  supplierName: { fontSize: 15, fontWeight: '600', marginBottom: 3, letterSpacing: -0.2, lineHeight: 20 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 5 },
+  detailText: { fontSize: 13, flex: 1 },
+  gstBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
+  gstText: { fontSize: 11, fontWeight: '600' },
+  fab: { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
 });

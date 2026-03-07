@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { GlassCard } from "@/components/ui/glass-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -31,56 +32,68 @@ export default async function AccountingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Financial Accounting</h1>
-        <p className="text-gray-500">Double-entry bookkeeping and financial statements</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Financial Accounting</h1>
+        <p className="text-sm text-muted-foreground">Double-entry bookkeeping and financial statements</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Chart of Accounts</CardTitle>
-            <BookOpen className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.accountCount}</div>
-            <p className="text-xs text-muted-foreground">active accounts</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-blue-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Chart of Accounts</p>
+              <div className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400">{stats.accountCount}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">active accounts</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-blue-500/10 flex-shrink-0">
+              <BookOpen className="h-4 w-4 text-blue-600" />
+            </div>
+          </div>
+        </GlassCard>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Journal Entries</CardTitle>
-            <FileText className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.journalEntryCount}</div>
-            <p className="text-xs text-muted-foreground">posted entries</p>
-          </CardContent>
-        </Card>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-green-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Journal Entries</p>
+              <div className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-400">{stats.journalEntryCount}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">posted entries</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-green-500/10 flex-shrink-0">
+              <FileText className="h-4 w-4 text-green-600" />
+            </div>
+          </div>
+        </GlassCard>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Assets</CardTitle>
-            <TrendingUp className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalAssets)}</div>
-            <p className="text-xs text-muted-foreground">total assets</p>
-          </CardContent>
-        </Card>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-purple-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Assets</p>
+              <div className="text-xl sm:text-2xl font-bold text-purple-700 dark:text-purple-400">{formatCurrency(stats.totalAssets)}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">total assets</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-purple-500/10 flex-shrink-0">
+              <TrendingUp className="h-4 w-4 text-purple-600" />
+            </div>
+          </div>
+        </GlassCard>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-            <Scale className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.netProfit)}</div>
-            <p className="text-xs text-muted-foreground">this period</p>
-          </CardContent>
-        </Card>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-orange-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Net Profit</p>
+              <div className="text-xl sm:text-2xl font-bold text-orange-700 dark:text-orange-400">{formatCurrency(stats.netProfit)}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">this period</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-orange-500/10 flex-shrink-0">
+              <Scale className="h-4 w-4 text-orange-600" />
+            </div>
+          </div>
+        </GlassCard>
       </div>
 
       <Tabs defaultValue="accounts" className="space-y-4">

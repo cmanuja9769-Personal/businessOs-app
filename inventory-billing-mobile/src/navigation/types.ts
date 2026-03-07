@@ -43,6 +43,12 @@ export type InventoryStackParamList = {
   ItemDetail: { itemId: string };
   AddItem: { itemId?: string; barcode?: string } | undefined;
   StockAdjustment: { itemId?: string } | undefined;
+  StockTransfer: undefined;
+  StockMovements: { itemId?: string } | undefined;
+  BarcodeGenerator: { itemId?: string } | undefined;
+  BarcodeLogs: undefined;
+  ItemBatches: { itemId: string };
+  ItemSerials: { itemId: string };
 };
 
 // More Stack
@@ -66,13 +72,25 @@ export type MoreStackParamList = {
   ReportDetail: { reportKey: string };
   PartyLedger: undefined;
   Settings: undefined;
+  BusinessInfo: undefined;
   Profile: undefined;
   Organization: undefined;
   Users: undefined;
   Accounting: undefined;
+  ChartOfAccounts: undefined;
+  JournalEntries: undefined;
+  JournalEntryDetail: { entryId: string };
+  CreateJournalEntry: undefined;
+  TrialBalance: undefined;
   Godowns: undefined;
   GodownDetail: { godownId: string };
   AddGodown: { godownId?: string } | undefined;
+  StockTransfer: undefined;
+  StockMovements: { itemId?: string } | undefined;
+  BarcodeGenerator: { itemId?: string } | undefined;
+  BarcodeLogs: undefined;
+  EInvoice: { invoiceId?: string } | undefined;
+  CustomerAging: undefined;
 };
 
 // Root Stack

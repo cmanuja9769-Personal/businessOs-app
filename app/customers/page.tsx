@@ -88,7 +88,7 @@ export default async function CustomersPage({ searchParams }: { searchParams?: P
                   <Link
                     key={customer.id}
                     href={`/customers/${customer.id}`}
-                    className="block p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors"
+                    className="block p-3 rounded-2xl glass-subtle neo-shadow-sm transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0">

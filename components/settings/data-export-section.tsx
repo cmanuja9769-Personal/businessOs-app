@@ -68,7 +68,7 @@ export function DataExportSection() {
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {EXPORT_OPTIONS.map((option) => (
-            <div key={option.table} className="flex items-center justify-between rounded-lg border p-3">
+            <div key={option.table} className="flex items-center justify-between rounded-2xl glass-subtle p-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
                   {option.icon}

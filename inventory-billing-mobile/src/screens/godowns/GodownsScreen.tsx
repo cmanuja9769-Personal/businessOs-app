@@ -16,7 +16,7 @@ import Card from '@components/ui/Card';
 import Loading from '@components/ui/Loading';
 import EmptyState from '@components/ui/EmptyState';
 import { spacing, fontSize } from '@theme/spacing';
-import { supabase } from '@lib/supabase';
+import { fetchWarehousesForOrganization } from '@lib/warehouse-service';
 
 interface Godown {
   id: string;
@@ -41,16 +41,10 @@ export default function GodownsScreen() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .is('deleted_at', null)
-        .order('is_default', { ascending: false })
-        .order('name');
-
-      if (error) throw error;
-      setGodowns(data || []);
+      const data = await fetchWarehousesForOrganization<Godown>(organizationId, {
+        select: 'id, name, code, is_default, is_active',
+      });
+      setGodowns(data);
     } catch (error) {
       console.error('Error fetching godowns:', error);
       Alert.alert('Error', 'Failed to fetch godowns');

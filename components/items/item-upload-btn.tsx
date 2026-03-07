@@ -864,7 +864,7 @@ export function ItemUploadBtn({ godowns }: { godowns: Array<{ id: string; name: 
         Bulk Upload
       </Button>
 
-      <Dialog open={open} onOpenChange={() => {}}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v && !isProcessing) handleCancel() }}>
         <DialogContent className="!max-w-[95vw] sm:!max-w-[95vw] w-full h-auto max-h-[90vh] overflow-y-auto p-6" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{step === "upload" ? "Bulk Upload Items" : "Review & Confirm Upload"}</DialogTitle>

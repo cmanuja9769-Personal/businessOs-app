@@ -15,6 +15,7 @@ import PurchasesScreen from '@screens/purchases/PurchasesScreen';
 import CreatePurchaseScreen from '@screens/purchases/CreatePurchaseScreen';
 import PurchaseDetailScreen from '@screens/purchases/PurchaseDetailScreen';
 import EwaybillsScreen from '@screens/ewaybills/EwaybillsScreen';
+import EInvoiceScreen from '@screens/ewaybills/EInvoiceScreen';
 import PaymentsScreen from '@screens/payments/PaymentsScreen';
 import RecordPaymentScreen from '@screens/payments/RecordPaymentScreen';
 import ReportsScreen from '@screens/reports/ReportsScreen';
@@ -23,11 +24,63 @@ import PartyLedgerScreen from '@screens/reports/PartyLedgerScreen';
 import OrganizationScreen from '@screens/organization/OrganizationScreen';
 import UsersScreen from '@screens/users/UsersScreen';
 import AccountingScreen from '@screens/accounting/AccountingScreen';
+import ChartOfAccountsScreen from '@screens/accounting/ChartOfAccountsScreen';
+import JournalEntriesScreen from '@screens/accounting/JournalEntriesScreen';
+import JournalEntryDetailScreen from '@screens/accounting/JournalEntryDetailScreen';
+import CreateJournalEntryScreen from '@screens/accounting/CreateJournalEntryScreen';
+import TrialBalanceScreen from '@screens/accounting/TrialBalanceScreen';
 import GodownsScreen from '@screens/godowns/GodownsScreen';
 import GodownDetailScreen from '@screens/godowns/GodownDetailScreen';
 import AddGodownScreen from '@screens/godowns/AddGodownScreen';
+import StockTransferScreen from '@screens/inventory/StockTransferScreen';
+import StockMovementScreen from '@screens/inventory/StockMovementScreen';
+import BarcodeGeneratorScreen from '@screens/inventory/BarcodeGeneratorScreen';
+import BarcodeLogsScreen from '@screens/inventory/BarcodeLogsScreen';
 
 const Stack = createStackNavigator<MoreStackParamList>();
+
+type ScreenConfig = {
+  readonly name: keyof MoreStackParamList;
+  readonly component: React.ComponentType;
+  readonly title: string;
+  readonly headerShown?: boolean;
+};
+
+const SCREENS: readonly ScreenConfig[] = [
+  { name: 'Customers', component: CustomersScreen, title: 'Customers' },
+  { name: 'CustomerDetail', component: CustomerDetailScreen, title: 'Customer Details' },
+  { name: 'AddCustomer', component: AddCustomerScreen, title: 'Add Customer' },
+  { name: 'Settings', component: SettingsScreen, title: 'Settings' },
+  { name: 'Profile', component: ProfileScreen, title: 'Profile' },
+  { name: 'Suppliers', component: SuppliersScreen, title: 'Suppliers' },
+  { name: 'AddSupplier', component: AddSupplierScreen, title: 'Add Supplier' },
+  { name: 'SupplierDetail', component: SupplierDetailScreen, title: 'Supplier Details', headerShown: false },
+  { name: 'Purchases', component: PurchasesScreen, title: 'Purchases' },
+  { name: 'CreatePurchase', component: CreatePurchaseScreen, title: 'New Purchase', headerShown: false },
+  { name: 'PurchaseDetail', component: PurchaseDetailScreen, title: 'Purchase Details', headerShown: false },
+  { name: 'Ewaybills', component: EwaybillsScreen, title: 'E-waybills', headerShown: false },
+  { name: 'Payments', component: PaymentsScreen, title: 'Payments' },
+  { name: 'RecordPayment', component: RecordPaymentScreen, title: 'Record Payment', headerShown: false },
+  { name: 'Reports', component: ReportsScreen, title: 'Reports' },
+  { name: 'ReportDetail', component: ReportDetailScreen, title: 'Report', headerShown: false },
+  { name: 'PartyLedger', component: PartyLedgerScreen, title: 'Party Ledger', headerShown: false },
+  { name: 'Organization', component: OrganizationScreen, title: 'Organization' },
+  { name: 'Users', component: UsersScreen, title: 'Team Members' },
+  { name: 'Accounting', component: AccountingScreen, title: 'Accounting', headerShown: false },
+  { name: 'Godowns', component: GodownsScreen, title: 'Godowns' },
+  { name: 'GodownDetail', component: GodownDetailScreen, title: 'Godown Details', headerShown: false },
+  { name: 'AddGodown', component: AddGodownScreen, title: 'Add Godown' },
+  { name: 'EInvoice', component: EInvoiceScreen, title: 'E-Invoice', headerShown: false },
+  { name: 'ChartOfAccounts', component: ChartOfAccountsScreen, title: 'Chart of Accounts', headerShown: false },
+  { name: 'JournalEntries', component: JournalEntriesScreen, title: 'Journal Entries', headerShown: false },
+  { name: 'JournalEntryDetail', component: JournalEntryDetailScreen, title: 'Journal Entry', headerShown: false },
+  { name: 'CreateJournalEntry', component: CreateJournalEntryScreen, title: 'New Journal Entry', headerShown: false },
+  { name: 'TrialBalance', component: TrialBalanceScreen, title: 'Trial Balance', headerShown: false },
+  { name: 'StockTransfer', component: StockTransferScreen, title: 'Stock Transfer' },
+  { name: 'StockMovements', component: StockMovementScreen, title: 'Stock Movements', headerShown: false },
+  { name: 'BarcodeGenerator', component: BarcodeGeneratorScreen, title: 'Barcode Generator', headerShown: false },
+  { name: 'BarcodeLogs', component: BarcodeLogsScreen, title: 'Barcode Logs', headerShown: false },
+] as const;
 
 export default function MoreStack() {
   const { colors } = useTheme();
@@ -51,126 +104,16 @@ export default function MoreStack() {
       <Stack.Screen 
         name="More" 
         component={MoreScreen}
-        options={{ 
-          title: 'More',
-          headerLeft: () => null,
-        }}
+        options={{ title: 'More', headerShown: false }}
       />
-      <Stack.Screen 
-        name="Customers" 
-        component={CustomersScreen}
-        options={{ title: 'Customers' }}
-      />
-      <Stack.Screen 
-        name="CustomerDetail" 
-        component={CustomerDetailScreen}
-        options={{ title: 'Customer Details' }}
-      />
-      <Stack.Screen 
-        name="AddCustomer" 
-        component={AddCustomerScreen}
-        options={{ title: 'Add Customer' }}
-      />
-      <Stack.Screen 
-        name="Settings" 
-        component={SettingsScreen}
-        options={{ title: 'Settings' }}
-      />
-      <Stack.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
-      />
-      <Stack.Screen 
-        name="Suppliers" 
-        component={SuppliersScreen}
-        options={{ title: 'Suppliers' }}
-      />
-      <Stack.Screen 
-        name="AddSupplier" 
-        component={AddSupplierScreen}
-        options={{ title: 'Add Supplier' }}
-      />
-      <Stack.Screen 
-        name="SupplierDetail" 
-        component={SupplierDetailScreen}
-        options={{ title: 'Supplier Details', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Purchases" 
-        component={PurchasesScreen}
-        options={{ title: 'Purchases', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="CreatePurchase" 
-        component={CreatePurchaseScreen}
-        options={{ title: 'New Purchase', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="PurchaseDetail" 
-        component={PurchaseDetailScreen}
-        options={{ title: 'Purchase Details', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Ewaybills" 
-        component={EwaybillsScreen}
-        options={{ title: 'E-waybills', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Payments" 
-        component={PaymentsScreen}
-        options={{ title: 'Payments' }}
-      />
-      <Stack.Screen 
-        name="RecordPayment" 
-        component={RecordPaymentScreen}
-        options={{ title: 'Record Payment', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Reports" 
-        component={ReportsScreen}
-        options={{ title: 'Reports', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="ReportDetail" 
-        component={ReportDetailScreen}
-        options={{ title: 'Report', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="PartyLedger" 
-        component={PartyLedgerScreen}
-        options={{ title: 'Party Ledger', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Organization" 
-        component={OrganizationScreen}
-        options={{ title: 'Organization' }}
-      />
-      <Stack.Screen 
-        name="Users" 
-        component={UsersScreen}
-        options={{ title: 'Users', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Accounting" 
-        component={AccountingScreen}
-        options={{ title: 'Accounting', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Godowns" 
-        component={GodownsScreen}
-        options={{ title: 'Godowns' }}
-      />
-      <Stack.Screen 
-        name="GodownDetail" 
-        component={GodownDetailScreen}
-        options={{ title: 'Godown Details', headerShown: false }}
-      />
-      <Stack.Screen 
-        name="AddGodown" 
-        component={AddGodownScreen}
-        options={{ title: 'Add Godown' }}
-      />
+      {SCREENS.map(({ name, component, title, headerShown }) => (
+        <Stack.Screen
+          key={name}
+          name={name}
+          component={component}
+          options={headerShown === false ? { title, headerShown: false } : { title }}
+        />
+      ))}
     </Stack.Navigator>
   );
 }

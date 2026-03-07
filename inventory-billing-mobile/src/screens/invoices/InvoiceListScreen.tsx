@@ -6,8 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  StatusBar,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +15,7 @@ import { InvoiceStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { useFocusRefresh } from '@hooks/useFocusRefresh';
+import Card from '@components/ui/Card';
 import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
@@ -27,6 +26,7 @@ import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
 import { lightTap } from '@lib/haptics';
 import AnimatedListItem from '@components/ui/AnimatedListItem';
+import SortSelector, { SortOption } from '@components/ui/SortSelector';
 
 type DocumentType = 'invoice' | 'sales_order' | 'quotation' | 'proforma' | 'delivery_challan' | 'credit_note' | 'debit_note';
 
@@ -60,12 +60,21 @@ interface Invoice {
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
 
+const INVOICE_SORT_OPTIONS: SortOption[] = [
+  { key: 'created_at', label: 'Recent' },
+  { key: 'total', label: 'Amount' },
+  { key: 'invoice_date', label: 'Date' },
+  { key: 'customer_name', label: 'Customer' },
+];
+
 const buildAndExecuteInvoiceQuery = async (
   organizationId: string,
   docType: DocumentType | 'all',
   query: string,
   pageNum: number,
-  totalCountFallback: number
+  totalCountFallback: number,
+  sortBy: string = 'created_at',
+  sortAsc: boolean = false,
 ): Promise<{ fetchedItems: Invoice[]; count: number | null }> => {
   const from = pageNum * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
@@ -82,7 +91,7 @@ const buildAndExecuteInvoiceQuery = async (
     .select('id, invoice_number, customer_name, total, status, invoice_date, document_type')
     .eq('organization_id', organizationId)
     .is('deleted_at', null)
-    .order('created_at', { ascending: false })
+    .order(sortBy, { ascending: sortAsc })
     .range(from, to);
 
   if (docType !== 'all') {
@@ -117,7 +126,7 @@ const extractFetchError = (err: unknown): string =>
 
 export default function InvoiceListScreen() {
   const navigation = useNavigation<InvoiceStackNavigationProp>();
-  const { colors, shadows, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const { organizationId } = useAuth();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -131,6 +140,8 @@ export default function InvoiceListScreen() {
   const [page, setPage] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState('created_at');
+  const [sortAsc, setSortAsc] = useState(false);
 
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const currentQueryRef = useRef('');
@@ -183,7 +194,7 @@ export default function InvoiceListScreen() {
 
     try {
       const { fetchedItems, count } = await buildAndExecuteInvoiceQuery(
-        organizationId, docType, query, pageNum, totalCountRef.current
+        organizationId, docType, query, pageNum, totalCountRef.current, sortKey, sortAsc
       );
       if (currentQueryRef.current !== query) return;
       applyFetchResults(fetchedItems, count, isFirstPage, pageNum);
@@ -194,7 +205,7 @@ export default function InvoiceListScreen() {
       setIsLoadingMore(false);
       setIsRefreshing(false);
     }
-  }, [organizationId]);
+  }, [organizationId, sortKey, sortAsc]);
 
   useFocusRefresh(useCallback(() => {
     fetchInvoices(searchQuery, selectedType, 0, true);
@@ -272,16 +283,19 @@ export default function InvoiceListScreen() {
       onPress={() => handleTypeChange(type)}
       style={[
         styles.filterButton,
-        {
-          backgroundColor: selectedType === type ? colors.primary : colors.card,
-          ...shadows.xs,
-        }
+        selectedType === type
+          ? { backgroundColor: colors.primary }
+          : {
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+            },
       ]}
       activeOpacity={0.7}
     >
       <Ionicons
         name={icon}
-        size={18}
+        size={16}
         color={selectedType === type ? '#FFFFFF' : colors.textSecondary}
       />
       <Text style={[
@@ -300,10 +314,9 @@ export default function InvoiceListScreen() {
 
     return (
       <AnimatedListItem index={index}>
-      <TouchableOpacity
+      <Card
         onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: item.id })}
-        activeOpacity={0.7}
-        style={[styles.invoiceCard, { backgroundColor: colors.card, ...shadows.sm }]}
+        style={styles.invoiceCard}
       >
         <View style={styles.invoiceContent}>
           <LinearGradient
@@ -341,12 +354,12 @@ export default function InvoiceListScreen() {
             </View>
           </View>
 
-          <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
         </View>
-      </TouchableOpacity>
+      </Card>
       </AnimatedListItem>
     );
-  }, [colors, shadows, navigation, getStatusStyle]);
+  }, [colors, navigation, getStatusStyle]);
 
   const renderListFooter = useCallback(() => (
     <ListFooterLoader
@@ -392,10 +405,7 @@ export default function InvoiceListScreen() {
   if (loading && invoices.length === 0 && !searchQuery) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Invoices</Text>
-        </View>
-        <View style={{ paddingHorizontal: 20 }}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
           <SkeletonList count={6} />
         </View>
       </View>
@@ -404,19 +414,7 @@ export default function InvoiceListScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-      />
-
       {isOffline && <OfflineBanner onRetry={handleRefresh} />}
-
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Invoices</Text>
-        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-          {totalCount} {selectedType === 'all' ? 'total' : DOCUMENT_TYPES[selectedType]?.label.toLowerCase() + 's'}
-        </Text>
-      </View>
 
       <View style={styles.searchContainer}>
         <Input
@@ -455,6 +453,36 @@ export default function InvoiceListScreen() {
         />
       </View>
 
+      <View style={styles.overviewContainer}>
+        <Card style={styles.overviewCard}>
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.text }]}>{totalCount}</Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>Total</Text>
+          </View>
+          <View style={[styles.overviewDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.success }]}>
+              {invoices.filter((i) => i.status === 'paid').length}
+            </Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>Paid</Text>
+          </View>
+          <View style={[styles.overviewDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.overviewStat}>
+            <Text style={[styles.overviewValue, { color: colors.warning }]}>
+              {invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').length}
+            </Text>
+            <Text style={[styles.overviewLabel, { color: colors.textSecondary }]}>Pending</Text>
+          </View>
+        </Card>
+      </View>
+
+      <SortSelector
+        options={INVOICE_SORT_OPTIONS}
+        activeKey={sortKey}
+        ascending={sortAsc}
+        onSort={(key, asc) => { setSortKey(key); setSortAsc(asc); }}
+      />
+
       <FlatList
         data={invoices}
         renderItem={renderInvoiceItem}
@@ -485,18 +513,11 @@ export default function InvoiceListScreen() {
       />
 
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={() => { lightTap(); navigation.navigate('CreateInvoice', {}); }}
-        activeOpacity={0.9}
+        activeOpacity={0.8}
       >
-        <LinearGradient
-          colors={['#4F46E5', '#6366F1']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.fabGradient}
-        >
-          <Ionicons name="add" size={28} color="#ffffff" />
-        </LinearGradient>
+        <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
     </View>
   );
@@ -505,20 +526,6 @@ export default function InvoiceListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 60,
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
   },
   searchContainer: {
     paddingHorizontal: 20,
@@ -534,7 +541,7 @@ const styles = StyleSheet.create({
     top: 12,
   },
   filtersContainer: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   filtersList: {
     paddingHorizontal: 20,
@@ -544,8 +551,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
     gap: 6,
     marginRight: 10,
   },
@@ -553,6 +560,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  overviewContainer: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 2 },
+  overviewCard: { padding: 14, flexDirection: 'row', alignItems: 'center' },
+  overviewStat: { flex: 1, alignItems: 'center' },
+  overviewValue: { fontSize: 18, fontWeight: '700', marginBottom: 2 },
+  overviewLabel: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
+  overviewDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginHorizontal: 6 },
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
@@ -561,8 +574,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   invoiceCard: {
-    borderRadius: 16,
-    padding: 16,
+    padding: 14,
   },
   invoiceContent: {
     flexDirection: 'row',
@@ -617,21 +629,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+  fab: { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
 });

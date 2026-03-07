@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/ui/glass-card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowRight, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
@@ -15,77 +14,82 @@ interface LowStockAlertProps {
 
 export function LowStockAlert({ items, lowStockCount, outOfStockCount, loading }: LowStockAlertProps) {
   return (
-    <Card className={lowStockCount > 0 ? "border-orange-200/50 dark:border-orange-900/50" : ""}>
-      <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+    <GlassCard glow>
+      <GlassCardHeader>
         <div className="flex items-center gap-1.5 min-w-0">
-          <CardTitle className="text-sm font-semibold">Low Stock</CardTitle>
+          <GlassCardTitle>Low Stock</GlassCardTitle>
           {!loading && lowStockCount > 0 && (
-            <Badge variant="destructive" className="text-[0.625rem] h-5">
+            <Badge variant="destructive" className="text-[0.625rem] h-5 rounded-full px-1.5">
               {lowStockCount}
             </Badge>
           )}
         </div>
-        <Link href="/items">
-          <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 px-2">
-            View all
-            <ArrowRight className="h-3 w-3" />
-          </Button>
+        <Link
+          href="/items"
+          className="flex items-center gap-1 text-[0.6875rem] font-medium text-primary hover:underline transition-colors"
+        >
+          View all
+          <ArrowRight className="h-3 w-3" />
         </Link>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0">
+      </GlassCardHeader>
+      <GlassCardContent>
         {loading && (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
+              <Skeleton key={i} className="h-14 w-full rounded-2xl" />
             ))}
           </div>
         )}
         {!loading && items.length === 0 && (
-          <div className="text-center py-6">
-            <CheckCircle2 className="h-8 w-8 mx-auto text-green-500 mb-2" />
+          <div className="text-center py-8">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-emerald-500/10 neo-inset flex items-center justify-center mb-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            </div>
             <p className="text-xs text-muted-foreground">All items well-stocked!</p>
           </div>
         )}
         {!loading && items.length > 0 && (
-          <div className="space-y-2">
-            {items.map((item) => (
-              <Link
-                key={item.id}
-                href={`/items/${item.id}`}
-                className={`flex items-center justify-between p-2 rounded-lg border transition-colors ${
-                  item.stock === 0
-                    ? "border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40"
-                    : "border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/40"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-xs truncate">{item.name}</p>
-                  <p className={`text-[0.625rem] ${item.stock === 0 ? "text-red-600 dark:text-red-400" : "text-orange-600 dark:text-orange-400"}`}>
-                    {item.stock === 0 ? "Out of stock" : `Min: ${item.minStock} ${item.unit}`}
-                  </p>
-                </div>
-                <div className="text-right ml-2 flex items-center gap-1.5 flex-shrink-0">
-                  {item.stock === 0 ? (
-                    <XCircle className="h-3.5 w-3.5 text-red-500" />
-                  ) : (
-                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
-                  )}
-                  <div>
-                    <p className={`font-semibold text-xs ${item.stock === 0 ? "text-red-700 dark:text-red-300" : "text-orange-700 dark:text-orange-300"}`}>
+          <div className="space-y-1.5">
+            {items.map((item) => {
+              const isOutOfStock = item.stock === 0
+              return (
+                <Link
+                  key={item.id}
+                  href={`/items/${item.id}`}
+                  className="flex items-center justify-between p-2.5 rounded-2xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] bg-gradient-to-r from-transparent to-transparent"
+                  style={{
+                    background: isOutOfStock
+                      ? "oklch(0.55 0.25 25 / 0.06)"
+                      : "oklch(0.75 0.18 85 / 0.08)",
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-xs truncate">{item.name}</p>
+                    <p className={`text-[0.625rem] mt-0.5 ${isOutOfStock ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}>
+                      {isOutOfStock ? "Out of stock" : `Min: ${item.minStock} ${item.unit}`}
+                    </p>
+                  </div>
+                  <div className="text-right ml-2 flex items-center gap-1.5 flex-shrink-0">
+                    {isOutOfStock ? (
+                      <XCircle className="h-3.5 w-3.5 text-red-500" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                    )}
+                    <p className={`font-bold text-xs ${isOutOfStock ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
                       {item.stock} {item.unit}
                     </p>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
             {outOfStockCount > 0 && items.length < lowStockCount && (
-              <p className="text-[0.625rem] text-center text-muted-foreground">
+              <p className="text-[0.625rem] text-center text-muted-foreground/70 pt-1">
                 +{lowStockCount - items.length} more items need attention
               </p>
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   )
 }

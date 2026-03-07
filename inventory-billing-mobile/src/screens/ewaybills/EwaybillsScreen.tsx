@@ -16,8 +16,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
+import { useToast } from '@contexts/ToastContext';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
+import { lightTap, successFeedback, errorFeedback } from '@lib/haptics';
 
 interface EWayBill {
   id: string;
@@ -93,20 +95,99 @@ export default function EwaybillsScreen() {
     setRefreshing(false);
   };
 
-  const handleGenerateNew = () => {
-    Alert.alert(
-      'Generate E-Way Bill',
-      'E-Way Bill generation requires an invoice. Please go to an invoice and generate the E-Way Bill from there.',
-      [{ text: 'OK' }]
-    );
-  };
+  const toast = useToast();
 
-  const handleCancelEwaybill = (ewb: EWayBill) => {
+  const handleEwaybillActions = (ewb: EWayBill) => {
+    lightTap();
     if (ewb.status !== 'active') {
-      Alert.alert('Cannot Cancel', 'Only active E-Way Bills can be cancelled.');
+      Alert.alert('E-Way Bill', `This e-way bill is ${ewb.status}. No actions available.`);
       return;
     }
 
+    Alert.alert(
+      `E-Way Bill: ${ewb.ewb_no}`,
+      'What would you like to do?',
+      [
+        {
+          text: 'Update Vehicle',
+          onPress: () => handleUpdateVehicle(ewb),
+        },
+        {
+          text: 'Extend Validity',
+          onPress: () => handleExtendValidity(ewb),
+        },
+        {
+          text: 'Cancel E-Way Bill',
+          style: 'destructive',
+          onPress: () => confirmCancelEwaybill(ewb),
+        },
+        { text: 'Close', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleUpdateVehicle = (ewb: EWayBill) => {
+    Alert.prompt(
+      'Update Vehicle',
+      `Enter new vehicle number for E-Way Bill ${ewb.ewb_no}:`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: async (newVehicle?: string) => {
+            if (!newVehicle?.trim()) return;
+            try {
+              const { error } = await supabase
+                .from('ewaybills')
+                .update({ vehicle_no: newVehicle.trim().toUpperCase() })
+                .eq('id', ewb.id);
+              if (error) throw error;
+              await successFeedback();
+              toast.success('Vehicle number updated');
+              loadEwaybills();
+            } catch {
+              await errorFeedback();
+              toast.error('Failed to update vehicle');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      ewb.vehicle_no || '',
+    );
+  };
+
+  const handleExtendValidity = (ewb: EWayBill) => {
+    Alert.alert(
+      'Extend Validity',
+      `Current validity: ${formatDate(ewb.valid_upto)}\n\nExtend by 24 hours?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Extend',
+          onPress: async () => {
+            try {
+              const currentValid = new Date(ewb.valid_upto);
+              currentValid.setHours(currentValid.getHours() + 24);
+              const { error } = await supabase
+                .from('ewaybills')
+                .update({ valid_upto: currentValid.toISOString() })
+                .eq('id', ewb.id);
+              if (error) throw error;
+              await successFeedback();
+              toast.success('Validity extended by 24 hours');
+              loadEwaybills();
+            } catch {
+              await errorFeedback();
+              toast.error('Failed to extend validity');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmCancelEwaybill = (ewb: EWayBill) => {
     Alert.alert(
       'Cancel E-Way Bill',
       `Are you sure you want to cancel E-Way Bill ${ewb.ewb_no}?`,
@@ -121,13 +202,13 @@ export default function EwaybillsScreen() {
                 .from('ewaybills')
                 .update({ status: 'cancelled' })
                 .eq('id', ewb.id);
-
               if (error) throw error;
+              await successFeedback();
+              toast.success('E-Way Bill cancelled');
               loadEwaybills();
-              Alert.alert('Success', 'E-Way Bill cancelled successfully');
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : 'Failed to cancel E-Way Bill';
-              Alert.alert('Error', message);
+            } catch {
+              await errorFeedback();
+              toast.error('Failed to cancel E-Way Bill');
             }
           },
         },
@@ -151,7 +232,7 @@ export default function EwaybillsScreen() {
     return (
       <TouchableOpacity
         style={[styles.ewaybillCard, { backgroundColor: colors.card, ...shadows.sm }]}
-        onPress={() => handleCancelEwaybill(ewb)}
+        onPress={() => handleEwaybillActions(ewb)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.ewbInfo}>
@@ -223,7 +304,13 @@ export default function EwaybillsScreen() {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>E-Way Bills</Text>
-        <TouchableOpacity onPress={handleGenerateNew} style={styles.addButton}>
+        <TouchableOpacity
+          onPress={() => {
+            lightTap();
+            toast.show('Create e-way bills from Invoices or Purchases', 'info');
+          }}
+          style={styles.addButton}
+        >
           <Ionicons name="add-circle-outline" size={22} color="#fff" />
         </TouchableOpacity>
       </LinearGradient>

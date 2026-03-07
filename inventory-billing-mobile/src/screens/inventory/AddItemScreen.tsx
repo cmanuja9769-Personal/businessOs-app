@@ -27,8 +27,11 @@ import { supabase } from '@lib/supabase';
 import { successFeedback, errorFeedback } from '@lib/haptics';
 
 const GST_RATES = [0, 5, 12, 18, 28];
-const UNITS = ['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'SET'];
+const UNITS = ['PCS', 'KG', 'LTR', 'MTR', 'BOX', 'SET', 'DOZEN', 'PKT', 'BAG'];
 const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Stationery', 'Hardware', 'Other'];
+const PACKAGING_UNITS = ['CTN', 'GONI', 'BAG', 'BUNDLE', 'PKT', 'BOX', 'CASE', 'ROLL', 'DRUM'];
+
+const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? ('padding' as const) : undefined;
 
 interface ItemFormFields {
   name: string;
@@ -38,28 +41,51 @@ interface ItemFormFields {
   unit: string;
   purchasePrice: string;
   sellingPrice: string;
+  wholesalePrice: string;
+  mrp: string;
+  quantityDiscountPrice: string;
   gstRate: number;
+  cessRate: string;
   hsnCode: string;
   minStock: string;
   maxStock: string;
   currentStock: string;
+  packagingUnit: string;
+  qtyPerPackage: string;
+  enableBatch: boolean;
+  enableSerial: boolean;
+  location: string;
+  rackInfo: string;
   description: string;
 }
 
+const str = (val: unknown, fallback = ''): string => String(val || fallback);
+const numStr = (val: unknown, fallback = ''): string => val ? String(val) : fallback;
+
 const mapSupabaseItemToForm = (data: Record<string, unknown>): ItemFormFields => ({
-  name: String(data.name || ''),
-  sku: String(data.item_code || ''),
-  barcode: String(data.barcode_no || ''),
-  category: String(data.category || ''),
-  unit: String(data.unit || 'PCS'),
-  purchasePrice: data.purchase_price ? String(data.purchase_price) : '',
-  sellingPrice: data.sale_price ? String(data.sale_price) : '',
+  name: str(data.name),
+  sku: str(data.item_code),
+  barcode: str(data.barcode_no),
+  category: str(data.category),
+  unit: str(data.unit, 'PCS'),
+  purchasePrice: numStr(data.purchase_price),
+  sellingPrice: numStr(data.sale_price),
+  wholesalePrice: numStr(data.wholesale_price),
+  mrp: numStr(data.mrp),
+  quantityDiscountPrice: numStr(data.quantity_discount_price),
   gstRate: data.tax_rate ? Number(data.tax_rate) : 18,
-  hsnCode: String(data.hsn || ''),
-  minStock: data.min_stock ? String(data.min_stock) : '',
-  maxStock: '',
-  currentStock: data.current_stock ? String(data.current_stock) : '0',
-  description: String(data.description || ''),
+  cessRate: numStr(data.cess_rate),
+  hsnCode: str(data.hsn),
+  minStock: numStr(data.min_stock),
+  maxStock: numStr(data.max_stock),
+  currentStock: numStr(data.current_stock, '0'),
+  packagingUnit: str(data.packaging_unit),
+  qtyPerPackage: numStr(data.qty_per_package),
+  enableBatch: Boolean(data.enable_batch_tracking),
+  enableSerial: Boolean(data.enable_serial_tracking),
+  location: str(data.location),
+  rackInfo: str(data.rack_info),
+  description: str(data.description),
 });
 
 const validateItemForm = (fields: {
@@ -88,7 +114,10 @@ const buildItemData = (
   fields: {
     name: string; sku: string; barcode: string; category: string; unit: string;
     purchasePrice: string; sellingPrice: string; gstRate: number; hsnCode: string;
-    minStock: string; currentStock: string; description: string;
+    minStock: string; maxStock: string; currentStock: string; description: string;
+    wholesalePrice: string; mrp: string; quantityDiscountPrice: string; cessRate: string;
+    packagingUnit: string; qtyPerPackage: string; enableBatch: boolean; enableSerial: boolean;
+    location: string; rackInfo: string;
   },
   organizationId: string,
 ) => ({
@@ -100,10 +129,21 @@ const buildItemData = (
   unit: fields.unit,
   purchase_price: parseFloat(fields.purchasePrice),
   sale_price: parseFloat(fields.sellingPrice),
+  wholesale_price: fields.wholesalePrice ? parseFloat(fields.wholesalePrice) : null,
+  mrp: fields.mrp ? parseFloat(fields.mrp) : null,
+  quantity_discount_price: fields.quantityDiscountPrice ? parseFloat(fields.quantityDiscountPrice) : null,
   tax_rate: fields.gstRate,
+  cess_rate: fields.cessRate ? parseFloat(fields.cessRate) : 0,
   hsn: fields.hsnCode.trim() || null,
   min_stock: fields.minStock ? parseInt(fields.minStock) : 0,
+  max_stock: fields.maxStock ? parseInt(fields.maxStock) : null,
   current_stock: parseInt(fields.currentStock),
+  packaging_unit: fields.packagingUnit || null,
+  qty_per_package: fields.qtyPerPackage ? parseInt(fields.qtyPerPackage) : null,
+  enable_batch_tracking: fields.enableBatch,
+  enable_serial_tracking: fields.enableSerial,
+  location: fields.location.trim() || null,
+  rack_info: fields.rackInfo.trim() || null,
   description: fields.description.trim() || null,
 });
 
@@ -120,6 +160,20 @@ const upsertItem = async (
   }
   const { error } = await supabase.from('items').insert(itemData).select().single();
   if (error) throw error;
+};
+
+const launchCamera = async (): Promise<string | null> => {
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission needed', 'Camera permission is required to take photos');
+    return null;
+  }
+  const result = await ImagePicker.launchCameraAsync({
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.8,
+  });
+  return result.canceled ? null : result.assets[0].uri;
 };
 
 const getErrorMessage = (err: unknown, fallback: string): string =>
@@ -155,6 +209,43 @@ export default function AddItemScreen() {
   const [currentStock, setCurrentStock] = useState('');
   const [description, setDescription] = useState('');
   const [savedSuccessfully, setSavedSuccessfully] = useState(false);
+
+  const [wholesalePrice, setWholesalePrice] = useState('');
+  const [mrp, setMrp] = useState('');
+  const [quantityDiscountPrice, setQuantityDiscountPrice] = useState('');
+  const [cessRate, setCessRate] = useState('');
+  const [packagingUnit, setPackagingUnit] = useState('');
+  const [qtyPerPackage, setQtyPerPackage] = useState('');
+  const [enableBatch, setEnableBatch] = useState(false);
+  const [enableSerial, setEnableSerial] = useState(false);
+  const [location, setLocation] = useState('');
+  const [rackInfo, setRackInfo] = useState('');
+
+  const applyItemFormFields = (fields: ItemFormFields) => {
+    setName(fields.name);
+    setSku(fields.sku);
+    setBarcode(fields.barcode);
+    setCategory(fields.category);
+    setUnit(fields.unit);
+    setPurchasePrice(fields.purchasePrice);
+    setSellingPrice(fields.sellingPrice);
+    setWholesalePrice(fields.wholesalePrice);
+    setMrp(fields.mrp);
+    setQuantityDiscountPrice(fields.quantityDiscountPrice);
+    setGstRate(fields.gstRate);
+    setCessRate(fields.cessRate);
+    setHsnCode(fields.hsnCode);
+    setMinStock(fields.minStock);
+    setMaxStock(fields.maxStock);
+    setCurrentStock(fields.currentStock);
+    setPackagingUnit(fields.packagingUnit);
+    setQtyPerPackage(fields.qtyPerPackage);
+    setEnableBatch(fields.enableBatch);
+    setEnableSerial(fields.enableSerial);
+    setLocation(fields.location);
+    setRackInfo(fields.rackInfo);
+    setDescription(fields.description);
+  };
 
   // Validation
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -195,20 +286,7 @@ export default function AddItemScreen() {
 
         if (error) throw error;
         if (data) {
-          const fields = mapSupabaseItemToForm(data as Record<string, unknown>);
-          setName(fields.name);
-          setSku(fields.sku);
-          setBarcode(fields.barcode);
-          setCategory(fields.category);
-          setUnit(fields.unit);
-          setPurchasePrice(fields.purchasePrice);
-          setSellingPrice(fields.sellingPrice);
-          setGstRate(fields.gstRate);
-          setHsnCode(fields.hsnCode);
-          setMinStock(fields.minStock);
-          setMaxStock(fields.maxStock);
-          setCurrentStock(fields.currentStock);
-          setDescription(fields.description);
+          applyItemFormFields(mapSupabaseItemToForm(data as Record<string, unknown>));
         }
       } catch {
         toast.error('Failed to load item details');
@@ -234,22 +312,8 @@ export default function AddItemScreen() {
   };
 
   const takePicture = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required to take photos');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+    const uri = await launchCamera();
+    if (uri) setImageUri(uri);
   };
 
   const validateForm = (): boolean => {
@@ -274,7 +338,13 @@ export default function AddItemScreen() {
 
     try {
       const itemData = buildItemData(
-        { name, sku, barcode, category, unit, purchasePrice, sellingPrice, gstRate, hsnCode, minStock, currentStock, description },
+        {
+          name, sku, barcode, category, unit, purchasePrice, sellingPrice,
+          gstRate, hsnCode, minStock, maxStock, currentStock, description,
+          wholesalePrice, mrp, quantityDiscountPrice, cessRate,
+          packagingUnit, qtyPerPackage, enableBatch, enableSerial,
+          location, rackInfo,
+        },
         organizationId,
       );
       await upsertItem(isEditing, itemId, organizationId, itemData);
@@ -293,7 +363,7 @@ export default function AddItemScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
     >
       {initialLoading ? (
         <Loading fullScreen text="Loading item..." />
@@ -466,6 +536,33 @@ export default function AddItemScreen() {
             />
           </View>
 
+          <View style={styles.row}>
+            <Input
+              label="Wholesale Price"
+              placeholder="0.00"
+              value={wholesalePrice}
+              onChangeText={setWholesalePrice}
+              keyboardType="numeric"
+              style={styles.halfInput}
+            />
+            <Input
+              label="MRP"
+              placeholder="0.00"
+              value={mrp}
+              onChangeText={setMrp}
+              keyboardType="numeric"
+              style={styles.halfInput}
+            />
+          </View>
+
+          <Input
+            label="Quantity Discount Price"
+            placeholder="0.00"
+            value={quantityDiscountPrice}
+            onChangeText={setQuantityDiscountPrice}
+            keyboardType="numeric"
+          />
+
           <Text style={[styles.label, { color: colors.textSecondary }]}>GST Rate</Text>
           <View style={styles.optionsRow}>
             {GST_RATES.map((rate) => (
@@ -491,6 +588,14 @@ export default function AddItemScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <Input
+            label="CESS Rate (%)"
+            placeholder="0"
+            value={cessRate}
+            onChangeText={setCessRate}
+            keyboardType="numeric"
+          />
         </Card>
 
         {/* Inventory */}
@@ -524,6 +629,87 @@ export default function AddItemScreen() {
               style={styles.halfInput}
             />
           </View>
+          <View style={styles.row}>
+            <Input
+              label="Location"
+              placeholder="Warehouse location"
+              value={location}
+              onChangeText={setLocation}
+              style={styles.halfInput}
+            />
+            <Input
+              label="Rack/Shelf"
+              placeholder="Rack info"
+              value={rackInfo}
+              onChangeText={setRackInfo}
+              style={styles.halfInput}
+            />
+          </View>
+        </Card>
+
+        {/* Packaging Units */}
+        <Card style={{ marginTop: spacing.md }}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Packaging
+          </Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Packaging Unit</Text>
+          <View style={styles.optionsRow}>
+            {PACKAGING_UNITS.map((pu) => (
+              <TouchableOpacity
+                key={pu}
+                style={[
+                  styles.optionChip,
+                  {
+                    backgroundColor: packagingUnit === pu ? colors.primary : colors.card,
+                    borderColor: packagingUnit === pu ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setPackagingUnit(packagingUnit === pu ? '' : pu)}
+              >
+                <Text
+                  style={[styles.optionText, { color: packagingUnit === pu ? '#fff' : colors.text }]}
+                >
+                  {pu}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {packagingUnit ? (
+            <Input
+              label={`Qty per ${packagingUnit}`}
+              placeholder="e.g. 12"
+              value={qtyPerPackage}
+              onChangeText={setQtyPerPackage}
+              keyboardType="numeric"
+            />
+          ) : null}
+        </Card>
+
+        {/* Tracking Options */}
+        <Card style={{ marginTop: spacing.md }}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Tracking
+          </Text>
+          <TouchableOpacity
+            style={[styles.trackingToggle, { borderColor: colors.border }]}
+            onPress={() => setEnableBatch(!enableBatch)}
+          >
+            <Ionicons name={enableBatch ? 'checkbox' : 'square-outline'} size={22} color={colors.primary} />
+            <View style={styles.trackingInfo}>
+              <Text style={[styles.trackingLabel, { color: colors.text }]}>Enable Batch Tracking</Text>
+              <Text style={[styles.trackingHint, { color: colors.textSecondary }]}>Track manufacturing & expiry dates (FIFO)</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.trackingToggle, { borderColor: colors.border }]}
+            onPress={() => setEnableSerial(!enableSerial)}
+          >
+            <Ionicons name={enableSerial ? 'checkbox' : 'square-outline'} size={22} color={colors.primary} />
+            <View style={styles.trackingInfo}>
+              <Text style={[styles.trackingLabel, { color: colors.text }]}>Enable Serial Number Tracking</Text>
+              <Text style={[styles.trackingHint, { color: colors.textSecondary }]}>Track individual units with warranty</Text>
+            </View>
+          </TouchableOpacity>
         </Card>
       </ScrollView>
       )}
@@ -629,5 +815,23 @@ const styles = StyleSheet.create({
   },
   footerButton: {
     flex: 1,
+  },
+  trackingToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  trackingInfo: {
+    flex: 1,
+  },
+  trackingLabel: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+  },
+  trackingHint: {
+    fontSize: fontSize.xs,
+    marginTop: 2,
   },
 });

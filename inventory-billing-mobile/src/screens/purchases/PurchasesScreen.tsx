@@ -7,23 +7,25 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { useFocusRefresh } from '@hooks/useFocusRefresh';
-import Loading from '@components/ui/Loading';
+import Card from '@components/ui/Card';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
 import ListFooterLoader from '@components/ui/ListFooterLoader';
+import SortSelector, { SortOption } from '@components/ui/SortSelector';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
+import { lightTap } from '@lib/haptics';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
 
 interface Purchase {
   id: string;
@@ -48,6 +50,13 @@ const STATUS_COLORS: Record<string, string> = {
 function getStatusColor(status: string, fallback: string): string {
   return STATUS_COLORS[status] ?? fallback;
 }
+
+const PURCHASE_SORT_OPTIONS: SortOption[] = [
+  { key: 'purchase_date', label: 'Date' },
+  { key: 'total', label: 'Amount' },
+  { key: 'supplier_name', label: 'Supplier' },
+  { key: 'created_at', label: 'Recent' },
+];
 
 function extractPurchaseCount(
   result: { count?: number | null; error: unknown } | null
@@ -83,7 +92,7 @@ function getPurchaseErrorMessage(err: unknown): string {
 
 export default function PurchasesScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
-  const { colors, shadows } = useTheme();
+  const { colors, isDark } = useTheme();
   const { organizationId } = useAuth();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -97,6 +106,8 @@ export default function PurchasesScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ total: 0, paid: 0, pending: 0 });
+  const [sortKey, setSortKey] = useState('purchase_date');
+  const [sortAsc, setSortAsc] = useState(false);
 
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const currentQueryRef = useRef('');
@@ -160,7 +171,7 @@ export default function PurchasesScreen() {
         .select('id, purchase_number, supplier_name, purchase_date, total, paid_amount, balance, status')
         .eq('organization_id', organizationId)
         .is('deleted_at', null)
-        .order('purchase_date', { ascending: false })
+        .order(sortKey, { ascending: sortAsc })
         .range(from, to);
 
       if (query.trim()) {
@@ -195,7 +206,7 @@ export default function PurchasesScreen() {
       setIsLoadingMore(false);
       setIsRefreshing(false);
     }
-  }, [organizationId]);
+  }, [organizationId, sortKey, sortAsc]);
 
   useFocusRefresh(useCallback(() => {
     fetchPurchases(searchQuery, 0, true);
@@ -248,31 +259,32 @@ export default function PurchasesScreen() {
     return () => unsubscribe();
   }, [searchQuery, error, fetchPurchases]);
 
-  const renderPurchaseItem = useCallback(({ item }: { item: Purchase }) => (
-    <TouchableOpacity
-      style={[styles.purchaseCard, { backgroundColor: colors.card, ...shadows.sm }]}
-      onPress={() => navigation.navigate('PurchaseDetail', { purchaseId: item.id })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.purchaseHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.purchaseNo, { color: colors.text }]} numberOfLines={1}>
-            {item.purchase_number}
-          </Text>
-          <Text style={[styles.supplierName, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.supplier_name}
-          </Text>
+  const renderPurchaseItem = useCallback(({ item, index }: { item: Purchase; index: number }) => (
+    <AnimatedListItem index={index}>
+      <Card
+        onPress={() => navigation.navigate('PurchaseDetail', { purchaseId: item.id })}
+        style={styles.purchaseCard}
+      >
+        <View style={styles.purchaseHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.purchaseNo, { color: colors.text }]} numberOfLines={1}>
+              {item.purchase_number}
+            </Text>
+            <Text style={[styles.supplierName, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.supplier_name}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, colors.textSecondary) }]}>
+            <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+          </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, colors.textSecondary) }]}>
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+        <View style={[styles.purchaseFooter, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+          <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.purchase_date)}</Text>
+          <Text style={[styles.purchaseAmount, { color: colors.primary }]}>{formatCurrency(item.total)}</Text>
         </View>
-      </View>
-      <View style={[styles.purchaseFooter, { borderTopColor: colors.border }]}>
-        <Text style={[styles.purchaseDate, { color: colors.textSecondary }]}>{formatDate(item.purchase_date)}</Text>
-        <Text style={[styles.purchaseAmount, { color: colors.primary }]}>{formatCurrency(item.total)}</Text>
-      </View>
-    </TouchableOpacity>
-  ), [colors, shadows, navigation]);
+      </Card>
+    </AnimatedListItem>
+  ), [colors, isDark, navigation]);
 
   const renderListFooter = useCallback(() => (
     <ListFooterLoader
@@ -308,38 +320,34 @@ export default function PurchasesScreen() {
   }, [loading, error, searchQuery, handleRefresh, navigation]);
 
   if (loading && purchases.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading purchases..." />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+          <SkeletonList count={6} />
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isOffline && <OfflineBanner onRetry={handleRefresh} />}
 
-      <LinearGradient colors={['#4F46E5', '#6366F1']} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Purchases</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => navigation.navigate('CreatePurchase', {})}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
-      </LinearGradient>
-
       <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="wallet-outline" size={20} color="#6366F1" />
+          <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.total)}</Text>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total</Text>
-          <Text style={[styles.statValue, { color: colors.text }]}>{formatCurrency(stats.total)}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="checkmark-circle-outline" size={20} color="#10B981" />
+          <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.paid)}</Text>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Paid</Text>
-          <Text style={[styles.statValue, { color: '#10B981' }]}>{formatCurrency(stats.paid)}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Ionicons name="time-outline" size={20} color="#EF4444" />
+          <Text style={[styles.statValue, { color: colors.text }]} numberOfLines={1}>{formatCurrency(stats.pending)}</Text>
           <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
-          <Text style={[styles.statValue, { color: '#EF4444' }]}>{formatCurrency(stats.pending)}</Text>
         </View>
       </View>
 
@@ -361,22 +369,21 @@ export default function PurchasesScreen() {
         )}
       </View>
 
+      <SortSelector
+        options={PURCHASE_SORT_OPTIONS}
+        activeKey={sortKey}
+        ascending={sortAsc}
+        onSort={(key, asc) => { setSortKey(key); setSortAsc(asc); }}
+      />
+
       <FlatList
         data={purchases}
         renderItem={renderPurchaseItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          purchases.length === 0 && styles.listContentEmpty,
-        ]}
+        contentContainerStyle={[styles.listContent, purchases.length === 0 && styles.listContentEmpty]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
@@ -387,33 +394,39 @@ export default function PurchasesScreen() {
         windowSize={10}
         initialNumToRender={15}
         keyboardShouldPersistTaps="handled"
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
       />
+
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => { lightTap(); navigation.navigate('CreatePurchase', {}); }}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
-  backButton: { width: 40 },
-  headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#fff', textAlign: 'center' },
-  addButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  statsContainer: { flexDirection: 'row', padding: 16, gap: 12 },
-  statCard: { flex: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
-  statLabel: { fontSize: 12, marginBottom: 4 },
+  statsContainer: { flexDirection: 'row', padding: 16, gap: 10 },
+  statCard: { flex: 1, padding: 12, borderRadius: 12, alignItems: 'center', gap: 4, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2 },
   statValue: { fontSize: 14, fontWeight: '700' },
+  statLabel: { fontSize: 11 },
   searchWrapper: { paddingHorizontal: 16, paddingBottom: 8, position: 'relative' },
   searchInput: { marginBottom: 0 },
   searchIndicator: { position: 'absolute', right: 28, top: 12 },
-  listContent: { padding: 16, paddingTop: 8 },
+  listContent: { padding: 16, paddingTop: 8, paddingBottom: 100 },
   listContentEmpty: { flexGrow: 1 },
-  purchaseCard: { borderRadius: 12, padding: 16, marginBottom: 12 },
+  purchaseCard: { padding: 14 },
   purchaseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  purchaseNo: { fontSize: 16, fontWeight: '600' },
-  supplierName: { fontSize: 14, marginTop: 2 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 11, fontWeight: '600', color: '#fff' },
+  purchaseNo: { fontSize: 15, fontWeight: '600' },
+  supplierName: { fontSize: 13, marginTop: 2 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  statusText: { fontSize: 10, fontWeight: '700', color: '#fff' },
   purchaseFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
-  purchaseDate: { fontSize: 13 },
-  purchaseAmount: { fontSize: 18, fontWeight: '700' },
+  purchaseDate: { fontSize: 12 },
+  purchaseAmount: { fontSize: 17, fontWeight: '700' },
+  fab: { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
 });

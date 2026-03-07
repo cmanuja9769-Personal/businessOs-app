@@ -23,7 +23,7 @@ export default function ResetPasswordPage() {
         </div>
 
         {/* Form Card */}
-        <div className="bg-card rounded-lg shadow-sm border border-border p-8">
+        <div className="glass rounded-2xl neo-shadow-sm p-8">
           <ResetPasswordForm />
         </div>
 

@@ -17,7 +17,7 @@ export function OrganizationSwitcher() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-card">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-subtle">
         <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         <span className="text-sm text-muted-foreground">Loading…</span>
       </div>
@@ -26,7 +26,7 @@ export function OrganizationSwitcher() {
 
   if (!organization || organizations.length === 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-card">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-subtle">
         <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         <span className="text-sm text-muted-foreground">No organizations</span>
       </div>
@@ -34,7 +34,7 @@ export function OrganizationSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 rounded-md border bg-card">
+    <div className="flex items-center gap-2 px-2 py-1 rounded-lg glass-subtle">
       <Building2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
       <Select
         value={organization.id}

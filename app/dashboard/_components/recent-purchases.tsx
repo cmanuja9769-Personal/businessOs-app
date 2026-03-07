@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/ui/glass-card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ShoppingCart, Plus, ArrowRight, Clock, FileText, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
@@ -18,7 +17,7 @@ function getStatusBadge(status: string) {
   }
   const config = statusConfig[status] || statusConfig.draft
   return (
-    <Badge variant={config.variant} className="text-xs gap-1">
+    <Badge variant={config.variant} className="text-[0.625rem] gap-0.5 px-1.5 py-0 h-5 rounded-full">
       {config.icon}
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
@@ -32,61 +31,64 @@ interface RecentPurchasesProps {
 
 export function RecentPurchases({ purchases, loading }: RecentPurchasesProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
-        <div className="min-w-0">
-          <CardTitle className="text-sm font-semibold">Recent Purchases</CardTitle>
-        </div>
-        <Link href="/purchases">
-          <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 px-2">
-            View all
-            <ArrowRight className="h-3 w-3" />
-          </Button>
+    <GlassCard glow>
+      <GlassCardHeader>
+        <GlassCardTitle>Recent Purchases</GlassCardTitle>
+        <Link
+          href="/purchases"
+          className="flex items-center gap-1 text-[0.6875rem] font-medium text-primary hover:underline transition-colors"
+        >
+          View all
+          <ArrowRight className="h-3 w-3" />
         </Link>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0">
+      </GlassCardHeader>
+      <GlassCardContent>
         {loading && (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
+              <Skeleton key={i} className="h-14 w-full rounded-2xl" />
             ))}
           </div>
         )}
         {!loading && purchases.length === 0 && (
-          <div className="text-center py-6">
-            <ShoppingCart className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            <p className="text-xs text-muted-foreground">No purchases yet</p>
-            <Link href="/purchases/new">
-              <Button size="sm" className="mt-2 text-xs h-7">
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Purchase
-              </Button>
+          <div className="text-center py-8">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-muted/50 neo-inset flex items-center justify-center mb-3">
+              <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">No purchases yet</p>
+            <Link
+              href="/purchases/new"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Purchase
             </Link>
           </div>
         )}
         {!loading && purchases.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {purchases.map((purchase) => (
               <Link
                 key={purchase.id}
                 href={`/purchases/${purchase.id}`}
-                className="flex items-center justify-between p-2 rounded-lg border hover:bg-muted/50 transition-colors"
+                className="flex items-center justify-between p-2.5 rounded-2xl glass-subtle transition-all duration-200 hover:scale-[1.01] active:scale-[0.98]"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-medium text-xs truncate max-w-[7.5rem]">{purchase.purchaseNo}</span>
+                    <span className="font-semibold text-xs truncate max-w-[7.5rem]">{purchase.purchaseNo}</span>
                     {getStatusBadge(purchase.status)}
                   </div>
-                  <p className="text-[0.625rem] text-muted-foreground truncate">{purchase.supplierName}</p>
+                  <p className="text-[0.625rem] text-muted-foreground/70 truncate mt-0.5">{purchase.supplierName}</p>
                 </div>
                 <div className="text-right ml-2 flex-shrink-0">
-                  <p className="font-semibold text-xs">{formatCurrency(purchase.total)}</p>
-                  <p className="text-[0.625rem] text-muted-foreground">{dashboardFormatDate(purchase.date)}</p>
+                  <p className="font-bold text-xs">{formatCurrency(purchase.total)}</p>
+                  <p className="text-[0.625rem] text-muted-foreground/70">{dashboardFormatDate(purchase.date)}</p>
                 </div>
               </Link>
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </GlassCardContent>
+    </GlassCard>
   )
 }

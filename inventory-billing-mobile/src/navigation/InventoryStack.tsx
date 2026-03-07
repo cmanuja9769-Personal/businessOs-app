@@ -6,6 +6,10 @@ import ItemListScreen from '@screens/inventory/ItemListScreen';
 import ItemDetailScreen from '@screens/inventory/ItemDetailScreen';
 import AddItemScreen from '@screens/inventory/AddItemScreen';
 import StockAdjustmentScreen from '@screens/inventory/StockAdjustmentScreen';
+import StockTransferScreen from '@screens/inventory/StockTransferScreen';
+import StockMovementScreen from '@screens/inventory/StockMovementScreen';
+import BarcodeGeneratorScreen from '@screens/inventory/BarcodeGeneratorScreen';
+import BarcodeLogsScreen from '@screens/inventory/BarcodeLogsScreen';
 
 const Stack = createStackNavigator<InventoryStackParamList>();
 
@@ -51,7 +55,27 @@ export default function InventoryStack() {
       <Stack.Screen 
         name="StockAdjustment" 
         component={StockAdjustmentScreen}
-        options={{ title: 'Stock Adjustment' }}
+        options={{ title: 'Stock Adjustment', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="StockTransfer" 
+        component={StockTransferScreen}
+        options={{ title: 'Stock Transfer' }}
+      />
+      <Stack.Screen 
+        name="StockMovements" 
+        component={StockMovementScreen}
+        options={{ title: 'Stock Movements', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="BarcodeGenerator" 
+        component={BarcodeGeneratorScreen}
+        options={{ title: 'Barcode Generator', headerShown: false }}
+      />
+      <Stack.Screen 
+        name="BarcodeLogs" 
+        component={BarcodeLogsScreen}
+        options={{ title: 'Barcode Logs', headerShown: false }}
       />
     </Stack.Navigator>
   );

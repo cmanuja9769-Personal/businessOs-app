@@ -188,6 +188,145 @@
   }
 }
 
+/* ========================================
+   LIQUID GLASS DESIGN SYSTEM
+   Modern frosted-glass aesthetic with
+   Bento Grid, neomorphic depth, and
+   micro-interactions
+   ======================================== */
+
+@layer utilities {
+  .glass {
+    background: oklch(1 0 0 / 0.6);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid oklch(1 0 0 / 0.2);
+  }
+  .dark .glass,
+  :is(.dark *).glass {
+    background: oklch(0.2 0.01 250 / 0.5);
+    border-color: oklch(1 0 0 / 0.08);
+  }
+
+  .glass-subtle {
+    background: oklch(1 0 0 / 0.4);
+    backdrop-filter: blur(8px) saturate(1.2);
+    -webkit-backdrop-filter: blur(8px) saturate(1.2);
+    border: 1px solid oklch(1 0 0 / 0.15);
+  }
+  .dark .glass-subtle,
+  :is(.dark *).glass-subtle {
+    background: oklch(0.2 0.01 250 / 0.35);
+    border-color: oklch(1 0 0 / 0.06);
+  }
+
+  .glass-strong {
+    background: oklch(1 0 0 / 0.75);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border: 1px solid oklch(1 0 0 / 0.3);
+  }
+  .dark .glass-strong,
+  :is(.dark *).glass-strong {
+    background: oklch(0.18 0.01 250 / 0.65);
+    border-color: oklch(1 0 0 / 0.1);
+  }
+
+  .neo-shadow {
+    box-shadow:
+      6px 6px 12px oklch(0 0 0 / 0.06),
+      -4px -4px 10px oklch(1 0 0 / 0.7);
+  }
+  .dark .neo-shadow,
+  :is(.dark *).neo-shadow {
+    box-shadow:
+      6px 6px 12px oklch(0 0 0 / 0.3),
+      -4px -4px 10px oklch(1 0 0 / 0.04);
+  }
+
+  .neo-shadow-sm {
+    box-shadow:
+      3px 3px 6px oklch(0 0 0 / 0.04),
+      -2px -2px 5px oklch(1 0 0 / 0.6);
+  }
+  .dark .neo-shadow-sm,
+  :is(.dark *).neo-shadow-sm {
+    box-shadow:
+      3px 3px 6px oklch(0 0 0 / 0.25),
+      -2px -2px 5px oklch(1 0 0 / 0.03);
+  }
+
+  .neo-inset {
+    box-shadow:
+      inset 2px 2px 4px oklch(0 0 0 / 0.05),
+      inset -2px -2px 4px oklch(1 0 0 / 0.5);
+  }
+  .dark .neo-inset,
+  :is(.dark *).neo-inset {
+    box-shadow:
+      inset 2px 2px 4px oklch(0 0 0 / 0.2),
+      inset -2px -2px 4px oklch(1 0 0 / 0.02);
+  }
+
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .bento-grid {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+  }
+
+  .bento-tile {
+    border-radius: 1.5rem;
+    overflow: hidden;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+  .bento-tile:active {
+    transform: scale(0.97);
+  }
+  @media (min-width: 768px) {
+    .bento-tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px oklch(0 0 0 / 0.08);
+    }
+    .dark .bento-tile:hover,
+    :is(.dark *).bento-tile:hover {
+      box-shadow: 0 8px 24px oklch(0 0 0 / 0.3);
+    }
+  }
+
+  .bento-1x1 { grid-column: span 1; grid-row: span 1; }
+  .bento-2x1 { grid-column: span 2; grid-row: span 1; }
+  .bento-1x2 { grid-column: span 1; grid-row: span 2; }
+  .bento-2x2 { grid-column: span 2; grid-row: span 2; }
+
+  .tile-glow {
+    position: relative;
+  }
+  .tile-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 300ms ease;
+    pointer-events: none;
+    background: radial-gradient(
+      600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      oklch(0.52 0.22 265 / 0.06),
+      transparent 40%
+    );
+  }
+  .tile-glow:hover::before {
+    opacity: 1;
+  }
+}
+
 /* Skeleton shimmer animation */
 @keyframes shimmer {
   0% {
@@ -198,10 +337,67 @@
   }
 }
 
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes number-tick {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
 @layer utilities {
   .animate-shimmer {
     animation: shimmer 2s infinite;
   }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 400ms ease-out both;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 300ms ease-out both;
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 2s ease-in-out infinite;
+  }
+
+  .animate-number-tick {
+    animation: number-tick 500ms ease-out both;
+  }
+
+  .anim-delay-1 { animation-delay: 50ms; }
+  .anim-delay-2 { animation-delay: 100ms; }
+  .anim-delay-3 { animation-delay: 150ms; }
+  .anim-delay-4 { animation-delay: 200ms; }
+  .anim-delay-5 { animation-delay: 250ms; }
+  .anim-delay-6 { animation-delay: 300ms; }
+  .anim-delay-7 { animation-delay: 350ms; }
+  .anim-delay-8 { animation-delay: 400ms; }
 
   /* Responsive container utilities */
   .container-responsive {

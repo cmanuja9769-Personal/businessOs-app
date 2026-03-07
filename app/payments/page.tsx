@@ -1,6 +1,7 @@
 import { getInvoices } from "@/app/invoices/actions"
 import { getPurchases } from "@/app/purchases/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { GlassCard } from "@/components/ui/glass-card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { StatusBadge, type DocumentStatus } from "@/components/ui/status-badge"
 import { PageHeader } from "@/components/ui/page-header"
@@ -29,46 +30,48 @@ export default async function PaymentsPage() {
         description="Track receivables, payables, and record payments"
       />
 
-      {/* Summary Cards */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3 shrink-0">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Receivables</CardTitle>
-            <TrendingUp className="w-4 h-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{totalReceivables.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {unpaidInvoices.length} unpaid invoice{unpaidInvoices.length !== 1 ? "s" : ""}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 shrink-0">
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-emerald-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Total Receivables</p>
+              <div className="text-xl sm:text-2xl font-bold text-emerald-700 dark:text-emerald-400">₹{totalReceivables.toFixed(2)}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">{unpaidInvoices.length} unpaid invoice{unpaidInvoices.length !== 1 ? "s" : ""}</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-emerald-500/10 flex-shrink-0">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+            </div>
+          </div>
+        </GlassCard>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total Payables</CardTitle>
-            <TrendingDown className="w-4 h-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{totalPayables.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {unpaidPurchases.length} unpaid purchase{unpaidPurchases.length !== 1 ? "s" : ""}
-            </p>
-          </CardContent>
-        </Card>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-red-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Total Payables</p>
+              <div className="text-xl sm:text-2xl font-bold text-red-700 dark:text-red-400">₹{totalPayables.toFixed(2)}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">{unpaidPurchases.length} unpaid purchase{unpaidPurchases.length !== 1 ? "s" : ""}</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-red-500/10 flex-shrink-0">
+              <TrendingDown className="h-4 w-4 text-red-600" />
+            </div>
+          </div>
+        </GlassCard>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Net Position</CardTitle>
-            <Wallet className="w-4 h-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{(totalReceivables - totalPayables).toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {totalReceivables > totalPayables ? "Positive" : "Negative"} cash flow
-            </p>
-          </CardContent>
-        </Card>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-blue-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Net Position</p>
+              <div className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400">₹{(totalReceivables - totalPayables).toFixed(2)}</div>
+              <p className="text-[0.6875rem] text-muted-foreground/80">{totalReceivables > totalPayables ? "Positive" : "Negative"} cash flow</p>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-blue-500/10 flex-shrink-0">
+              <Wallet className="h-4 w-4 text-blue-600" />
+            </div>
+          </div>
+        </GlassCard>
       </div>
 
       {/* Tabs for Receivables and Payables */}

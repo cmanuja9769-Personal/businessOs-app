@@ -48,7 +48,7 @@ export default async function LoginPage({
         )}
 
         {/* Login Form */}
-        <div className="bg-card rounded-lg shadow-sm border border-border p-8 space-y-6">
+        <div className="glass rounded-2xl neo-shadow-sm p-8 space-y-6">
           <LoginForm />
 
           {/* Divider */}
@@ -57,7 +57,7 @@ export default async function LoginPage({
               <div className="w-full border-t border-border"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card text-muted-foreground">Don&apos;t have an account?</span>
+              <span className="px-2 bg-transparent text-muted-foreground">Don&apos;t have an account?</span>
             </div>
           </div>
 

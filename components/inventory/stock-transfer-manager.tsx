@@ -559,7 +559,7 @@ function TransferRow({
               )}
               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
                 {transfer.items.map(item => (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-background">
+                  <div key={item.id} className="flex items-center justify-between p-2.5 rounded-lg glass-subtle">
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{item.itemName}</p>
                       {item.itemCode && <p className="text-xs text-muted-foreground font-mono">{item.itemCode}</p>}

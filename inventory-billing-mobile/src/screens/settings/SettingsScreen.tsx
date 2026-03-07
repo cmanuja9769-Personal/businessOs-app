@@ -225,20 +225,6 @@ export default function SettingsScreen() {
                 thumbColor="#ffffff"
               />
             </View>
-            <View style={[styles.settingItem, styles.settingItemBorder, { borderBottomColor: colors.border }]}>
-              <View style={styles.settingLeft}>
-                <Ionicons name="finger-print-outline" size={20} color={colors.text} />
-                <Text style={[styles.settingText, { color: colors.text }]}>
-                  Biometric Lock
-                </Text>
-              </View>
-              <Switch
-                value={settings.enableBiometric}
-                onValueChange={(v) => { lightTap(); updateSettings({ enableBiometric: v }); }}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#ffffff"
-              />
-            </View>
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Ionicons name="cash-outline" size={20} color={colors.text} />
@@ -252,6 +238,77 @@ export default function SettingsScreen() {
                 </View>
               </View>
             </View>
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            BUSINESS
+          </Text>
+          <Card>
+            <TouchableOpacity
+              style={[styles.settingItem, styles.settingItemBorder, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                lightTap();
+                toast.info('Business info is managed from the web app Settings page');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="business-outline" size={20} color={colors.text} />
+                <View>
+                  <Text style={[styles.settingText, { color: colors.text }]}>
+                    Business Info
+                  </Text>
+                  <Text style={[styles.settingHint, { color: colors.textSecondary }]}>
+                    Logo, GSTIN, PAN, bank details
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.settingItem, styles.settingItemBorder, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                lightTap();
+                toast.info('Invoice templates are managed from the web app');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="document-text-outline" size={20} color={colors.text} />
+                <View>
+                  <Text style={[styles.settingText, { color: colors.text }]}>
+                    Invoice Templates
+                  </Text>
+                  <Text style={[styles.settingHint, { color: colors.textSecondary }]}>
+                    Customize invoice layout
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => {
+                lightTap();
+                toast.info('Data import/export available from the web app');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="download-outline" size={20} color={colors.text} />
+                <View>
+                  <Text style={[styles.settingText, { color: colors.text }]}>
+                    Data Export / Import
+                  </Text>
+                  <Text style={[styles.settingHint, { color: colors.textSecondary }]}>
+                    Excel export, bulk import
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
           </Card>
         </View>
 

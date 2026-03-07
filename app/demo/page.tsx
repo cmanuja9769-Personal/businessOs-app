@@ -52,7 +52,7 @@ export default function DemoPage() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="group rounded-xl border border-border/60 bg-card/50 p-5 backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-md"
+              className="group rounded-2xl glass-subtle p-5 neo-shadow-sm transition-all hover:border-primary/30 hover:scale-[1.02]"
             >
               <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary transition-colors group-hover:bg-primary/20">
                 <f.icon className="h-5 w-5" />
@@ -63,7 +63,7 @@ export default function DemoPage() {
           ))}
         </div>
 
-        <div className="mt-12 rounded-xl border border-amber-200/50 bg-amber-50/50 p-4 text-center dark:border-amber-500/20 dark:bg-amber-950/20">
+        <div className="mt-12 rounded-2xl glass-subtle p-4 text-center">
           <p className="text-sm text-amber-800 dark:text-amber-200">
             <strong>Demo mode is read-only.</strong> You can browse all pages and features, but changes will not be saved. Sign up for a free account to start managing your business.
           </p>

@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
-  Dimensions,
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -21,25 +20,51 @@ import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
 import { lightTap, warningFeedback } from '@lib/haptics';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_GAP = 10;
-const HORIZONTAL_PADDING = 20;
-const GRID_COLUMNS = 3;
-const CARD_SIZE = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - CARD_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+const PAD = 16;
 
-interface ActionCard {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  screen: string;
-  gradient: [string, string];
+interface MenuItem {
+  readonly icon: keyof typeof Ionicons.glyphMap;
+  readonly title: string;
+  readonly screen: string;
+  readonly color: string;
 }
 
 interface QuickStat {
   label: string;
   value: string;
   icon: keyof typeof Ionicons.glyphMap;
-  trend?: 'up' | 'down' | 'neutral';
+  color: string;
 }
+
+const TRANSACTION_ITEMS: readonly MenuItem[] = [
+  { icon: 'people-outline', title: 'Customers', screen: 'Customers', color: '#4F46E5' },
+  { icon: 'briefcase-outline', title: 'Suppliers', screen: 'Suppliers', color: '#7C3AED' },
+  { icon: 'cart-outline', title: 'Purchases', screen: 'Purchases', color: '#059669' },
+  { icon: 'cash-outline', title: 'Payments', screen: 'Payments', color: '#0369A1' },
+  { icon: 'document-text-outline', title: 'E-Waybills', screen: 'Ewaybills', color: '#D97706' },
+  { icon: 'flash-outline', title: 'E-Invoice', screen: 'EInvoice', color: '#7C3AED' },
+] as const;
+
+const INVENTORY_ITEMS: readonly MenuItem[] = [
+  { icon: 'cube-outline', title: 'Godowns', screen: 'Godowns', color: '#B45309' },
+  { icon: 'swap-horizontal-outline', title: 'Stock Transfers', screen: 'StockTransfer', color: '#059669' },
+  { icon: 'time-outline', title: 'Stock Movements', screen: 'StockMovements', color: '#0284C7' },
+  { icon: 'barcode-outline', title: 'Barcode Generator', screen: 'BarcodeGenerator', color: '#7C3AED' },
+] as const;
+
+const FINANCE_ITEMS: readonly MenuItem[] = [
+  { icon: 'stats-chart-outline', title: 'Reports', screen: 'Reports', color: '#4F46E5' },
+  { icon: 'calculator-outline', title: 'Accounting', screen: 'Accounting', color: '#7C3AED' },
+  { icon: 'book-outline', title: 'Journal Entries', screen: 'JournalEntries', color: '#0369A1' },
+  { icon: 'receipt-outline', title: 'Trial Balance', screen: 'TrialBalance', color: '#059669' },
+] as const;
+
+const SETTINGS_ITEMS: readonly MenuItem[] = [
+  { icon: 'business-outline', title: 'Organization', screen: 'Organization', color: '#475569' },
+  { icon: 'people-circle-outline', title: 'Team Members', screen: 'Users', color: '#4338CA' },
+  { icon: 'person-outline', title: 'Profile', screen: 'Profile', color: '#0284C7' },
+  { icon: 'settings-outline', title: 'Settings', screen: 'Settings', color: '#64748B' },
+] as const;
 
 export default function MoreScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
@@ -84,24 +109,9 @@ export default function MoreScreen() {
         );
 
         setQuickStats([
-          {
-            label: "Today's Sales",
-            value: formatCurrency(todaysSale),
-            icon: 'trending-up-outline',
-            trend: todaysSale > 0 ? 'up' : 'neutral',
-          },
-          {
-            label: 'Total Items',
-            value: String(itemsResult.count || 0),
-            icon: 'cube-outline',
-            trend: 'neutral',
-          },
-          {
-            label: 'Customers',
-            value: String(customersResult.count || 0),
-            icon: 'people-outline',
-            trend: 'neutral',
-          },
+          { label: "Today's Sales", value: formatCurrency(todaysSale), icon: 'trending-up-outline', color: '#059669' },
+          { label: 'Total Items', value: String(itemsResult.count || 0), icon: 'cube-outline', color: '#7C3AED' },
+          { label: 'Customers', value: String(customersResult.count || 0), icon: 'people-outline', color: '#0284C7' },
         ]);
       } catch {
         if (!cancelled) setQuickStats([]);
@@ -112,98 +122,32 @@ export default function MoreScreen() {
     return () => { cancelled = true; };
   }, [organizationId]);
 
-  const transactionCards: ActionCard[] = [
-    { icon: 'people-outline', title: 'Customers', screen: 'Customers', gradient: ['#4F46E5', '#6366F1'] },
-    { icon: 'briefcase-outline', title: 'Suppliers', screen: 'Suppliers', gradient: ['#7C3AED', '#8B5CF6'] },
-    { icon: 'cart-outline', title: 'Purchases', screen: 'Purchases', gradient: ['#059669', '#10B981'] },
-    { icon: 'cash-outline', title: 'Payments', screen: 'Payments', gradient: ['#0369A1', '#0EA5E9'] },
-    { icon: 'document-text-outline', title: 'E-Waybills', screen: 'Ewaybills', gradient: ['#D97706', '#F59E0B'] },
-  ];
+  const navigateTo = useCallback((screen: string) => {
+    lightTap();
+    (navigation as { navigate: (screen: string) => void }).navigate(screen);
+  }, [navigation]);
 
-  const masterDataCards: ActionCard[] = [
-    { icon: 'cube-outline', title: 'Godowns', screen: 'Godowns', gradient: ['#B45309', '#D97706'] },
-    { icon: 'business-outline', title: 'Organization', screen: 'Organization', gradient: ['#475569', '#64748B'] },
-    { icon: 'people-circle-outline', title: 'Users', screen: 'Users', gradient: ['#4338CA', '#6366F1'] },
-  ];
-
-  const utilityCards: ActionCard[] = [
-    { icon: 'stats-chart-outline', title: 'Reports', screen: 'Reports', gradient: ['#4F46E5', '#818CF8'] },
-    { icon: 'calculator-outline', title: 'Accounting', screen: 'Accounting', gradient: ['#7C3AED', '#A78BFA'] },
-    { icon: 'person-outline', title: 'Profile', screen: 'Profile', gradient: ['#0284C7', '#38BDF8'] },
-    { icon: 'settings-outline', title: 'Settings', screen: 'Settings', gradient: ['#475569', '#94A3B8'] },
-  ];
-
-  const renderActionCard = (item: ActionCard) => (
+  const renderMenuItem = (item: MenuItem, isLast: boolean) => (
     <TouchableOpacity
-      key={item.title}
-      onPress={() => { lightTap(); (navigation as { navigate: (screen: string) => void }).navigate(item.screen); }}
-      activeOpacity={0.7}
-      style={styles.actionCardWrapper}
+      key={item.screen}
+      onPress={() => navigateTo(item.screen)}
+      activeOpacity={0.6}
+      style={styles.menuRow}
     >
-      <View style={[styles.actionCard, { backgroundColor: colors.card, ...shadows.sm }]}>
-        <LinearGradient
-          colors={item.gradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.actionCardIcon}
-        >
-          <Ionicons name={item.icon} size={22} color="#FFFFFF" />
-        </LinearGradient>
-        <Text
-          style={[styles.actionCardTitle, { color: colors.text }]}
-          numberOfLines={1}
-        >
-          {item.title}
-        </Text>
+      <View style={[styles.menuIcon, { backgroundColor: item.color + '14' }]}>
+        <Ionicons name={item.icon} size={18} color={item.color} />
       </View>
+      <Text style={[styles.menuTitle, { color: colors.text }]}>{item.title}</Text>
+      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+      {!isLast && <View style={[styles.menuSeparator, { backgroundColor: colors.border }]} />}
     </TouchableOpacity>
   );
 
-  const renderQuickStats = () => {
-    if (quickStats.length === 0) return null;
-
-    return (
-      <View style={styles.statsContainer}>
-        <LinearGradient
-          colors={isDark ? ['#312E81', '#1E293B'] : ['#4F46E5', '#6366F1']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.statsCard, shadows.lg]}
-        >
-          <View style={styles.statsRow}>
-            {quickStats.map((stat, index) => (
-              <View
-                key={stat.label}
-                style={[
-                  styles.statItem,
-                  index < quickStats.length - 1 && styles.statItemBorder,
-                ]}
-              >
-                <View style={styles.statIconRow}>
-                  <View style={styles.statIconBg}>
-                    <Ionicons name={stat.icon} size={14} color="#FFFFFF" />
-                  </View>
-                  {stat.trend === 'up' && (
-                    <Ionicons name="arrow-up" size={12} color="#34D399" />
-                  )}
-                </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-            ))}
-          </View>
-        </LinearGradient>
-      </View>
-    );
-  };
-
-  const renderSectionGrid = (title: string, cards: ActionCard[]) => (
+  const renderSection = (title: string, items: readonly MenuItem[]) => (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>
-        {title}
-      </Text>
-      <View style={styles.grid}>
-        {cards.map((card) => renderActionCard(card))}
+      <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>{title}</Text>
+      <View style={[styles.sectionCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+        {items.map((item, i) => renderMenuItem(item, i === items.length - 1))}
       </View>
     </View>
   );
@@ -231,6 +175,8 @@ export default function MoreScreen() {
     );
   }, [signOut, toast]);
 
+  const userInitial = (user?.user_metadata?.full_name?.[0] || user?.email?.[0] || 'U').toUpperCase();
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar
@@ -243,51 +189,64 @@ export default function MoreScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>
-                Business Hub
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.7}
+            style={styles.headerProfile}
+          >
+            <LinearGradient
+              colors={isDark ? ['#6366F1', '#4F46E5'] : ['#4F46E5', '#6366F1']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.avatarGradient}
+            >
+              <Text style={styles.avatarText}>{userInitial}</Text>
+            </LinearGradient>
+            <View style={styles.headerTextBlock}>
+              <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>
+                {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
               </Text>
-              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+              <Text style={[styles.headerEmail, { color: colors.textSecondary }]} numberOfLines={1}>
                 {user?.email || 'Manage your business'}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Profile')}
-              activeOpacity={0.7}
-              style={[styles.avatarButton, { backgroundColor: colors.primaryLight }]}
-            >
-              <Ionicons name="person" size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
         </View>
 
-        {renderQuickStats()}
+        {quickStats.length > 0 && (
+          <View style={styles.statsRow}>
+            {quickStats.map((stat) => (
+              <View key={stat.label} style={[styles.statCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+                <View style={[styles.statIconBg, { backgroundColor: stat.color + '14' }]}>
+                  <Ionicons name={stat.icon} size={16} color={stat.color} />
+                </View>
+                <Text style={[styles.statValue, { color: colors.text }]}>{stat.value}</Text>
+                <Text style={[styles.statLabel, { color: colors.textTertiary }]}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
-        {renderSectionGrid('TRANSACTIONS', transactionCards)}
-        {renderSectionGrid('MASTER DATA', masterDataCards)}
-        {renderSectionGrid('UTILITIES', utilityCards)}
+        {renderSection('Transactions', TRANSACTION_ITEMS)}
+        {renderSection('Inventory', INVENTORY_ITEMS)}
+        {renderSection('Finance & Reports', FINANCE_ITEMS)}
+        {renderSection('Settings', SETTINGS_ITEMS)}
 
-        <View style={styles.logoutSection}>
-          <TouchableOpacity
-            onPress={handleSignOut}
-            activeOpacity={0.7}
-            style={[
-              styles.logoutButton,
-              {
-                backgroundColor: colors.errorLight,
-                borderColor: colors.error + '30',
-              },
-            ]}
-          >
-            <View style={[styles.logoutIconBg, { backgroundColor: colors.error + '20' }]}>
-              <Ionicons name="log-out-outline" size={18} color={colors.error} />
-            </View>
-            <Text style={[styles.logoutText, { color: colors.error }]}>
-              Sign Out
-            </Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.error} />
-          </TouchableOpacity>
+        <View style={styles.section}>
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+            <TouchableOpacity
+              onPress={handleSignOut}
+              activeOpacity={0.6}
+              style={styles.menuRow}
+            >
+              <View style={[styles.menuIcon, { backgroundColor: colors.error + '14' }]}>
+                <Ionicons name="log-out-outline" size={18} color={colors.error} />
+              </View>
+              <Text style={[styles.menuTitle, { color: colors.error }]}>Sign Out</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.error + '60'} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={[styles.version, { color: colors.textTertiary }]}>
@@ -306,146 +265,115 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 16 : 56,
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingBottom: 8,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 20 : 60,
+    paddingHorizontal: PAD,
+    paddingBottom: 12,
   },
-  headerTop: {
+  headerProfile: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-  },
-  avatarButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  avatarGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statsContainer: {
-    paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: 16,
-    paddingBottom: 8,
+  avatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
-  statsCard: {
-    borderRadius: 16,
-    padding: 16,
+  headerTextBlock: {
+    flex: 1,
+    marginLeft: 14,
+    marginRight: 8,
+  },
+  headerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 2,
+  },
+  headerEmail: {
+    fontSize: 13,
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingHorizontal: PAD,
+    gap: 10,
+    marginBottom: 8,
   },
-  statItem: {
+  statCard: {
     flex: 1,
+    borderRadius: 14,
+    padding: 14,
     alignItems: 'center',
-  },
-  statItemBorder: {
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  statIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 6,
   },
   statIconBg: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 11,
     fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.7)',
   },
   section: {
-    paddingTop: 20,
-    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingHorizontal: PAD,
+    marginTop: 16,
   },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 12,
-    marginLeft: 2,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: CARD_GAP,
-  },
-  actionCardWrapper: {
-    width: CARD_SIZE,
-  },
-  actionCard: {
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: CARD_SIZE,
-  },
-  actionCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  actionCardTitle: {
+  sectionLabel: {
     fontSize: 12,
     fontWeight: '600',
-    textAlign: 'center',
+    letterSpacing: 0.3,
+    marginBottom: 8,
+    marginLeft: 4,
+    textTransform: 'uppercase',
   },
-  logoutSection: {
-    paddingHorizontal: HORIZONTAL_PADDING,
-    marginTop: 28,
-    marginBottom: 16,
+  sectionCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
   },
-  logoutButton: {
+  menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 52,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
   },
-  logoutIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  menuIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  logoutText: {
+  menuTitle: {
     flex: 1,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
+  },
+  menuSeparator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 60,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
   },
   version: {
     textAlign: 'center',
     fontSize: 11,
+    marginTop: 24,
     marginBottom: 20,
   },
 });

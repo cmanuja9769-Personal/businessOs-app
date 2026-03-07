@@ -59,7 +59,7 @@ export function Header() {
   const totalResults = results.customers.length + results.items.length + results.invoices.length
 
   return (
-    <header className="bg-background border-b border-border">
+    <header className="glass-subtle border-b border-border/50">
       <div className="flex items-center justify-between px-4 lg:px-6 py-2 gap-3 sm:gap-4">
         {/* Organization Switcher */}
         <div className="flex-shrink-0 hidden sm:block">

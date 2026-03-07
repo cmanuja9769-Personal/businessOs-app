@@ -189,29 +189,29 @@ export function EWayBillSync({ onSyncComplete }: { onSyncComplete?: () => void }
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-3 bg-white rounded-lg border">
-                  <div className="text-2xl font-bold text-gray-900">
+                <div className="text-center p-3 glass-subtle rounded-xl">
+                  <div className="text-2xl font-bold text-foreground">
                     {syncResult.total}
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">Total Found</div>
+                  <div className="text-xs text-muted-foreground mt-1">Total Found</div>
                 </div>
-                <div className="text-center p-3 bg-white rounded-lg border border-green-200">
+                <div className="text-center p-3 glass-subtle rounded-xl">
                   <div className="text-2xl font-bold text-green-600">
                     {syncResult.synced}
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">New Synced</div>
+                  <div className="text-xs text-muted-foreground mt-1">New Synced</div>
                 </div>
-                <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
+                <div className="text-center p-3 glass-subtle rounded-xl">
                   <div className="text-2xl font-bold text-blue-600">
                     {syncResult.updated}
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">Updated</div>
+                  <div className="text-xs text-muted-foreground mt-1">Updated</div>
                 </div>
-                <div className="text-center p-3 bg-white rounded-lg border border-amber-200">
+                <div className="text-center p-3 glass-subtle rounded-xl">
                   <div className="text-2xl font-bold text-amber-600">
                     {syncResult.skipped}
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">Skipped</div>
+                  <div className="text-xs text-muted-foreground mt-1">Skipped</div>
                 </div>
               </div>
             </CardContent>

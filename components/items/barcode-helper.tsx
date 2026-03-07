@@ -105,7 +105,7 @@ export function BarcodeExamples() {
   ]
 
   return (
-    <div className="rounded-lg border p-4 space-y-3">
+    <div className="rounded-2xl glass-subtle p-4 space-y-3">
       <h4 className="text-sm font-semibold flex items-center gap-2">
         <InfoIcon className="h-4 w-4" />
         Barcode Format Examples

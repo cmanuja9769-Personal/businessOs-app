@@ -6,19 +6,26 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import Card from '@components/ui/Card';
-import Loading from '@components/ui/Loading';
+import { SkeletonList } from '@components/ui/Skeleton';
 import EmptyState from '@components/ui/EmptyState';
 import Input from '@components/ui/Input';
 import OfflineBanner from '@components/ui/OfflineBanner';
 import ListFooterLoader from '@components/ui/ListFooterLoader';
+import AnimatedListItem from '@components/ui/AnimatedListItem';
+import SortSelector, { SortOption } from '@components/ui/SortSelector';
 import { spacing, fontSize } from '@theme/spacing';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { NetworkService } from '@services/network';
+import { lightTap } from '@lib/haptics';
+import { commonColors } from '@theme/colors';
+import { useFocusRefresh } from '@hooks/useFocusRefresh';
 
 interface Payment {
   id: string;
@@ -42,16 +49,34 @@ interface Payment {
 const PAGE_SIZE = 50;
 const DEBOUNCE_MS = 300;
 
-const PAYMENT_METHOD_ICONS: Record<string, string> = {
-  cash: '💵',
-  card: '💳',
-  upi: '📱',
-  bank_transfer: '🏦',
-  cheque: '📝',
+const PAYMENT_SORT_OPTIONS: SortOption[] = [
+  { key: 'payment_date', label: 'Date' },
+  { key: 'amount', label: 'Amount' },
+  { key: 'created_at', label: 'Recent' },
+];
+
+const METHOD_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
+  cash: 'cash-outline',
+  card: 'card-outline',
+  upi: 'phone-portrait-outline',
+  bank_transfer: 'business-outline',
+  cheque: 'document-text-outline',
 };
 
-function getPaymentMethodIcon(method: string): string {
-  return PAYMENT_METHOD_ICONS[method?.toLowerCase()] ?? '💰';
+const METHOD_COLOR_MAP: Record<string, string> = {
+  cash: '#22c55e',
+  card: '#6366f1',
+  upi: '#f59e0b',
+  bank_transfer: '#3b82f6',
+  cheque: '#8b5cf6',
+};
+
+function getMethodIcon(method: string): keyof typeof Ionicons.glyphMap {
+  return METHOD_ICON_MAP[method?.toLowerCase()] ?? 'wallet-outline';
+}
+
+function getMethodColor(method: string): string {
+  return METHOD_COLOR_MAP[method?.toLowerCase()] ?? '#64748b';
 }
 
 function normalizeJoinedField(field: unknown): unknown {
@@ -98,6 +123,9 @@ function getPaymentErrorMessage(err: unknown): string {
   return 'Failed to load payments';
 }
 
+const TABS = ['All', 'Receivables', 'Payables'] as const;
+type PaymentTab = typeof TABS[number];
+
 export default function PaymentsScreen() {
   const { colors } = useTheme();
   const { organizationId } = useAuth();
@@ -112,10 +140,68 @@ export default function PaymentsScreen() {
   const [page, setPage] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<PaymentTab>('All');
+  const [stats, setStats] = useState({ totalReceived: 0, totalPaid: 0, receivableCount: 0, payableCount: 0 });
+  const [sortKey, setSortKey] = useState('payment_date');
+  const [sortAsc, setSortAsc] = useState(false);
 
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const currentQueryRef = useRef('');
   const totalCountRef = useRef(0);
+
+  const fetchStats = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const { data } = await supabase
+        .from('payments')
+        .select('invoice_id, purchase_id, amount')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+      if (!data) return;
+      let totalReceived = 0;
+      let totalPaid = 0;
+      let receivableCount = 0;
+      let payableCount = 0;
+      for (const p of data) {
+        if (p.invoice_id) {
+          totalReceived += p.amount || 0;
+          receivableCount++;
+        }
+        if (p.purchase_id) {
+          totalPaid += p.amount || 0;
+          payableCount++;
+        }
+      }
+      setStats({ totalReceived, totalPaid, receivableCount, payableCount });
+    } catch {
+      /* silent */
+    }
+  }, [organizationId]);
+
+  const applyTabAndSearchFilters = useCallback((
+    countQ: ReturnType<typeof supabase.from>,
+    dataQ: ReturnType<typeof supabase.from>,
+    query: string,
+  ) => {
+    let cq = countQ;
+    let dq = dataQ;
+
+    if (activeTab === 'Receivables') {
+      cq = cq.not('invoice_id', 'is', null);
+      dq = dq.not('invoice_id', 'is', null);
+    } else if (activeTab === 'Payables') {
+      cq = cq.not('purchase_id', 'is', null);
+      dq = dq.not('purchase_id', 'is', null);
+    }
+
+    if (query.trim()) {
+      const searchTerm = `%${query.trim()}%`;
+      cq = cq.or(`reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`);
+      dq = dq.or(`reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`);
+    }
+
+    return { countQuery: cq, dataQuery: dq };
+  }, [activeTab]);
 
   const fetchPayments = useCallback(async (
     query: string,
@@ -145,29 +231,21 @@ export default function PaymentsScreen() {
       const from = pageNum * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      let countQuery = supabase
+      const baseCountQuery = supabase
         .from('payments')
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .is('deleted_at', null);
 
-      let dataQuery = supabase
+      const baseDataQuery = supabase
         .from('payments')
         .select('id, invoice_id, purchase_id, amount, payment_date, payment_mode, reference_no, notes, invoices(invoice_number, customer_name), purchases(purchase_number, supplier_name)')
         .eq('organization_id', organizationId)
         .is('deleted_at', null)
-        .order('payment_date', { ascending: false })
+        .order(sortKey, { ascending: sortAsc })
         .range(from, to);
 
-      if (query.trim()) {
-        const searchTerm = `%${query.trim()}%`;
-        countQuery = countQuery.or(
-          `reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`
-        );
-        dataQuery = dataQuery.or(
-          `reference_no.ilike.${searchTerm},payment_mode.ilike.${searchTerm}`
-        );
-      }
+      const { countQuery, dataQuery } = applyTabAndSearchFilters(baseCountQuery, baseDataQuery, query);
 
       const [countResult, dataResult] = await Promise.all([
         isFirstPage ? countQuery : Promise.resolve({ count: totalCountRef.current, error: null }),
@@ -191,7 +269,7 @@ export default function PaymentsScreen() {
       setIsLoadingMore(false);
       setIsRefreshing(false);
     }
-  }, [organizationId]);
+  }, [organizationId, applyTabAndSearchFilters, sortKey, sortAsc]);
 
   useEffect(() => {
     currentQueryRef.current = searchQuery;
@@ -212,8 +290,20 @@ export default function PaymentsScreen() {
   }, [searchQuery, fetchPayments]);
 
   useEffect(() => {
-    if (organizationId) fetchPayments('', 0);
-  }, [organizationId, fetchPayments]);
+    if (organizationId) {
+      fetchPayments('', 0);
+      fetchStats();
+    }
+  }, [organizationId, fetchPayments, fetchStats]);
+
+  useEffect(() => {
+    fetchPayments(searchQuery, 0);
+  }, [activeTab, fetchPayments, searchQuery]);
+
+  useFocusRefresh(() => {
+    fetchPayments(searchQuery, 0);
+    fetchStats();
+  });
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && !loading) {
@@ -225,7 +315,8 @@ export default function PaymentsScreen() {
     setIsRefreshing(true);
     setPage(0);
     fetchPayments(searchQuery, 0, true);
-  }, [searchQuery, fetchPayments]);
+    fetchStats();
+  }, [searchQuery, fetchPayments, fetchStats]);
 
   useEffect(() => {
     const unsubscribe = NetworkService.subscribeToNetworkChanges((connected) => {
@@ -235,61 +326,80 @@ export default function PaymentsScreen() {
     return () => unsubscribe();
   }, [searchQuery, error, fetchPayments]);
 
-  const renderItem = useCallback(({ item }: { item: Payment }) => (
-    <Card style={styles.paymentCard}>
-      <View style={styles.paymentHeader}>
-        <View style={styles.paymentInfo}>
-          <Text style={[styles.paymentAmount, { color: colors.text }]}>
-            {formatCurrency(item.amount)}
-          </Text>
-          <Text style={[styles.paymentDate, { color: colors.textSecondary }]}>
-            {formatDate(item.payment_date)}
-          </Text>
-        </View>
-        <Text style={styles.methodIcon}>
-          {getPaymentMethodIcon(item.payment_mode)}
-        </Text>
-      </View>
+  const renderItem = useCallback(({ item, index }: { item: Payment; index: number }) => {
+    const methodColor = getMethodColor(item.payment_mode);
+    return (
+      <AnimatedListItem index={index}>
+        <Card style={styles.paymentCard}>
+          <View style={styles.paymentHeader}>
+            <View style={[styles.methodIconBadge, { backgroundColor: methodColor + '18' }]}>
+              <Ionicons name={getMethodIcon(item.payment_mode)} size={22} color={methodColor} />
+            </View>
+            <View style={styles.paymentInfo}>
+              <Text style={[styles.paymentAmount, { color: colors.text }]}>
+                {formatCurrency(item.amount)}
+              </Text>
+              <Text style={[styles.paymentDate, { color: colors.textSecondary }]}>
+                {formatDate(item.payment_date)}
+              </Text>
+            </View>
+            <View style={[styles.methodBadge, { backgroundColor: methodColor + '18' }]}>
+              <Text style={[styles.methodText, { color: methodColor }]}>
+                {(item.payment_mode || '').replace('_', ' ').toUpperCase()}
+              </Text>
+            </View>
+          </View>
 
-      {item.invoices && (
-        <View style={styles.paymentDetails}>
-          <Text style={[styles.invoiceNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-            Invoice: {item.invoices.invoice_number}
-          </Text>
-          {item.invoices.customer_name && (
-            <Text style={[styles.customerName, { color: colors.textSecondary }]} numberOfLines={1}>
-              Customer: {item.invoices.customer_name}
-            </Text>
+          {item.invoices && (
+            <View style={styles.paymentDetails}>
+              <View style={styles.detailRow}>
+                <Ionicons name="receipt-outline" size={14} color={colors.textSecondary} />
+                <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {item.invoices.invoice_number}
+                </Text>
+              </View>
+              {item.invoices.customer_name && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
+                  <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {item.invoices.customer_name}
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
-        </View>
-      )}
 
-      {item.purchases && (
-        <View style={styles.paymentDetails}>
-          <Text style={[styles.invoiceNumber, { color: colors.textSecondary }]} numberOfLines={1}>
-            Purchase: {item.purchases.purchase_number}
-          </Text>
-          {item.purchases.supplier_name && (
-            <Text style={[styles.customerName, { color: colors.textSecondary }]} numberOfLines={1}>
-              Supplier: {item.purchases.supplier_name}
-            </Text>
+          {item.purchases && (
+            <View style={styles.paymentDetails}>
+              <View style={styles.detailRow}>
+                <Ionicons name="cart-outline" size={14} color={colors.textSecondary} />
+                <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {item.purchases.purchase_number}
+                </Text>
+              </View>
+              {item.purchases.supplier_name && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="storefront-outline" size={14} color={colors.textSecondary} />
+                  <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {item.purchases.supplier_name}
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
-        </View>
-      )}
 
-      {item.reference_no && (
-        <Text style={[styles.reference, { color: colors.textSecondary }]} numberOfLines={1}>
-          Ref: {item.reference_no}
-        </Text>
-      )}
-
-      <View style={[styles.methodBadge, { backgroundColor: colors.primary + '20' }]}>
-        <Text style={[styles.methodText, { color: colors.primary }]}>
-          {(item.payment_mode || '').replace('_', ' ').toUpperCase()}
-        </Text>
-      </View>
-    </Card>
-  ), [colors]);
+          {item.reference_no && (
+            <View style={styles.detailRow}>
+              <Ionicons name="bookmark-outline" size={14} color={colors.textSecondary} />
+              <Text style={[styles.detailText, { color: colors.textSecondary }]} numberOfLines={1}>
+                Ref: {item.reference_no}
+              </Text>
+            </View>
+          )}
+        </Card>
+      </AnimatedListItem>
+    );
+  }, [colors]);
 
   const renderListFooter = useCallback(() => (
     <ListFooterLoader
@@ -323,12 +433,42 @@ export default function PaymentsScreen() {
   }, [loading, error, searchQuery, handleRefresh]);
 
   if (loading && payments.length === 0 && !searchQuery) {
-    return <Loading fullScreen text="Loading payments..." />;
+    return <SkeletonList />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isOffline && <OfflineBanner onRetry={handleRefresh} />}
+
+      <View style={styles.statsRow}>
+        <Card style={[styles.statCard, { borderLeftColor: commonColors.stockHigh, borderLeftWidth: 3 }]}>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Received</Text>
+          <Text style={[styles.statValue, { color: commonColors.stockHigh }]}>{formatCurrency(stats.totalReceived)}</Text>
+          <Text style={[styles.statCount, { color: colors.textSecondary }]}>{stats.receivableCount} payments</Text>
+        </Card>
+        <Card style={[styles.statCard, { borderLeftColor: commonColors.stockOut, borderLeftWidth: 3 }]}>
+          <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Paid Out</Text>
+          <Text style={[styles.statValue, { color: commonColors.stockOut }]}>{formatCurrency(stats.totalPaid)}</Text>
+          <Text style={[styles.statCount, { color: colors.textSecondary }]}>{stats.payableCount} payments</Text>
+        </Card>
+      </View>
+
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[
+              styles.tab,
+              activeTab === tab && { backgroundColor: colors.primary },
+            ]}
+            onPress={() => { lightTap(); setActiveTab(tab); }}
+          >
+            <Text style={[styles.tabText, { color: activeTab === tab ? '#fff' : colors.textSecondary }]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <View style={styles.searchWrapper}>
         <Input
@@ -348,22 +488,21 @@ export default function PaymentsScreen() {
         )}
       </View>
 
+      <SortSelector
+        options={PAYMENT_SORT_OPTIONS}
+        activeKey={sortKey}
+        ascending={sortAsc}
+        onSort={(key, asc) => { setSortKey(key); setSortAsc(asc); }}
+      />
+
       <FlatList
         data={payments}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          payments.length === 0 && styles.listContentEmpty,
-        ]}
+        contentContainerStyle={[styles.listContent, payments.length === 0 && styles.listContentEmpty]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
@@ -374,6 +513,7 @@ export default function PaymentsScreen() {
         windowSize={10}
         initialNumToRender={15}
         keyboardShouldPersistTaps="handled"
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
       />
     </View>
   );
@@ -382,6 +522,46 @@ export default function PaymentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  statCard: {
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '500',
+  },
+  statValue: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  statCount: {
+    fontSize: fontSize.xs,
+    marginTop: 2,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    borderRadius: spacing.sm,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
   },
   searchWrapper: {
     paddingHorizontal: spacing.md,
@@ -404,50 +584,52 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   paymentCard: {
-    marginBottom: spacing.md,
+    padding: 14,
   },
   paymentHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 12,
     marginBottom: spacing.sm,
+  },
+  methodIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   paymentInfo: {
     flex: 1,
   },
   paymentAmount: {
-    fontSize: fontSize.xl,
-    fontWeight: 'bold',
-    marginBottom: spacing.xs / 2,
+    fontSize: fontSize.lg,
+    fontWeight: '700',
   },
   paymentDate: {
     fontSize: fontSize.sm,
-  },
-  methodIcon: {
-    fontSize: 32,
-  },
-  paymentDetails: {
-    marginBottom: spacing.sm,
-  },
-  invoiceNumber: {
-    fontSize: fontSize.sm,
-    marginBottom: spacing.xs / 2,
-  },
-  customerName: {
-    fontSize: fontSize.sm,
-  },
-  reference: {
-    fontSize: fontSize.sm,
-    marginBottom: spacing.sm,
+    marginTop: 2,
   },
   methodBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs / 2,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   methodText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  paymentDetails: {
+    gap: 4,
+    marginBottom: spacing.xs,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  detailText: {
+    fontSize: fontSize.sm,
+    flex: 1,
   },
 });

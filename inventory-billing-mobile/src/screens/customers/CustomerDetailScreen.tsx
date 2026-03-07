@@ -19,8 +19,10 @@ import { spacing, fontSize, borderRadius } from '@theme/spacing';
 import { supabase } from '@lib/supabase';
 import { formatCurrency, formatDate } from '@lib/utils';
 import { CustomerDetailRouteProp } from '@navigation/types';
+import { lightTap } from '@lib/haptics';
 
 const { width: _screenWidth } = Dimensions.get('window');
+const JUSTIFY_SPACE_BETWEEN = 'space-between';
 
 type DbCustomer = {
   id: string;
@@ -47,6 +49,76 @@ type DbInvoice = {
   created_at?: string | null;
 };
 
+type AgingData = {
+  current: number;
+  days30: number;
+  days60: number;
+  days90: number;
+  over90: number;
+};
+
+function getInvoiceBalance(invoice: DbInvoice): number {
+  if (invoice.balance !== null && invoice.balance !== undefined) {
+    return Number(invoice.balance);
+  }
+
+  return Number(invoice.total || 0) - Number(invoice.paid_amount || 0);
+}
+
+function getInvoiceDueDate(invoice: DbInvoice): Date {
+  if (invoice.due_date) return new Date(invoice.due_date);
+  return new Date(invoice.invoice_date || invoice.created_at || '');
+}
+
+function getAgingBucket(daysDiff: number): keyof AgingData {
+  if (daysDiff <= 0) return 'current';
+  if (daysDiff <= 30) return 'days30';
+  if (daysDiff <= 60) return 'days60';
+  if (daysDiff <= 90) return 'days90';
+  return 'over90';
+}
+
+function calculateAgingData(invoices: DbInvoice[]): AgingData {
+  const now = new Date();
+  const aging: AgingData = { current: 0, days30: 0, days60: 0, days90: 0, over90: 0 };
+
+  for (const invoice of invoices) {
+    const balance = getInvoiceBalance(invoice);
+    if (balance <= 0) continue;
+
+    const daysDiff = Math.floor((now.getTime() - getInvoiceDueDate(invoice).getTime()) / (1000 * 60 * 60 * 24));
+    aging[getAgingBucket(daysDiff)] += balance;
+  }
+
+  return aging;
+}
+
+async function fetchCustomerDetailData(organizationId: string, customerId: string) {
+  return Promise.all([
+    supabase
+      .from('customers')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('id', customerId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+    supabase
+      .from('invoices')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('customer_id', customerId)
+      .is('deleted_at', null)
+      .order('invoice_date', { ascending: false }),
+    supabase
+      .from('payments')
+      .select('id, amount, payment_date, payment_mode, reference_number')
+      .eq('organization_id', organizationId)
+      .eq('customer_id', customerId)
+      .is('deleted_at', null)
+      .order('payment_date', { ascending: false }),
+  ]);
+}
+
 function getStatusBg(status: string): string {
   if (status === 'paid') return '#10B98120';
   if (status === 'pending') return '#F59E0B20';
@@ -70,7 +142,9 @@ export default function CustomerDetailScreen() {
   const [invoices, setInvoices] = useState<DbInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'invoices'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'aging' | 'payments'>('overview');
+  const [payments, setPayments] = useState<{ id: string; amount: number; payment_date: string; payment_mode: string; reference_number?: string }[]>([]);
+  const [agingData, setAgingData] = useState<AgingData>({ current: 0, days30: 0, days60: 0, days90: 0, over90: 0 });
 
   const cancelledRef = useRef(false);
 
@@ -82,22 +156,7 @@ export default function CustomerDetailScreen() {
         return;
       }
 
-      const [customerRes, invoicesRes] = await Promise.all([
-        supabase
-          .from('customers')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .eq('id', customerId)
-          .is('deleted_at', null)
-          .maybeSingle(),
-        supabase
-          .from('invoices')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .eq('customer_id', customerId)
-          .is('deleted_at', null)
-          .order('invoice_date', { ascending: false }),
-      ]);
+      const [customerRes, invoicesRes, paymentsRes] = await fetchCustomerDetailData(organizationId, customerId);
 
       if (cancelledRef.current) return;
 
@@ -105,7 +164,10 @@ export default function CustomerDetailScreen() {
       if (invoicesRes.error) throw invoicesRes.error;
 
       setCustomer((customerRes.data as DbCustomer) ?? null);
-      setInvoices((invoicesRes.data as DbInvoice[]) ?? []);
+      const invoiceRows = (invoicesRes.data as DbInvoice[]) ?? [];
+      setInvoices(invoiceRows);
+      setPayments((paymentsRes.data || []) as { id: string; amount: number; payment_date: string; payment_mode: string; reference_number?: string }[]);
+      setAgingData(calculateAgingData(invoiceRows));
     } catch (error) {
       console.error('[CUSTOMER_DETAIL] fetchAll error:', error);
     } finally {
@@ -173,13 +235,13 @@ export default function CustomerDetailScreen() {
   const customerAddress = (customer as DbCustomer & { address?: string }).address ?? customer.billing_address ?? null;
   const customerGstin = (customer as DbCustomer & { gst_number?: string }).gst_number ?? customer.gstin ?? null;
 
-  const TabButton = ({ id, label }: { id: 'overview' | 'invoices', label: string }) => (
+  const TabButton = ({ id, label }: { id: 'overview' | 'invoices' | 'aging' | 'payments', label: string }) => (
     <TouchableOpacity
       style={[
         styles.tabButton,
         activeTab === id && { borderBottomColor: colors.primary, borderBottomWidth: 2 }
       ]}
-      onPress={() => setActiveTab(id)}
+      onPress={() => { lightTap(); setActiveTab(id); }}
     >
       <Text style={[
         styles.tabLabel,
@@ -190,9 +252,204 @@ export default function CustomerDetailScreen() {
     </TouchableOpacity>
   );
 
+  const renderOverviewTab = () => (
+    <View style={styles.overviewContainer}>
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total Spent</Text>
+          <Text style={[styles.statValue, { color: colors.success }]}>
+            {formatCurrency(summary.totalPaid)}
+          </Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Outstanding</Text>
+          <Text style={[styles.statValue, { color: colors.warning }]}>
+            {formatCurrency(summary.totalBalance)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Invoices</Text>
+          <Text style={[styles.statValue, { color: colors.text }]}>{summary.invoicesCount}</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total Invoiced</Text>
+          <Text style={[styles.statValue, { color: colors.primary }]}>
+            {formatCurrency(summary.totalInvoiced)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.section, { backgroundColor: colors.card }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Details</Text>
+
+        <View style={styles.detailItem}>
+          <View style={styles.detailIcon}>
+            <Ionicons name="location" size={20} color={colors.textMuted} />
+          </View>
+          <View style={styles.detailContent}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Address</Text>
+            <Text style={[styles.detailText, { color: colors.text }]}>
+              {customerAddress || 'No address provided'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.detailItem}>
+          <View style={styles.detailIcon}>
+            <Ionicons name="document-text" size={20} color={colors.textMuted} />
+          </View>
+          <View style={styles.detailContent}>
+            <Text style={[styles.detailLabel, { color: colors.textMuted }]}>GSTIN</Text>
+            <Text style={[styles.detailText, { color: colors.text }]}>
+              {customerGstin || 'Not registered'}
+            </Text>
+          </View>
+        </View>
+
+        {customer.created_at && (
+          <View style={styles.detailItem}>
+            <View style={styles.detailIcon}>
+              <Ionicons name="calendar" size={20} color={colors.textMuted} />
+            </View>
+            <View style={styles.detailContent}>
+              <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Customer Since</Text>
+              <Text style={[styles.detailText, { color: colors.text }]}>
+                {formatDate(customer.created_at)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderAgingTab = () => (
+    <View style={styles.agingContainer}>
+      <View style={[styles.agingCard, { backgroundColor: colors.card }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Receivables Aging</Text>
+        {[
+          { label: 'Current (Not Due)', value: agingData.current, color: '#10B981' },
+          { label: '1-30 Days', value: agingData.days30, color: '#F59E0B' },
+          { label: '31-60 Days', value: agingData.days60, color: '#F97316' },
+          { label: '61-90 Days', value: agingData.days90, color: '#EF4444' },
+          { label: '90+ Days', value: agingData.over90, color: '#DC2626' },
+        ].map(bucket => (
+          <View key={bucket.label} style={styles.agingRow}>
+            <View style={styles.agingLabelRow}>
+              <View style={[styles.agingDot, { backgroundColor: bucket.color }]} />
+              <Text style={[styles.agingLabel, { color: colors.text }]}>{bucket.label}</Text>
+            </View>
+            <Text style={[styles.agingValue, { color: bucket.value > 0 ? bucket.color : colors.textSecondary }]}>
+              {formatCurrency(bucket.value)}
+            </Text>
+          </View>
+        ))}
+        <View style={[styles.agingTotalRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.agingTotalLabel, { color: colors.text }]}>Total Outstanding</Text>
+          <Text style={[styles.agingTotalValue, { color: colors.warning }]}>
+            {formatCurrency(agingData.current + agingData.days30 + agingData.days60 + agingData.days90 + agingData.over90)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderPaymentsTab = () => (
+    <View style={styles.invoicesContainer}>
+      {payments.length === 0 ? (
+        <View style={styles.emptyPayments}>
+          <Ionicons name="cash-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyPaymentsText, { color: colors.textMuted }]}>No payments recorded</Text>
+        </View>
+      ) : (
+        payments.map((pmt) => (
+          <View key={pmt.id} style={[styles.invoiceItem, { backgroundColor: colors.card }]}>
+            <View style={styles.invoiceLeft}>
+              <Text style={[styles.invoiceNumber, { color: colors.text }]}>
+                {formatCurrency(pmt.amount)}
+              </Text>
+              <Text style={[styles.invoiceDate, { color: colors.textMuted }]}>
+                {formatDate(pmt.payment_date)}
+              </Text>
+            </View>
+            <View style={styles.invoiceRight}>
+              <View style={[styles.statusBadge, { backgroundColor: '#10B98120' }]}>
+                <Text style={[styles.statusText, { color: '#10B981' }]}>
+                  {pmt.payment_mode || 'cash'}
+                </Text>
+              </View>
+              {pmt.reference_number && (
+                <Text style={[styles.invoiceDate, { color: colors.textMuted }]}>Ref: {pmt.reference_number}</Text>
+              )}
+            </View>
+          </View>
+        ))
+      )}
+    </View>
+  );
+
+  const renderInvoicesTab = () => (
+    <View style={styles.invoicesContainer}>
+      <TouchableOpacity
+        style={[styles.createButton, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('InvoicesTab', {
+          screen: 'CreateInvoice',
+          params: { customerId: customer.id },
+        })}
+      >
+        <Ionicons name="add" size={24} color="#FFF" />
+        <Text style={styles.createButtonText}>Create New Invoice</Text>
+      </TouchableOpacity>
+
+      {invoices.map((inv) => (
+        <TouchableOpacity
+          key={inv.id}
+          style={[styles.invoiceItem, { backgroundColor: colors.card }]}
+          onPress={() => navigation.navigate('InvoicesTab', {
+            screen: 'InvoiceDetail',
+            params: { invoiceId: inv.id },
+          })}
+        >
+          <View style={styles.invoiceLeft}>
+            <Text style={[styles.invoiceNumber, { color: colors.text }]}>
+              {inv.invoice_number || 'Draft'}
+            </Text>
+            <Text style={[styles.invoiceDate, { color: colors.textMuted }]}>
+              {formatDate(inv.invoice_date || inv.created_at || '')}
+            </Text>
+          </View>
+          <View style={styles.invoiceRight}>
+            <Text style={[styles.invoiceAmount, { color: colors.text }]}>
+              {formatCurrency(inv.total || 0)}
+            </Text>
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusBg(inv.status ?? '') }
+            ]}>
+              <Text style={[
+                styles.statusText,
+                { color: getStatusColor(inv.status ?? '') }
+              ]}>
+                {inv.status}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderActiveTab = () => {
+    if (activeTab === 'overview') return renderOverviewTab();
+    if (activeTab === 'aging') return renderAgingTab();
+    if (activeTab === 'payments') return renderPaymentsTab();
+    return renderInvoicesTab();
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.card }]}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -205,23 +462,25 @@ export default function CustomerDetailScreen() {
             <Text style={[styles.editText, { color: colors.primary }]}>Edit</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.profileSection}>
           <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarText}>{customer.name.charAt(0).toUpperCase()}</Text>
+            <Text style={styles.avatarText}>
+              {customer.name?.charAt(0)?.toUpperCase() || '?'}
+            </Text>
           </View>
           <Text style={[styles.customerName, { color: colors.text }]}>{customer.name}</Text>
           <View style={styles.contactRow}>
             {customerPhone && (
-              <TouchableOpacity onPress={handleCall} style={[styles.contactChip, { backgroundColor: colors.background }]}>
-                <Ionicons name="call" size={16} color={colors.primary} />
-                <Text style={[styles.contactText, { color: colors.text }]}>{customerPhone}</Text>
+              <TouchableOpacity style={[styles.contactChip, { backgroundColor: colors.success + '15' }]} onPress={handleCall}>
+                <Ionicons name="call" size={16} color={colors.success} />
+                <Text style={[styles.contactText, { color: colors.success }]}>{customerPhone}</Text>
               </TouchableOpacity>
             )}
             {customerEmail && (
-              <TouchableOpacity onPress={handleEmail} style={[styles.contactChip, { backgroundColor: colors.background }]}>
+              <TouchableOpacity style={[styles.contactChip, { backgroundColor: colors.primary + '15' }]} onPress={handleEmail}>
                 <Ionicons name="mail" size={16} color={colors.primary} />
-                <Text style={[styles.contactText, { color: colors.text }]}>Email</Text>
+                <Text style={[styles.contactText, { color: colors.primary }]}>{customerEmail}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -229,111 +488,18 @@ export default function CustomerDetailScreen() {
 
         <View style={styles.tabs}>
           <TabButton id="overview" label="Overview" />
-          <TabButton id="invoices" label={`Invoices (${invoices.length})`} />
+          <TabButton id="invoices" label="Invoices" />
+          <TabButton id="aging" label="Aging" />
+          <TabButton id="payments" label="Payments" />
         </View>
       </View>
 
       <ScrollView
+        style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        {activeTab === 'overview' ? (
-          <View style={styles.overviewContainer}>
-            {/* Stats Cards */}
-            <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Total Spent</Text>
-                <Text style={[styles.statValue, { color: colors.success }]}>
-                  {formatCurrency(summary.totalPaid)}
-                </Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                <Text style={[styles.statLabel, { color: colors.textMuted }]}>Outstanding</Text>
-                <Text style={[styles.statValue, { color: colors.warning }]}>
-                  {formatCurrency(summary.totalBalance)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Details Section */}
-            <View style={[styles.section, { backgroundColor: colors.card }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Details</Text>
-              
-              <View style={styles.detailItem}>
-                <View style={styles.detailIcon}>
-                  <Ionicons name="location" size={20} color={colors.textMuted} />
-                </View>
-                <View style={styles.detailContent}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>Address</Text>
-                  <Text style={[styles.detailText, { color: colors.text }]}>
-                    {customerAddress || 'No address provided'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.detailItem}>
-                <View style={styles.detailIcon}>
-                  <Ionicons name="document-text" size={20} color={colors.textMuted} />
-                </View>
-                <View style={styles.detailContent}>
-                  <Text style={[styles.detailLabel, { color: colors.textMuted }]}>GSTIN</Text>
-                  <Text style={[styles.detailText, { color: colors.text }]}>
-                    {customerGstin || 'Not registered'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.invoicesContainer}>
-            <TouchableOpacity
-              style={[styles.createButton, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('InvoicesTab', {
-                screen: 'CreateInvoice',
-                params: { customerId: customer.id },
-              })}
-            >
-              <Ionicons name="add" size={24} color="#FFF" />
-              <Text style={styles.createButtonText}>Create New Invoice</Text>
-            </TouchableOpacity>
-
-            {invoices.map((inv) => (
-              <TouchableOpacity
-                key={inv.id}
-                style={[styles.invoiceItem, { backgroundColor: colors.card }]}
-                onPress={() => navigation.navigate('InvoicesTab', {
-                  screen: 'InvoiceDetail',
-                  params: { invoiceId: inv.id },
-                })}
-              >
-                <View style={styles.invoiceLeft}>
-                  <Text style={[styles.invoiceNumber, { color: colors.text }]}>
-                    {inv.invoice_number || 'Draft'}
-                  </Text>
-                  <Text style={[styles.invoiceDate, { color: colors.textMuted }]}>
-                    {formatDate(inv.invoice_date || inv.created_at || '')}
-                  </Text>
-                </View>
-                <View style={styles.invoiceRight}>
-                  <Text style={[styles.invoiceAmount, { color: colors.text }]}>
-                    {formatCurrency(inv.total || 0)}
-                  </Text>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusBg(inv.status ?? '') }
-                  ]}>
-                    <Text style={[
-                      styles.statusText,
-                      { color: getStatusColor(inv.status ?? '') }
-                    ]}>
-                      {inv.status}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        {renderActiveTab()}
       </ScrollView>
     </View>
   );
@@ -516,7 +682,7 @@ const styles = StyleSheet.create({
   },
   invoiceItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
     alignItems: 'center',
     padding: spacing.md,
     borderRadius: borderRadius.md,
@@ -557,5 +723,64 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: fontSize.lg,
     fontWeight: '600',
+  },
+  agingContainer: {
+    gap: spacing.md,
+  },
+  agingCard: {
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  agingRow: {
+    flexDirection: 'row',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  agingLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  agingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  agingLabel: {
+    fontSize: fontSize.md,
+  },
+  agingValue: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+  },
+  agingTotalRow: {
+    flexDirection: 'row',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    marginTop: spacing.sm,
+    borderTopWidth: 1,
+  },
+  agingTotalLabel: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  agingTotalValue: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+  },
+  emptyPayments: {
+    alignItems: 'center',
+    paddingTop: 40,
+    gap: spacing.sm,
+  },
+  emptyPaymentsText: {
+    fontSize: fontSize.md,
   },
 });

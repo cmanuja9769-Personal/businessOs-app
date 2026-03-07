@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { GlassCard } from "@/components/ui/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -190,48 +191,43 @@ export default function BarcodeLogsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Hash className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Prints</p>
-                <p className="text-xl font-bold">{totalCount}</p>
-              </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-blue-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Total Prints</p>
+              <div className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400">{totalCount}</div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Barcode className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Labels (This Page)</p>
-                <p className="text-xl font-bold">{totalLabels}</p>
-              </div>
+            <div className="p-2 rounded-2xl neo-inset bg-blue-500/10 flex-shrink-0">
+              <Hash className="h-4 w-4 text-blue-600" />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <Package className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Batch / Individual (This Page)</p>
-                <p className="text-xl font-bold">
-                  {batchCount} / {individualCount}
-                </p>
-              </div>
+          </div>
+        </GlassCard>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-green-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Labels (This Page)</p>
+              <div className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-400">{totalLabels}</div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="p-2 rounded-2xl neo-inset bg-green-500/10 flex-shrink-0">
+              <Barcode className="h-4 w-4 text-green-600" />
+            </div>
+          </div>
+        </GlassCard>
+        <GlassCard glow className="relative overflow-hidden group">
+          <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full opacity-[0.07] blur-2xl bg-purple-500" />
+          <div className="flex items-start justify-between gap-2 relative">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[0.6875rem] font-medium text-muted-foreground uppercase tracking-wider">Batch / Individual</p>
+              <div className="text-xl sm:text-2xl font-bold text-purple-700 dark:text-purple-400">{batchCount} / {individualCount}</div>
+            </div>
+            <div className="p-2 rounded-2xl neo-inset bg-purple-500/10 flex-shrink-0">
+              <Package className="h-4 w-4 text-purple-600" />
+            </div>
+          </div>
+        </GlassCard>
       </div>
 
       <Card>

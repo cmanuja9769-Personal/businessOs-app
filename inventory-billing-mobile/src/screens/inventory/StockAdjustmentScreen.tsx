@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { supabase } from '@lib/supabase';
+import { fetchWarehousesForOrganization } from '@lib/warehouse-service';
 import { ScreenHeader } from '@components/ui/ScreenHeader';
 import { spacing, fontSize, borderRadius } from '@theme/spacing';
 import type { InventoryStackParamList } from '../../navigation/types';
@@ -30,7 +31,24 @@ interface Item {
   unit: string;
 }
 
+interface Warehouse {
+  id: string;
+  name: string;
+  code?: string | null;
+  is_default?: boolean;
+}
+
+interface RecentAdjustment {
+  id: string;
+  quantity_change: number;
+  movement_type: string;
+  notes: string | null;
+  created_at: string;
+}
+
 type AdjustmentType = 'increase' | 'decrease';
+
+const JUSTIFY_SPACE_BETWEEN = 'space-between' as const;
 
 interface ReasonOption {
   value: string;
@@ -74,17 +92,45 @@ const formatAdjustmentNote = (type: AdjustmentType, qty: number, unit: string, r
 const formatSuccessMessage = (type: AdjustmentType, qty: number, unit: string): string =>
   `Stock ${type === 'increase' ? 'increased' : 'decreased'} by ${qty} ${unit}`;
 
+const getMovementType = (type: AdjustmentType, reason: string): 'stock_in' | 'adjustment' => {
+  if (type === 'increase') return 'stock_in';
+  if (reason === 'correction') return 'adjustment';
+  return 'adjustment';
+};
+
 const getErrorMessage = (err: unknown, fallback: string): string =>
   err instanceof Error ? err.message : fallback;
 
+const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? ('padding' as const) : undefined;
+
+const getEntryNotes = (notes: string | null): string => notes || 'Manual adjustment';
+
+const buildToggleStyle = (
+  active: boolean,
+  isDark: boolean,
+  activeColor: string,
+  darkBg: string,
+  lightBg: string,
+  colors: { border: string; textSecondary: string; surface: string },
+  icon: 'add-circle-outline' | 'remove-circle-outline',
+  label: string,
+) => ({
+  backgroundColor: getToggleBg(active, isDark, darkBg, lightBg, colors.surface),
+  borderColor: active ? activeColor : colors.border,
+  textColor: active ? activeColor : colors.textSecondary,
+  icon,
+  label,
+});
+
 const validateAdjustmentFields = (
   item: Item | null,
+  warehouseId: string,
   quantity: string,
   reason: string,
   organizationId: string | null,
   userId: string | null,
 ): string | null => {
-  if (!item || !quantity || !reason || !organizationId || !userId) {
+  if (!item || !warehouseId || !quantity || !reason || !organizationId || !userId) {
     return 'Please fill all required fields';
   }
   const qty = parseFloat(quantity);
@@ -100,19 +146,96 @@ const generateAdjustmentNo = (): string => {
   return `ADJ-${timestamp}-${seq}`;
 };
 
+const updateWarehouseStockForAdjustment = async (
+  organizationId: string,
+  itemId: string,
+  warehouseId: string,
+  adjustmentType: AdjustmentType,
+  quantity: number,
+  qtyChange: number,
+  warehouseName: string,
+  unit: string,
+) => {
+  const { data: warehouseStock, error: warehouseStockError } = await supabase
+    .from('item_warehouse_stock')
+    .select('id, quantity')
+    .eq('organization_id', organizationId)
+    .eq('item_id', itemId)
+    .eq('warehouse_id', warehouseId)
+    .maybeSingle();
+
+  if (warehouseStockError) throw warehouseStockError;
+
+  const quantityBefore = warehouseStock?.quantity || 0;
+  if (adjustmentType === 'decrease' && quantityBefore < quantity) {
+    throw new Error(`Insufficient stock in ${warehouseName}. Available: ${quantityBefore} ${unit}`);
+  }
+
+  const quantityAfter = quantityBefore + qtyChange;
+
+  if (!warehouseStock?.id) {
+    if (adjustmentType === 'decrease') {
+      throw new Error(`No stock record found in ${warehouseName}`);
+    }
+
+    const { error: warehouseInsertError } = await supabase
+      .from('item_warehouse_stock')
+      .insert({ organization_id: organizationId, item_id: itemId, warehouse_id: warehouseId, quantity: quantityAfter });
+    if (warehouseInsertError) throw warehouseInsertError;
+    return quantityAfter;
+  }
+
+  const { error: warehouseUpdateError } = await supabase
+    .from('item_warehouse_stock')
+    .update({ quantity: quantityAfter })
+    .eq('id', warehouseStock.id);
+  if (warehouseUpdateError) throw warehouseUpdateError;
+
+  return quantityAfter;
+};
+
+const buildRecentAdjustmentsQuery = (organizationId: string, itemId?: string) => {
+  const query = supabase
+    .from('stock_movements')
+    .select('id, quantity_change, movement_type, notes, created_at')
+    .eq('organization_id', organizationId)
+    .eq('reference_type', 'adjustment')
+    .order('created_at', { ascending: false })
+    .limit(8);
+
+  return itemId ? query.eq('item_id', itemId) : query;
+};
+
 const saveAdjustment = async (params: {
   organizationId: string;
   itemId: string;
+  warehouseId: string;
   adjustmentType: AdjustmentType;
   quantity: number;
   reason: string;
   notes: string;
   userId: string;
-  entryQuantity: number;
   unit: string;
-  currentStock: number;
+  warehouseName: string;
 }) => {
   const adjustmentNo = generateAdjustmentNo();
+  const qtyChange = computeEntryQuantity(params.adjustmentType, params.quantity);
+
+  const quantityAfter = await updateWarehouseStockForAdjustment(
+    params.organizationId, params.itemId, params.warehouseId,
+    params.adjustmentType, params.quantity, qtyChange,
+    params.warehouseName, params.unit,
+  );
+
+  const { data: warehouseRows, error: warehouseRowsError } = await supabase
+    .from('item_warehouse_stock')
+    .select('quantity')
+    .eq('organization_id', params.organizationId)
+    .eq('item_id', params.itemId);
+
+  if (warehouseRowsError) throw warehouseRowsError;
+
+  const newStock = (warehouseRows || []).reduce((sum, row) => sum + (row.quantity || 0), 0);
 
   const { error: adjError } = await supabase.from('stock_adjustments').insert({
     organization_id: params.organizationId,
@@ -121,7 +244,7 @@ const saveAdjustment = async (params: {
     adjustment_type: params.adjustmentType,
     quantity: params.quantity,
     reason: params.reason,
-    notes: params.notes.trim() || null,
+    notes: [params.warehouseName, params.notes.trim()].filter(Boolean).join(' • ') || null,
     adjusted_by: params.userId,
     status: 'approved',
   });
@@ -130,21 +253,24 @@ const saveAdjustment = async (params: {
   const { error: movError } = await supabase.from('stock_movements').insert({
     organization_id: params.organizationId,
     item_id: params.itemId,
-    transaction_type: 'ADJUSTMENT',
-    entry_quantity: params.entryQuantity,
+    movement_type: getMovementType(params.adjustmentType, params.reason),
+    quantity_before: quantityAfter - qtyChange,
+    quantity_change: qtyChange,
+    quantity_after: quantityAfter,
     reference_type: 'adjustment',
     reference_no: adjustmentNo,
-    notes: formatAdjustmentNote(params.adjustmentType, params.quantity, params.unit, params.reason),
+    notes: `${params.warehouseName} • ${formatAdjustmentNote(params.adjustmentType, params.quantity, params.unit, params.reason)}`,
     created_by: params.userId,
   });
   if (movError) throw movError;
 
-  const newStock = params.currentStock + params.entryQuantity;
   const { error: stockError } = await supabase
     .from('items')
     .update({ current_stock: newStock })
     .eq('id', params.itemId);
   if (stockError) throw stockError;
+
+  return { newStock, quantityAfter };
 };
 
 function ItemPickerSection({
@@ -268,6 +394,10 @@ export default function StockAdjustmentScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showItemPicker, setShowItemPicker] = useState(!route.params?.itemId);
   const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>('increase');
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+  const [warehouseStock, setWarehouseStock] = useState<number | null>(null);
+  const [recentAdjustments, setRecentAdjustments] = useState<RecentAdjustment[]>([]);
   const [quantity, setQuantity] = useState('');
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
@@ -275,32 +405,56 @@ export default function StockAdjustmentScreen() {
   const [loadingItem, setLoadingItem] = useState(!!route.params?.itemId);
 
   useEffect(() => {
-    if (route.params?.itemId && organizationId) {
-      const loadItem = async (id: string) => {
-        try {
-          setLoadingItem(true);
-          const { data, error } = await supabase
-            .from('items')
-            .select('id, name, item_code, current_stock, unit')
-            .eq('id', id)
-            .eq('organization_id', organizationId)
-            .is('deleted_at', null)
-            .single();
+    if (!organizationId) return;
 
-          if (error) throw error;
-          if (data) {
-            setItem(data as Item);
-            setShowItemPicker(false);
+    const loadWarehouses = async () => {
+      try {
+        const data = await fetchWarehousesForOrganization<Warehouse>(organizationId, {
+          select: 'id, name, code, is_default',
+        });
+        setWarehouses(data);
+        if (!selectedWarehouseId) {
+          const defaultWarehouse = data.find((warehouse) => warehouse.is_default) || data[0];
+          if (defaultWarehouse) {
+            setSelectedWarehouseId(defaultWarehouse.id);
           }
-        } catch {
-          Alert.alert('Error', 'Failed to load item');
-        } finally {
-          setLoadingItem(false);
         }
-      };
-      loadItem(route.params.itemId);
+      } catch (error) {
+        console.error('[STOCK_ADJUSTMENT] Failed to load warehouses:', error);
+      }
+    };
+
+    loadWarehouses();
+  }, [organizationId, selectedWarehouseId]);
+
+  const loadItemById = useCallback(async (id: string) => {
+    try {
+      setLoadingItem(true);
+      const { data, error } = await supabase
+        .from('items')
+        .select('id, name, item_code, current_stock, unit')
+        .eq('id', id)
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setItem(data as Item);
+        setShowItemPicker(false);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to load item');
+    } finally {
+      setLoadingItem(false);
     }
-  }, [route.params?.itemId, organizationId]);
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (route.params?.itemId && organizationId) {
+      loadItemById(route.params.itemId);
+    }
+  }, [route.params?.itemId, organizationId, loadItemById]);
 
   const searchItems = useCallback(async (query: string) => {
     if (!organizationId || query.length < 2) {
@@ -332,10 +486,58 @@ export default function StockAdjustmentScreen() {
     return () => clearTimeout(timer);
   }, [searchQuery, searchItems]);
 
+  const loadWarehouseStock = useCallback(async () => {
+    if (!organizationId || !item?.id || !selectedWarehouseId) {
+      setWarehouseStock(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('item_warehouse_stock')
+        .select('quantity')
+        .eq('organization_id', organizationId)
+        .eq('item_id', item.id)
+        .eq('warehouse_id', selectedWarehouseId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setWarehouseStock(data?.quantity ?? 0);
+    } catch (error) {
+      console.error('[STOCK_ADJUSTMENT] Failed to load warehouse stock:', error);
+      setWarehouseStock(null);
+    }
+  }, [organizationId, item?.id, selectedWarehouseId]);
+
+  const loadRecentAdjustments = useCallback(async () => {
+    if (!organizationId) {
+      setRecentAdjustments([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await buildRecentAdjustmentsQuery(organizationId, item?.id);
+      if (error) throw error;
+      setRecentAdjustments((data || []) as RecentAdjustment[]);
+    } catch (error) {
+      console.error('[STOCK_ADJUSTMENT] Failed to load recent adjustments:', error);
+      setRecentAdjustments([]);
+    }
+  }, [organizationId, item?.id]);
+
+  useEffect(() => {
+    loadWarehouseStock();
+  }, [loadWarehouseStock]);
+
+  useEffect(() => {
+    loadRecentAdjustments();
+  }, [loadRecentAdjustments]);
+
   const filteredReasons = REASONS.filter((r) => r.types.includes(adjustmentType));
+  const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === selectedWarehouseId) || null;
 
   const handleSubmit = async () => {
-    const validationError = validateAdjustmentFields(item, quantity, reason, organizationId, user?.id ?? null);
+    const validationError = validateAdjustmentFields(item, selectedWarehouseId, quantity, reason, organizationId, user?.id ?? null);
     if (validationError) {
       Alert.alert('Validation Error', validationError);
       return;
@@ -344,22 +546,22 @@ export default function StockAdjustmentScreen() {
     setSubmitting(true);
     try {
       const qty = parseFloat(quantity);
-      const entryQuantity = computeEntryQuantity(adjustmentType, qty);
-      await saveAdjustment({
+      const result = await saveAdjustment({
         organizationId: organizationId!,
         itemId: item!.id,
+        warehouseId: selectedWarehouseId,
         adjustmentType,
         quantity: qty,
         reason,
         notes,
         userId: user!.id,
-        entryQuantity,
         unit: item!.unit,
-        currentStock: item!.current_stock,
+        warehouseName: selectedWarehouse?.name || 'Warehouse',
       });
+      setWarehouseStock(result.quantityAfter);
       Alert.alert(
         'Success',
-        formatSuccessMessage(adjustmentType, qty, item!.unit),
+        `${formatSuccessMessage(adjustmentType, qty, item!.unit)} in ${selectedWarehouse?.name || 'warehouse'}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch (err: unknown) {
@@ -388,28 +590,16 @@ export default function StockAdjustmentScreen() {
   }
 
   const isIncrease = adjustmentType === 'increase';
-  const increaseStyle = {
-    backgroundColor: getToggleBg(isIncrease, isDark, '#064e3b', '#D1FAE5', colors.surface),
-    borderColor: isIncrease ? '#10B981' : colors.border,
-    textColor: isIncrease ? '#10B981' : colors.textSecondary,
-    icon: 'add-circle-outline' as const,
-    label: 'Increase Stock',
-  };
-  const decreaseStyle = {
-    backgroundColor: getToggleBg(!isIncrease, isDark, '#7f1d1d', '#FEE2E2', colors.surface),
-    borderColor: !isIncrease ? '#EF4444' : colors.border,
-    textColor: !isIncrease ? '#EF4444' : colors.textSecondary,
-    icon: 'remove-circle-outline' as const,
-    label: 'Decrease Stock',
-  };
-  const inputBg = isDark ? colors.surface : '#F9FAFB';
+  const increaseStyle = buildToggleStyle(isIncrease, isDark, '#10B981', '#064e3b', '#D1FAE5', colors, 'add-circle-outline', 'Increase Stock');
+  const decreaseStyle = buildToggleStyle(!isIncrease, isDark, '#EF4444', '#7f1d1d', '#FEE2E2', colors, 'remove-circle-outline', 'Decrease Stock');
+  const inputBg = getInputBackground(isDark, colors, '#F9FAFB');
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title="Stock Adjustment" subtitle={item?.name} compact />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <ScrollView
           style={styles.flex}
@@ -436,12 +626,52 @@ export default function StockAdjustmentScreen() {
                   <View style={styles.flex}>
                     <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
                     <Text style={[styles.itemCode, { color: colors.textSecondary }]}>
-                      {item.item_code} • Current stock: {item.current_stock} {item.unit}
+                      {item.item_code} • Total stock: {item.current_stock} {item.unit}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
+
+              <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Warehouse</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.warehouseRow}>
+                  {warehouses.map((warehouse) => (
+                    <TouchableOpacity
+                      key={warehouse.id}
+                      style={[
+                        styles.warehouseChip,
+                        {
+                          backgroundColor: selectedWarehouseId === warehouse.id ? colors.primary : colors.surface,
+                          borderColor: selectedWarehouseId === warehouse.id ? colors.primary : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedWarehouseId(warehouse.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="business-outline"
+                        size={16}
+                        color={selectedWarehouseId === warehouse.id ? '#ffffff' : colors.textSecondary}
+                      />
+                      <Text style={[styles.warehouseChipText, { color: selectedWarehouseId === warehouse.id ? '#ffffff' : colors.text }]}>
+                        {warehouse.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {item && selectedWarehouse && warehouseStock !== null ? (
+                  <View style={[styles.stockSummaryCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View>
+                      <Text style={[styles.stockSummaryLabel, { color: colors.textSecondary }]}>Available in {selectedWarehouse.name}</Text>
+                      <Text style={[styles.stockSummaryValue, { color: colors.text }]}>{warehouseStock} {item.unit}</Text>
+                    </View>
+                    <View style={[styles.stockSummaryBadge, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.stockSummaryBadgeText, { color: colors.primary }]}>{selectedWarehouse.code || 'WAREHOUSE'}</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
 
               <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Adjustment Type</Text>
@@ -486,7 +716,12 @@ export default function StockAdjustmentScreen() {
                   onChangeText={setQuantity}
                 />
                 {item && (
-                  <StockPreview item={item} quantity={quantity} adjustmentType={adjustmentType} colors={colors} />
+                  <StockPreview
+                    item={{ ...item, current_stock: warehouseStock ?? item.current_stock }}
+                    quantity={quantity}
+                    adjustmentType={adjustmentType}
+                    colors={colors}
+                  />
                 )}
               </View>
 
@@ -531,6 +766,39 @@ export default function StockAdjustmentScreen() {
                   value={notes}
                   onChangeText={setNotes}
                 />
+              </View>
+
+              <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.historyHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Recent Adjustments</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('StockMovements', item ? { itemId: item.id } : undefined)}>
+                    <Text style={[styles.historyLink, { color: colors.primary }]}>See movement log</Text>
+                  </TouchableOpacity>
+                </View>
+                {recentAdjustments.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No recent adjustments yet</Text>
+                ) : (
+                  recentAdjustments.map((entry) => (
+                    <View key={entry.id} style={[styles.historyItem, { borderBottomColor: colors.border }]}>
+                      <View style={styles.historyLeft}>
+                        <Text style={[styles.historyType, { color: colors.text }]}>
+                          {entry.movement_type.replace(/_/g, ' ')}
+                        </Text>
+                        <Text style={[styles.historyNotes, { color: colors.textSecondary }]} numberOfLines={2}>
+                          {getEntryNotes(entry.notes)}
+                        </Text>
+                      </View>
+                      <View style={styles.historyRight}>
+                        <Text style={[styles.historyQty, { color: entry.quantity_change >= 0 ? colors.success : colors.error }]}>
+                          {entry.quantity_change >= 0 ? '+' : ''}{entry.quantity_change}
+                        </Text>
+                        <Text style={[styles.historyDate, { color: colors.textSecondary }]}>
+                          {new Date(entry.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
               </View>
             </>
           )}
@@ -593,7 +861,7 @@ const styles = StyleSheet.create({
   itemOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -672,9 +940,91 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+  warehouseRow: {
+    gap: 8,
+  },
+  warehouseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  warehouseChipText: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+  },
+  stockSummaryCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: borderRadius.sm,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
+    alignItems: 'center',
+  },
+  stockSummaryLabel: {
+    fontSize: fontSize.xs,
+    marginBottom: 4,
+  },
+  stockSummaryValue: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+  },
+  stockSummaryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  stockSummaryBadgeText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+  },
   reasonText: {
     fontSize: fontSize.xs,
     fontWeight: '500',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  historyLink: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+  },
+  historyItem: {
+    flexDirection: 'row',
+    justifyContent: JUSTIFY_SPACE_BETWEEN,
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  historyLeft: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  historyRight: {
+    alignItems: 'flex-end',
+  },
+  historyType: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  historyNotes: {
+    fontSize: fontSize.xs,
+  },
+  historyQty: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  historyDate: {
+    fontSize: fontSize.xs,
   },
   footer: {
     padding: spacing.md,

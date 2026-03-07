@@ -7,18 +7,16 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MoreStackNavigationProp } from '@navigation/types';
 import { useTheme } from '@contexts/ThemeContext';
 import { useAuth } from '@contexts/AuthContext';
 import { supabase } from '@lib/supabase';
 import { formatCurrency } from '@lib/utils';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { lightTap } from '@lib/haptics';
 
 interface FinancialData {
   revenue: number;
@@ -34,7 +32,7 @@ type TabType = 'summary' | 'balance-sheet' | 'profit-loss' | 'cash-flow';
 
 export default function AccountingScreen() {
   const navigation = useNavigation<MoreStackNavigationProp>();
-  const { colors, shadows } = useTheme();
+  const { colors, shadows, isDark } = useTheme();
   const { organizationId } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('summary');
@@ -110,26 +108,55 @@ export default function AccountingScreen() {
   const renderSummary = () => (
     <View style={styles.section}>
       <View style={styles.metricsGrid}>
-        <View style={[styles.metricCard, { backgroundColor: '#10B981' }]}>
-          <Ionicons name="arrow-up-circle-outline" size={28} color="#fff" />
-          <Text style={styles.metricLabel}>Revenue</Text>
-          <Text style={styles.metricValue}>{formatCurrency(data.revenue)}</Text>
+        <View style={[styles.metricCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <View style={[styles.metricIconWrap, { backgroundColor: '#10B98120' }]}>
+            <Ionicons name="arrow-up-circle-outline" size={20} color="#10B981" />
+          </View>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Revenue</Text>
+          <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(data.revenue)}</Text>
         </View>
-        <View style={[styles.metricCard, { backgroundColor: '#EF4444' }]}>
-          <Ionicons name="arrow-down-circle-outline" size={28} color="#fff" />
-          <Text style={styles.metricLabel}>Expenses</Text>
-          <Text style={styles.metricValue}>{formatCurrency(data.expenses)}</Text>
+        <View style={[styles.metricCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <View style={[styles.metricIconWrap, { backgroundColor: '#EF444420' }]}>
+            <Ionicons name="arrow-down-circle-outline" size={20} color="#EF4444" />
+          </View>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Expenses</Text>
+          <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(data.expenses)}</Text>
         </View>
-        <View style={[styles.metricCard, { backgroundColor: netProfit >= 0 ? '#0EA5E9' : '#F59E0B' }]}>
-          <Ionicons name="trending-up-outline" size={28} color="#fff" />
-          <Text style={styles.metricLabel}>Net Profit</Text>
-          <Text style={styles.metricValue}>{formatCurrency(netProfit)}</Text>
+        <View style={[styles.metricCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <View style={[styles.metricIconWrap, { backgroundColor: `${netProfit >= 0 ? '#0EA5E9' : '#F59E0B'}20` }]}>
+            <Ionicons name="trending-up-outline" size={20} color={netProfit >= 0 ? '#0EA5E9' : '#F59E0B'} />
+          </View>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Net Profit</Text>
+          <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(netProfit)}</Text>
         </View>
-        <View style={[styles.metricCard, { backgroundColor: '#8B5CF6' }]}>
-          <Ionicons name="cube-outline" size={28} color="#fff" />
-          <Text style={styles.metricLabel}>Inventory</Text>
-          <Text style={styles.metricValue}>{formatCurrency(data.inventory)}</Text>
+        <View style={[styles.metricCard, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <View style={[styles.metricIconWrap, { backgroundColor: '#8B5CF620' }]}>
+            <Ionicons name="cube-outline" size={20} color="#8B5CF6" />
+          </View>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Inventory</Text>
+          <Text style={[styles.metricValue, { color: colors.text }]}>{formatCurrency(data.inventory)}</Text>
         </View>
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>Accounting Tools</Text>
+        {[
+          { title: 'Chart of Accounts', icon: 'list-outline' as const, screen: 'ChartOfAccounts' as const },
+          { title: 'Journal Entries', icon: 'journal-outline' as const, screen: 'JournalEntries' as const },
+          { title: 'Trial Balance', icon: 'scale-outline' as const, screen: 'TrialBalance' as const },
+        ].map((tool) => (
+          <TouchableOpacity
+            key={tool.screen}
+            style={styles.toolRow}
+            onPress={() => { lightTap(); navigation.navigate(tool.screen as 'ChartOfAccounts' | 'JournalEntries' | 'TrialBalance'); }}
+          >
+            <View style={[styles.toolIcon, { backgroundColor: `${colors.primary}20` }]}>
+              <Ionicons name={tool.icon} size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.toolLabel, { color: colors.text }]}>{tool.title}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ))}
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.card, ...shadows.sm }]}>
@@ -299,13 +326,17 @@ export default function AccountingScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <LinearGradient colors={['#4F46E5', '#6366F1']} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card, ...shadows.sm }]}>
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Accounting</Text>
-        <View style={styles.headerRight} />
-      </LinearGradient>
+        <View style={styles.headerTextBlock}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Accounting</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Financial overview, journals, and balances</Text>
+        </View>
+      </View>
 
       <View style={styles.tabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
@@ -314,7 +345,10 @@ export default function AccountingScreen() {
               key={tab.key}
               style={[
                 styles.tab,
-                activeTab === tab.key && { backgroundColor: colors.primary },
+                {
+                  backgroundColor: activeTab === tab.key ? colors.primary : colors.card,
+                  borderColor: activeTab === tab.key ? colors.primary : colors.border,
+                },
               ]}
               onPress={() => setActiveTab(tab.key)}
             >
@@ -347,20 +381,22 @@ export default function AccountingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { justifyContent: 'center', alignItems: 'center' },
-  header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
-  backButton: { width: 40 },
-  headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#fff', textAlign: 'center' },
-  headerRight: { width: 40 },
+  header: { paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 0) + 16, paddingBottom: 12, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
+  backButton: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  headerTextBlock: { flex: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '700', letterSpacing: -0.4 },
+  headerSubtitle: { fontSize: 13, marginTop: 2 },
   tabContainer: { backgroundColor: 'transparent' },
   tabScroll: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 6 },
+  tab: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 6, borderWidth: 1 },
   tabText: { fontSize: 13, fontWeight: '500' },
   content: { flex: 1 },
   section: { padding: 16 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  metricCard: { width: (SCREEN_WIDTH - 44) / 2, padding: 16, borderRadius: 12 },
-  metricLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 8 },
-  metricValue: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 4 },
+  metricCard: { width: '48%', padding: 16, borderRadius: 14 },
+  metricIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  metricLabel: { fontSize: 12 },
+  metricValue: { fontSize: 18, fontWeight: '700', marginTop: 4 },
   card: { borderRadius: 12, padding: 16, marginBottom: 16 },
   cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
   lineItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
@@ -372,4 +408,7 @@ const styles = StyleSheet.create({
   ratioValue: { fontSize: 14, fontWeight: '600' },
   profitIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, gap: 10 },
   profitText: { fontSize: 18, fontWeight: '700' },
+  toolRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
+  toolIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  toolLabel: { flex: 1, fontSize: 15, fontWeight: '500' },
 });

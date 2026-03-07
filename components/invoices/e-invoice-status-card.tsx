@@ -96,9 +96,9 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
         <div className="grid gap-4 md:grid-cols-2">
           {/* IRN Section */}
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700">Invoice Reference Number (IRN)</p>
-            <div className="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
-              <code className="text-xs font-mono text-gray-600 break-all">{invoice.irn}</code>
+            <p className="text-sm font-medium text-muted-foreground">Invoice Reference Number (IRN)</p>
+            <div className="flex items-center justify-between p-2 glass-subtle rounded-lg">
+              <code className="text-xs font-mono text-foreground break-all">{invoice.irn}</code>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(invoice.irn || "")
@@ -108,7 +108,7 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
                 Copy
               </button>
             </div>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-muted-foreground">
               Generated: {invoice.eInvoiceDate && new Date(invoice.eInvoiceDate).toLocaleString()}
             </p>
           </div>
@@ -116,18 +116,18 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
           {/* QR Code Section */}
           {invoice.qrCode && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">QR Code</p>
-              <div className="p-2 bg-white rounded border border-gray-200 flex items-center justify-center">
+              <p className="text-sm font-medium text-muted-foreground">QR Code</p>
+              <div className="p-2 glass-subtle rounded-lg flex items-center justify-center">
                 <Image src={invoice.qrCode} alt="E-Invoice QR Code" width={128} height={128} unoptimized />
               </div>
-              <p className="text-xs text-gray-600">Scan for invoice verification</p>
+              <p className="text-xs text-muted-foreground">Scan for invoice verification</p>
             </div>
           )}
         </div>
 
         {/* Filing Status */}
         {filingStatus && (
-          <div className="mt-4 p-3 bg-white rounded border border-gray-200 space-y-2">
+          <div className="mt-4 p-3 glass-subtle rounded-lg space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">GST Filing Status</p>
               <div className="flex items-center gap-2">
@@ -145,12 +145,12 @@ export function EInvoiceStatusCard({ invoice }: EInvoiceStatusCardProps) {
             </div>
 
             {filingStatus.gstr1Status && (
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted-foreground">
                 <span className="font-medium">GSTR-1:</span> {filingStatus.gstr1Status}
               </p>
             )}
             {filingStatus.gstr3bStatus && (
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted-foreground">
                 <span className="font-medium">GSTR-3B:</span> {filingStatus.gstr3bStatus}
               </p>
             )}

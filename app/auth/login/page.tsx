@@ -64,7 +64,7 @@ export default async function LoginPage({
           {/* Sign Up Link */}
           <Link
             href="/auth/signup"
-            className="w-full py-2 px-4 rounded-lg border border-border hover:bg-muted text-center font-medium transition-colors"
+            className="flex items-center justify-center w-full py-2 px-4 rounded-lg border border-border hover:bg-muted text-center font-medium transition-colors"
           >
             Create new account
           </Link>
